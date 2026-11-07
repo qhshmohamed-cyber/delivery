@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your Staff — متابعة الدليفري</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#f5f3ee;--card:#fff;--text:#1f2a24;--muted:#6f776f;--line:#e2ded4;--brand:#1f6b45;--gold:#c8962e}
+@media (prefers-color-scheme:dark){:root{--bg:#141815;--card:#1e241f;--text:#eef1ec;--muted:#98a19a;--line:#323a34;--brand:#3fa874}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
+.wrap{max-width:900px;margin:0 auto;padding:12px 0}
+header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+header h1{font-size:16px;margin:0;flex:1}header small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+button,input,select,textarea{font:inherit;font-size:14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px;width:100%}
+button{width:auto;cursor:pointer;font-weight:600}
+button.p{background:var(--brand);color:#fff;border-color:var(--brand)}
+button.g{background:var(--gold);color:#fff;border-color:var(--gold)}
+button.r{color:#e03131;border-color:#e03131}
+button:disabled{opacity:.5}
+.big{width:100%;padding:14px;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.stat b{display:block;font-size:22px}.stat span{font-size:11px;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.badge{font-size:11px;color:#fff;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.late{color:#e03131;font-size:12px;font-weight:700}
+.meta{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.7}
+.ord{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.acts{display:flex;gap:8px;margin-top:10px}.acts button{flex:1;padding:12px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{color:var(--muted);font-weight:600}
+.msg{padding:10px;border-radius:10px;margin-bottom:10px;font-size:13px}
+.msg.e{background:#ffe3e3;color:#c92a2a}.msg.o{background:#d3f9d8;color:#2b8a3e}
+.modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
+.modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
+.modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
+.hide{display:none}h2{font-size:14px;margin:12px 0 6px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+/* ===== الإعدادات: ضع بيانات مشروعك من Supabase > Project Settings > API ===== */
+const SB_URL = 'https://mkptmejkcemdhlhdaort.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcHRtZWprY2VtZGhsaGRhb3J0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwODE2MTQsImV4cCI6MjEwOTY1NzYxNH0.ovPRrF8RDXPut2jY8HMHdO27sFvxmyDymBVAKBV7mC8';
+/* ============================================================================= */
+const sb = supabase.createClient(SB_URL, SB_KEY);
+const ST = {new:['جديد','#868e96'],received:['تم الاستلام','#1c7ed6'],out:['خرج للتوصيل','#e8590c'],
+  delivered:['تم التوصيل','#2f9e44'],failed:['تعذر التوصيل','#e03131'],cancelled:['ملغي','#adb5bd']};
+const REASONS = ['العميل لا يرد','العميل ألغى الطلب','العنوان غير صحيح','مشكلة في الطلب','سبب آخر'];
+const LATE_MIN = 45, PAGE = 25;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cairoDate = d => (d || new Date()).toLocaleDateString('en-CA', {timeZone:'Africa/Cairo'});
+const tm = t => t ? new Date(t).toLocaleTimeString('ar-EG', {timeZone:'Africa/Cairo', hour:'2-digit', minute:'2-digit'}) : '—';
+const mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000) : null;
+const isLate = o => ['new','received','out'].includes(o.status)
+  ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
+  : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
+let me = null, drivers = [], page = 0, timer = null, chan = null;
+
+function flash(t, ok) {
+  const m = $('flash'); if (!m) return;
+  m.className = 'msg ' + (ok ? 'o' : 'e'); m.textContent = t;
+  setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
+}
+const shell = (inner) => `<header><h1>🍽️ Your Staff — واحة اليمن
+  <small>${esc(me.full_name)} · كود ${esc(me.employee_code)} · ${{driver:'دليفري',manager:'مدير دليفري',admin:'مدير النظام'}[me.role]}</small></h1>
+  <button id="out">خروج</button></header><div id="flash" class="hide"></div>${inner}`;
+
+/* ---------- الدخول ---------- */
+function loginView(err) {
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><h1 style="font-size:18px">تسجيل الدخول</h1>
+    <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
+    <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
+    <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
+    <button class="p big" id="go" style="margin-top:14px">دخول</button></div>`;
+  $('go').onclick = async () => {
+    $('go').disabled = true;
+    const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
+    if (error) return loginView('بيانات الدخول غير صحيحة');
+    boot();
+  };
+}
+async function boot() {
+  const {data:{session}} = await sb.auth.getSession();
+  if (!session) return loginView();
+  const {data, error} = await sb.from('dlv_profiles').select('*').eq('user_id', session.user.id).maybeSingle();
+  if (error || !data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
+  me = data;
+  if (me.role !== 'driver') {
+    const r = await sb.from('dlv_profiles').select('user_id,full_name,employee_code').eq('role','driver').eq('active',true).order('full_name');
+    drivers = r.data || [];
+  }
+  me.role === 'driver' ? driverView() : managerView();
+  if (chan) sb.removeChannel(chan);
+  chan = sb.channel('dlv').on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, () => {
+    clearTimeout(timer); timer = setTimeout(() => me.role === 'driver' ? loadMine() : loadAll(), 400);
+  }).subscribe();
+}
+function bindOut() { $('out').onclick = async () => { await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+
+/* ---------- العمليات ---------- */
+async function setStatus(id, to, note) {
+  const {error} = await sb.rpc('dlv_set_status', {p_id: id, p_to: to, p_note: note || null});
+  if (error) return flash(error.message, false);
+  flash('تم التحديث', true);
+  me.role === 'driver' ? loadMine() : loadAll();
+}
+function newOrderForm() {
+  const isMgr = me.role !== 'driver';
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
+    <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
+    <label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
+    <label>العنوان</label><input id="n_a">
+    ${isMgr ? `<label>الدليفري *</label><select id="n_d"><option value="">اختر...</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>` : ''}
+    <label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>
+    <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
+  document.body.appendChild(d);
+  $('n_x').onclick = () => d.remove();
+  $('n_ok').onclick = async () => {
+    $('n_ok').disabled = true;
+    const {error} = await sb.rpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: $('n_c').value, p_phone: $('n_p').value,
+      p_address: $('n_a').value, p_notes: $('n_n').value, p_driver: isMgr ? ($('n_d').value || null) : null});
+    if (error) { $('n_ok').disabled = false; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    d.remove(); flash('تم تسجيل الطلب', true); isMgr ? loadAll() : loadMine();
+  };
+}
+function failDialog(id) {
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = `<div><h2 style="font-size:16px">سبب تعذر التوصيل</h2><select id="fr">${REASONS.map(r => `<option>${r}</option>`).join('')}</select>
+    <div class="row" style="margin-top:14px"><button class="r big" id="fr_ok" style="flex:1">تأكيد</button><button class="big" id="fr_x" style="flex:0 0 90px">رجوع</button></div></div>`;
+  document.body.appendChild(d);
+  $('fr_x').onclick = () => d.remove();
+  $('fr_ok').onclick = () => { const r = $('fr').value; d.remove(); setStatus(id, 'failed', r); };
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const id = +b.dataset.id, a = b.dataset.act;
+  if (a === 'failed') failDialog(id); else setStatus(id, a);
+});
+
+/* ---------- واجهة الدليفري ---------- */
+function driverView() {
+  $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
+    <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
+    <button class="g big" id="nw">＋ طلب جديد</button><h2>طلبات اليوم</h2><div id="ol"></div>`);
+  bindOut(); $('nw').onclick = newOrderForm; loadMine();
+}
+async function loadMine() {
+  const {data, error} = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).order('created_at', {ascending:false}).limit(100);
+  if (error) return flash(error.message, false);
+  const o = data || [];
+  $('s1').textContent = o.filter(x => ['new','received','out'].includes(x.status)).length;
+  $('s2').textContent = o.filter(x => x.status === 'out').length;
+  $('s3').textContent = o.filter(x => x.status === 'delivered').length;
+  $('ol').innerHTML = o.map(x => {
+    const s = ST[x.status];
+    const acts = x.status === 'new' ? `<button class="p" data-act="received" data-id="${x.id}">استلام الطلب</button>`
+      : x.status === 'received' ? `<button class="p" data-act="out" data-id="${x.id}">خرج للتوصيل</button>`
+      : x.status === 'out' ? `<button class="p" data-act="delivered" data-id="${x.id}">تم التوصيل</button><button class="r" data-act="failed" data-id="${x.id}">تعذر التوصيل</button>` : '';
+    return `<div class="card"><div class="ord"><b style="font-size:18px">#${esc(x.order_no)}</b><span class="badge" style="background:${s[1]}">${s[0]}</span></div>
+      <div class="meta">${esc(x.customer_name || '')} ${x.phone ? '· <a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a>' : ''}<br>${esc(x.address || '')}<br>
+      استلام ${tm(x.received_at)} · خروج ${tm(x.out_at)} · تسليم ${tm(x.delivered_at)}
+      ${x.failed_reason ? '<br>السبب: ' + esc(x.failed_reason) : ''} ${isLate(x) ? '<br><span class="late">⚠ متأخر</span>' : ''}</div>
+      ${acts ? '<div class="acts">' + acts + '</div>' : ''}</div>`;
+  }).join('') || '<div class="meta">لا توجد طلبات اليوم</div>';
+}
+
+/* ---------- واجهة المدير ---------- */
+function managerView() {
+  const t = cairoDate();
+  $('app').innerHTML = shell(`<div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">
+    <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
+    <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
+    <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button></div>
+    <div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
+    <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
+    <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
+  bindOut(); $('nw').onclick = newOrderForm; page = 0;
+  ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
+  let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
+  $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
+  $('nx').onclick = () => { page++; loadAll(); };
+  loadAll();
+}
+async function loadAll() {
+  const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
+  const q = $('f_q').value.replace(/[,()%*]/g, ' ').trim();
+  let qb = sb.from('dlv_orders').select('*, driver:driver_id(full_name)', {count:'exact'}).gte('order_date', from).lte('order_date', to)
+    .order('created_at', {ascending:false}).range(page * PAGE, page * PAGE + PAGE - 1);
+  if (st) qb = qb.eq('status', st); if (dr) qb = qb.eq('driver_id', dr);
+  if (q) qb = qb.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
+  const [o, s] = await Promise.all([qb, sb.rpc('dlv_stats', {p_from: from, p_to: to})]);
+  if (o.error) return flash(o.error.message, false);
+  const rows = (s.data || []).filter(r => !dr || r.driver_id === dr);
+  const sum = k => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
+  const avgs = rows.filter(r => r.avg_min != null);
+  const avg = avgs.length ? Math.round(avgs.reduce((a, r) => a + Number(r.avg_min) * Number(r.delivered), 0) / Math.max(1, avgs.reduce((a, r) => a + Number(r.delivered), 0))) : '—';
+  $('kpi').innerHTML = [['إجمالي الطلبات', sum('total')], ['خرجت للتوصيل', sum('out_now')], ['تم توصيلها', sum('delivered')],
+    ['متأخرة', sum('late')], ['تعذر توصيلها', sum('failed')], ['متوسط التوصيل (د)', avg]]
+    .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
+  $('perf').innerHTML = `<table><tr><th>الدليفري</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
+    (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th></th></tr>` +
+    ((o.data || []).map(x => {
+      const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
+      const cancel = ['new','received'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
+      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}</td><td>${cancel}</td></tr>`;
+    }).join('') || '<tr><td colspan="9">لا طلبات</td></tr>') + '</table>';
+  const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
+  $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
+  $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
+}
+boot();
+</script>
+</body>
+</html>

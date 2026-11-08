@@ -185,11 +185,11 @@ function managerView() {
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
-    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button id="ad">＋ إضافة طيار</button>${me.role === 'admin' ? '<button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button>' : ''}</div>
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${me.role === 'admin' ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button>' : ''}</div>
     <div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; page = 0;
+  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; page = 0;
   ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
   let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
@@ -296,8 +296,8 @@ function addDriverForm() {
   const A = 'abcdefghjkmnpqrstuvwxyz23456789';
   const pw = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => A[b % A.length]).join('');
   const d = document.createElement('div'); d.className = 'modal';
-  d.innerHTML = '<div><h2 style="font-size:16px">إضافة طيار جديد</h2><div id="aerr" class="msg e hide"></div>' +
-    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c">' +
+  d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
+    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير</option><option value="admin">مدير عام</option></select>' +
     '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (8 أحرف على الأقل)</label><input id="a_p" value="' + pw + '">' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
@@ -311,11 +311,11 @@ function addDriverForm() {
     if (!name || !code) return fail('اكتب الاسم والكود');
     if (!$('a_m').value.includes('@') && !/[a-z0-9]/i.test(code)) return fail('اكتب كود بأرقام أو حروف إنجليزي، أو اكتب الإيميل بنفسك');
     $('a_ok').disabled = true;
-    const { data, error } = await sb.rpc('dlv_create_driver', { p_email: email, p_password: pass, p_name: name, p_code: code });
+    const { data, error } = await sb.rpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value });
     if (error) return fail(error.message);
-    drivers.push({ user_id: data, full_name: name, employee_code: code });
-    const f = $('f_dr'); if (f) f.insertAdjacentHTML('beforeend', '<option value="' + data + '">' + esc(name) + '</option>');
-    const txt = name + '\nالإيميل: ' + email + '\nكلمة السر: ' + pass;
+    const jobSel = $('a_j'), jobVal = jobSel.value, jobName = jobSel.options[jobSel.selectedIndex].text; if (jobVal === 'driver') drivers.push({ user_id: data, full_name: name, employee_code: code });
+    const f = $('f_dr'); if (f && jobVal === 'driver') f.insertAdjacentHTML('beforeend', '<option value="' + data + '">' + esc(name) + '</option>');
+    const txt = name + '\nالوظيفة: ' + jobName + '\nالإيميل: ' + email + '\nكلمة السر: ' + pass;
     d.firstChild.innerHTML = '<h2 style="font-size:16px">✅ تم إنشاء الحساب</h2><div class="card" style="white-space:pre-line;direction:rtl">' + esc(txt) + '</div>' +
       '<div class="meta">احتفظ ببيانات الدخول وسلّمها للطيار، كلمة السر مش هتظهر تاني.</div>' +
       '<div class="row" style="margin-top:14px"><button class="p big" id="a_cp" style="flex:1">نسخ</button><button class="big" id="a_x2" style="flex:0 0 90px">إغلاق</button></div>';

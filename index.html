@@ -3,11 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Your Staff — متابعة الدليفري</title>
+<title>واحة اليمن — متابعة الدليفري</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4e2c12">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-:root{--bg:#f5f3ee;--card:#fff;--text:#1f2a24;--muted:#6f776f;--line:#e2ded4;--brand:#1f6b45;--gold:#c8962e}
-@media (prefers-color-scheme:dark){:root{--bg:#141815;--card:#1e241f;--text:#eef1ec;--muted:#98a19a;--line:#323a34;--brand:#3fa874}}
+:root{--bg:#f6ebd6;--card:#fffaf0;--text:#3a2412;--muted:#8a7258;--line:#e3d2b3;--brand:#5a3317;--gold:#b9832e}
+@media (prefers-color-scheme:dark){:root{--bg:#1c130b;--card:#2a1c10;--text:#f4e9d2;--muted:#b9a68a;--line:#46301c;--brand:#a8762a;--gold:#c8962e}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
 .wrap{max-width:900px;margin:0 auto;padding:12px 0}
@@ -38,7 +44,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
-.hide{display:none}h2{font-size:14px;margin:12px 0 6px}
+.hide{display:none}h2{font-size:14px;margin:12px 0 6px}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
 </style>
 </head>
 <body>
@@ -68,13 +74,13 @@ function flash(t, ok) {
   m.className = 'msg ' + (ok ? 'o' : 'e'); m.textContent = t;
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
-const shell = (inner) => `<header><h1>🍽️ Your Staff — واحة اليمن
+const shell = (inner) => `<header><img src="icon-192.png" alt="" style="width:46px;height:46px;border-radius:12px"><h1>واحة اليمن — متابعة الدليفري
   <small>${esc(me.full_name)} · كود ${esc(me.employee_code)} · ${{driver:'دليفري',manager:'مدير دليفري',admin:'مدير النظام'}[me.role]}</small></h1>
   <button id="out">خروج</button></header><div id="flash" class="hide"></div>${inner}`;
 
 /* ---------- الدخول ---------- */
 function loginView(err) {
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><h1 style="font-size:18px">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img src="icon-192.png" alt="" style="width:110px;height:110px;border-radius:22px;display:block;margin:0 auto 10px"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -102,7 +108,7 @@ async function boot() {
     clearTimeout(timer); timer = setTimeout(() => me.role === 'driver' ? loadMine() : loadAll(), 400);
   }).subscribe();
 }
-function bindOut() { $('out').onclick = async () => { await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+function bindOut() { $('out').onclick = async () => { if (watchId != null) await stopShare(); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
 
 /* ---------- العمليات ---------- */
 async function setStatus(id, to, note) {
@@ -149,8 +155,8 @@ document.addEventListener('click', e => {
 function driverView() {
   $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
     <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
-    <button class="g big" id="nw">＋ طلب جديد</button><h2>طلبات اليوم</h2><div id="ol"></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; loadMine();
+    <div class="card"><button class="g big" id="shr"></button><div class="meta" id="locst">الموقع بيتشارك وإنت شغّلته بس، والشاشة لازم تفضل مفتوحة.</div></div><button class="g big" id="nw">＋ طلب جديد</button><h2>طلبات اليوم</h2><div id="ol"></div>`);
+  bindOut(); $('nw').onclick = newOrderForm; $('shr').onclick = () => watchId != null ? stopShare() : startShare(); renderShare(); loadMine();
 }
 async function loadMine() {
   const {data, error} = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).order('created_at', {ascending:false}).limit(100);
@@ -179,11 +185,11 @@ function managerView() {
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
-    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button></div>
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button id="ad">＋ إضافة طيار</button></div>
     <div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; page = 0;
+  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; $('ad').onclick = addDriverForm; page = 0;
   ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
   let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
@@ -219,6 +225,102 @@ async function loadAll() {
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
 }
+/* ---------- مشاركة الموقع (الطيار) ---------- */
+let watchId = null, lastSend = 0, wake = null;
+function renderShare() {
+  const b = $('shr'); if (!b) return; const on = watchId != null;
+  b.textContent = on ? '⏹ إيقاف مشاركة الموقع' : '📍 ابدأ مشاركة الموقع';
+  b.style.background = on ? '#e03131' : ''; b.style.borderColor = on ? '#e03131' : '';
+}
+async function startShare() {
+  if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
+  watchId = navigator.geolocation.watchPosition(async p => {
+    if (Date.now() - lastSend < 15000) return; lastSend = Date.now();
+    const { error } = await sb.rpc('dlv_update_location', { p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy });
+    const s = $('locst'); if (s) s.textContent = error ? '⚠ ' + error.message : '🟢 الموقع شغال — آخر إرسال ' + tm(new Date());
+  }, e => { stopShare(); flash(e.code === 1 ? 'اسمح بالموقع من إعدادات المتصفح' : 'تعذر تحديد الموقع', false); },
+  { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  try { wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  renderShare();
+}
+async function stopShare() {
+  if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  try { wake && wake.release(); } catch (e) {} wake = null; lastSend = 0;
+  await sb.rpc('dlv_stop_location'); renderShare();
+  const s = $('locst'); if (s) s.textContent = 'مشاركة الموقع متوقفة.';
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId != null && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {});
+});
+
+/* ---------- خريطة الطيارين (المدير) ---------- */
+let map, markers = {}, mapTimer;
+function openMap() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
+  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">🗺️ مواقع الطيارين</b><span id="mcount" class="meta"></span><button id="mclose">إغلاق</button></div><div id="lmap" style="flex:1"></div>';
+  document.body.appendChild(d);
+  map = L.map('lmap').setView([30.0444, 31.2357], 12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  markers = {}; let fitted = false;
+  async function refresh() {
+    const [l, o] = await Promise.all([
+      sb.from('dlv_locations').select('driver_id,lat,lng,updated_at'),
+      sb.from('dlv_orders').select('driver_id,order_no,status').eq('order_date', cairoDate()).in('status', ['received', 'out'])]);
+    if (l.error) return;
+    const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
+    const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
+    const seen = new Set();
+    (l.data || []).forEach(r => {
+      seen.add(r.driver_id);
+      const live = (Date.now() - new Date(r.updated_at)) < 90000, nm = name[r.driver_id] || 'طيار';
+      const html = '<b>' + esc(nm) + '</b><br>' + (live ? '🟢 متصل' : '⚪ آخر ظهور ' + tm(r.updated_at)) + '<br>' + esc((ord[r.driver_id] || ['لا طلبات']).join(' · '));
+      const ic = L.divIcon({ className: '', html: '<div style="background:' + (live ? '#2f9e44' : '#868e96') + ';color:#fff;border:2px solid #fff;border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap">' + esc(nm) + '</div>' });
+      const m = markers[r.driver_id];
+      if (m) { m.setLatLng([r.lat, r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
+      else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
+    });
+    Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
+    $('mcount').textContent = seen.size + ' طيار';
+    if (!fitted && seen.size) { map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
+  }
+  refresh(); mapTimer = setInterval(refresh, 10000);
+  $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
+}
+
+/* ---------- إضافة طيار (المدير) ---------- */
+function addDriverForm() {
+  const A = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const pw = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => A[b % A.length]).join('');
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = '<div><h2 style="font-size:16px">إضافة طيار جديد</h2><div id="aerr" class="msg e hide"></div>' +
+    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c">' +
+    '<label>كلمة السر (8 أحرف على الأقل)</label><input id="a_p" value="' + pw + '">' +
+    '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
+  document.body.appendChild(d);
+  const mail = () => 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com';
+  $('a_c').oninput = () => { $('a_e').textContent = $('a_c').value.trim() ? mail() : '—'; };
+  $('a_x').onclick = () => d.remove();
+  $('a_ok').onclick = async () => {
+    const name = $('a_n').value.trim(), code = $('a_c').value.trim(), pass = $('a_p').value, email = mail();
+    const er = $('aerr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('a_ok').disabled = false; };
+    if (!name || !code) return fail('اكتب الاسم والكود');
+    $('a_ok').disabled = true;
+    const { data, error } = await sb.rpc('dlv_create_driver', { p_email: email, p_password: pass, p_name: name, p_code: code });
+    if (error) return fail(error.message);
+    drivers.push({ user_id: data, full_name: name, employee_code: code });
+    const f = $('f_dr'); if (f) f.insertAdjacentHTML('beforeend', '<option value="' + data + '">' + esc(name) + '</option>');
+    const txt = name + '\nالإيميل: ' + email + '\nكلمة السر: ' + pass;
+    d.firstChild.innerHTML = '<h2 style="font-size:16px">✅ تم إنشاء الحساب</h2><div class="card" style="white-space:pre-line;direction:rtl">' + esc(txt) + '</div>' +
+      '<div class="meta">احتفظ ببيانات الدخول وسلّمها للطيار، كلمة السر مش هتظهر تاني.</div>' +
+      '<div class="row" style="margin-top:14px"><button class="p big" id="a_cp" style="flex:1">نسخ</button><button class="big" id="a_x2" style="flex:0 0 90px">إغلاق</button></div>';
+    $('a_cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(txt); $('a_cp').textContent = 'اتنسخ ✓'; };
+    $('a_x2').onclick = () => d.remove();
+  };
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
 boot();
 </script>
 </body>

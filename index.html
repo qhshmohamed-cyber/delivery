@@ -68,6 +68,7 @@ const isLate = o => ['new','received','out'].includes(o.status)
   ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
 let me = null, drivers = [], page = 0, timer = null, chan = null;
+const ORD = {};
 
 function flash(t, ok) {
   const m = $('flash'); if (!m) return;
@@ -122,17 +123,17 @@ function newOrderForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
     <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
-    <label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
-    <label>العنوان</label><input id="n_a">
+    ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
+    <label>العنوان</label><input id="n_a">` : ''}
     ${isMgr ? `<label>الدليفري *</label><select id="n_d"><option value="">اختر...</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>` : ''}
-    <label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>
+    ${isMgr ? '<label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>' : ''}
     <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
   document.body.appendChild(d);
   $('n_x').onclick = () => d.remove();
   $('n_ok').onclick = async () => {
     $('n_ok').disabled = true;
-    const {error} = await sb.rpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: $('n_c').value, p_phone: $('n_p').value,
-      p_address: $('n_a').value, p_notes: $('n_n').value, p_driver: isMgr ? ($('n_d').value || null) : null});
+    const {error} = await sb.rpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
+      p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: isMgr ? ($('n_d').value || null) : null});
     if (error) { $('n_ok').disabled = false; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
     d.remove(); flash('تم تسجيل الطلب', true); isMgr ? loadAll() : loadMine();
   };
@@ -148,7 +149,7 @@ function failDialog(id) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const id = +b.dataset.id, a = b.dataset.act;
-  if (a === 'failed') failDialog(id); else setStatus(id, a);
+  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else setStatus(id, a);
 });
 
 /* ---------- واجهة الدليفري ---------- */
@@ -161,19 +162,19 @@ function driverView() {
 async function loadMine() {
   const {data, error} = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).order('created_at', {ascending:false}).limit(100);
   if (error) return flash(error.message, false);
-  const o = data || [];
+  const o = data || []; o.forEach(x => ORD[x.id] = x);
   $('s1').textContent = o.filter(x => ['new','received','out'].includes(x.status)).length;
   $('s2').textContent = o.filter(x => x.status === 'out').length;
   $('s3').textContent = o.filter(x => x.status === 'delivered').length;
   $('ol').innerHTML = o.map(x => {
     const s = ST[x.status];
     const acts = x.status === 'new' ? `<button class="p" data-act="received" data-id="${x.id}">استلام الطلب</button>`
-      : x.status === 'received' ? `<button class="p" data-act="out" data-id="${x.id}">خرج للتوصيل</button>`
-      : x.status === 'out' ? `<button class="p" data-act="delivered" data-id="${x.id}">تم التوصيل</button><button class="r" data-act="failed" data-id="${x.id}">تعذر التوصيل</button>` : '';
+      : x.status === 'received' ? `<button class="p" data-act="out" data-id="${x.id}">خرج للتوصيل</button><button data-act="note" data-id="${x.id}">📝 ملاحظة</button>`
+      : x.status === 'out' ? `<button class="p" data-act="delivered" data-id="${x.id}">تم التوصيل</button><button class="r" data-act="failed" data-id="${x.id}">تعذر التوصيل</button><button data-act="note" data-id="${x.id}">📝 ملاحظة</button>` : '';
     return `<div class="card"><div class="ord"><b style="font-size:18px">#${esc(x.order_no)}</b><span class="badge" style="background:${s[1]}">${s[0]}</span></div>
-      <div class="meta">${esc(x.customer_name || '')} ${x.phone ? '· <a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a>' : ''}<br>${esc(x.address || '')}<br>
+      <div class="meta">${esc(x.customer_name || '')} ${x.phone ? '· <a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a>' : ''}<br>${esc(x.address || (x.customer_name || x.phone ? '' : 'بيانات العميل لم تُضف بعد'))}<br>
       استلام ${tm(x.received_at)} · خروج ${tm(x.out_at)} · تسليم ${tm(x.delivered_at)}
-      ${x.failed_reason ? '<br>السبب: ' + esc(x.failed_reason) : ''} ${isLate(x) ? '<br><span class="late">⚠ متأخر</span>' : ''}</div>
+      ${x.failed_reason ? '<br>السبب: ' + esc(x.failed_reason) : ''}${x.driver_note ? '<br>📝 ' + esc(x.driver_note) : ''} ${isLate(x) ? '<br><span class="late">⚠ متأخر</span>' : ''}</div>
       ${acts ? '<div class="acts">' + acts + '</div>' : ''}</div>`;
   }).join('') || '<div class="meta">لا توجد طلبات اليوم</div>';
 }
@@ -205,6 +206,7 @@ async function loadAll() {
   if (q) qb = qb.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
   const [o, s] = await Promise.all([qb, sb.rpc('dlv_stats', {p_from: from, p_to: to})]);
   if (o.error) return flash(o.error.message, false);
+  (o.data || []).forEach(x => ORD[x.id] = x);
   const rows = (s.data || []).filter(r => !dr || r.driver_id === dr);
   const sum = k => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
   const avgs = rows.filter(r => r.avg_min != null);
@@ -214,13 +216,13 @@ async function loadAll() {
     .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
   $('perf').innerHTML = `<table><tr><th>الدليفري</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
     (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
-  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th></th></tr>` +
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th></th></tr>` +
     ((o.data || []).map(x => {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
       const cancel = ['new','received'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
       return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
-        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}</td><td>${cancel}</td></tr>`;
-    }).join('') || '<tr><td colspan="9">لا طلبات</td></tr>') + '</table>';
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
+    }).join('') || '<tr><td colspan="10">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
@@ -258,7 +260,7 @@ let map, markers = {}, mapTimer;
 function openMap() {
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
-  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">🗺️ مواقع الطيارين</b><span id="mcount" class="meta"></span><button id="mclose">إغلاق</button></div><div id="lmap" style="flex:1"></div>';
+  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">🗺️ مواقع الطيارين</b><span id="mcount" class="meta"></span><button id="mclose">إغلاق</button></div><div style="padding:0 10px 8px"><select id="msel"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1"></div>';
   document.body.appendChild(d);
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -271,19 +273,21 @@ function openMap() {
     const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
     const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
     const seen = new Set();
-    (l.data || []).forEach(r => {
+    const only = $('msel').value;
+    (l.data || []).filter(r => !only || r.driver_id === only).forEach(r => {
       seen.add(r.driver_id);
       const live = (Date.now() - new Date(r.updated_at)) < 90000, nm = name[r.driver_id] || 'طيار';
       const html = '<b>' + esc(nm) + '</b><br>' + (live ? '🟢 متصل' : '⚪ آخر ظهور ' + tm(r.updated_at)) + '<br>' + esc((ord[r.driver_id] || ['لا طلبات']).join(' · '));
-      const ic = L.divIcon({ className: '', html: '<div style="background:' + (live ? '#2f9e44' : '#868e96') + ';color:#fff;border:2px solid #fff;border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap">' + esc(nm) + '</div>' });
+      const ic = L.divIcon({ className: '', iconSize: null, html: '<div style="transform:translate(-50%,-50%);display:inline-block;background:' + (live ? '#2f9e44' : '#868e96') + ';color:#fff;border:2px solid #fff;border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap">' + esc(nm) + '</div>' });
       const m = markers[r.driver_id];
       if (m) { m.setLatLng([r.lat, r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
-    $('mcount').textContent = seen.size + ' طيار';
-    if (!fitted && seen.size) { map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
+    $('mcount').textContent = only && !seen.size ? 'الطيار ده مش بيشارك موقعه' : seen.size + ' طيار';
+    if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }
+  $('msel').onchange = () => { fitted = false; refresh(); };
   refresh(); mapTimer = setInterval(refresh, 10000);
   $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
 }
@@ -295,17 +299,18 @@ function addDriverForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة طيار جديد</h2><div id="aerr" class="msg e hide"></div>' +
     '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c">' +
-    '<label>كلمة السر (8 أحرف على الأقل)</label><input id="a_p" value="' + pw + '">' +
+    '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (8 أحرف على الأقل)</label><input id="a_p" value="' + pw + '">' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
   document.body.appendChild(d);
-  const mail = () => 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com';
-  $('a_c').oninput = () => { $('a_e').textContent = $('a_c').value.trim() ? mail() : '—'; };
+  const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
+  const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
   $('a_x').onclick = () => d.remove();
   $('a_ok').onclick = async () => {
     const name = $('a_n').value.trim(), code = $('a_c').value.trim(), pass = $('a_p').value, email = mail();
     const er = $('aerr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('a_ok').disabled = false; };
     if (!name || !code) return fail('اكتب الاسم والكود');
+    if (!$('a_m').value.includes('@') && !/[a-z0-9]/i.test(code)) return fail('اكتب كود بأرقام أو حروف إنجليزي، أو اكتب الإيميل بنفسك');
     $('a_ok').disabled = true;
     const { data, error } = await sb.rpc('dlv_create_driver', { p_email: email, p_password: pass, p_name: name, p_code: code });
     if (error) return fail(error.message);
@@ -317,6 +322,43 @@ function addDriverForm() {
       '<div class="row" style="margin-top:14px"><button class="p big" id="a_cp" style="flex:1">نسخ</button><button class="big" id="a_x2" style="flex:0 0 90px">إغلاق</button></div>';
     $('a_cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(txt); $('a_cp').textContent = 'اتنسخ ✓'; };
     $('a_x2').onclick = () => d.remove();
+  };
+}
+
+/* ---------- تعديل بيانات الطلب ---------- */
+function editOrderForm(id) {
+  const o = ORD[id]; if (!o) return;
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = '<div><h2 style="font-size:16px">تعديل طلب #' + esc(o.order_no) + '</h2><div id="eerr" class="msg e hide"></div>' +
+    '<label>اسم العميل</label><input id="e_c" value="' + esc(o.customer_name) + '">' +
+    '<label>رقم الهاتف</label><input id="e_p" inputmode="tel" value="' + esc(o.phone) + '">' +
+    '<label>العنوان</label><input id="e_a" value="' + esc(o.address) + '">' +
+    '<label>ملاحظات</label><textarea id="e_n" rows="2">' + esc(o.notes) + '</textarea>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="e_ok" style="flex:1">حفظ</button><button class="big" id="e_x" style="flex:0 0 90px">إلغاء</button></div></div>';
+  document.body.appendChild(d);
+  $('e_x').onclick = () => d.remove();
+  $('e_ok').onclick = async () => {
+    $('e_ok').disabled = true;
+    const { error } = await sb.rpc('dlv_edit_order', { p_id: id, p_customer: $('e_c').value, p_phone: $('e_p').value, p_address: $('e_a').value, p_notes: $('e_n').value });
+    if (error) { $('e_ok').disabled = false; const e = $('eerr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    d.remove(); flash('تم حفظ التعديل', true); me.role === 'driver' ? loadMine() : loadAll();
+  };
+}
+
+/* ---------- ملاحظة الطيار ---------- */
+function noteForm(id) {
+  const o = ORD[id]; if (!o) return;
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = '<div><h2 style="font-size:16px">ملاحظة على طلب #' + esc(o.order_no) + '</h2><div id="nerr" class="msg e hide"></div>' +
+    '<label>مثال: رقم العمارة غلط، العميل في العمارة اللي جنبها</label><textarea id="nt" rows="4">' + esc(o.driver_note) + '</textarea>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="nt_ok" style="flex:1">حفظ</button><button class="big" id="nt_x" style="flex:0 0 90px">إلغاء</button></div></div>';
+  document.body.appendChild(d);
+  $('nt_x').onclick = () => d.remove();
+  $('nt_ok').onclick = async () => {
+    $('nt_ok').disabled = true;
+    const { error } = await sb.rpc('dlv_set_note', { p_id: id, p_note: $('nt').value });
+    if (error) { $('nt_ok').disabled = false; const e = $('nerr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    d.remove(); flash('تم حفظ الملاحظة', true); loadMine();
   };
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

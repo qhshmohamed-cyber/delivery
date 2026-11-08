@@ -12,13 +12,13 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-:root{--bg:#f6ebd6;--card:#fffaf0;--text:#3a2412;--muted:#8a7258;--line:#e3d2b3;--brand:#5a3317;--gold:#b9832e}
-@media (prefers-color-scheme:dark){:root{--bg:#1c130b;--card:#2a1c10;--text:#f4e9d2;--muted:#b9a68a;--line:#46301c;--brand:#a8762a;--gold:#c8962e}}
+:root{--bg:#dca86f;--card:#fff8ea;--text:#3a2412;--muted:#5b4128;--line:#dcc49a;--brand:#5a3317;--gold:#b9832e}
+
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
-.wrap{max-width:900px;margin:0 auto;padding:12px 0}
-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-header h1{font-size:16px;margin:0;flex:1}header small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.wrap{max-width:900px;margin:0 auto;padding:12px 0;position:relative;z-index:1}
+header{display:flex;align-items:center;gap:10px;margin-bottom:12px;background:#4e2c12;color:#f4e9d2;border-radius:16px;padding:10px 12px;border-bottom:3px solid #b9832e}
+header h1{font-size:16px;margin:0;flex:1}header small{display:block;color:#e0cba6;font-weight:400;font-size:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
 button,input,select,textarea{font:inherit;font-size:14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px;width:100%}
 button{width:auto;cursor:pointer;font-weight:600}
@@ -44,7 +44,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
-.hide{display:none}h2{font-size:14px;margin:12px 0 6px}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
+.hide{display:none}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
 </style>
 </head>
 <body>

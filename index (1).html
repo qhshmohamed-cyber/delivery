@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>واحة اليمن — متابعة الدليفري</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4e2c12">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#dca86f;--card:#fff8ea;--text:#3a2412;--muted:#5b4128;--line:#dcc49a;--brand:#5a3317;--gold:#b9832e}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
+.wrap{max-width:900px;margin:0 auto;padding:12px 0;position:relative;z-index:1}
+header{display:flex;align-items:center;gap:10px;margin-bottom:12px;background:#4e2c12;color:#f4e9d2;border-radius:16px;padding:10px 12px;border-bottom:3px solid #b9832e}
+header h1{font-size:16px;margin:0;flex:1}header small{display:block;color:#e0cba6;font-weight:400;font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+button,input,select,textarea{font:inherit;font-size:14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px;width:100%}
+button{width:auto;cursor:pointer;font-weight:600}
+button.p{background:var(--brand);color:#fff;border-color:var(--brand)}
+button.g{background:var(--gold);color:#fff;border-color:var(--gold)}
+button.r{color:#e03131;border-color:#e03131}
+button:disabled{opacity:.5}
+.big{width:100%;padding:14px;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.stat b{display:block;font-size:22px}.stat span{font-size:11px;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.badge{font-size:11px;color:#fff;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.late{color:#e03131;font-size:12px;font-weight:700}
+.meta{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.7}
+.ord{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.acts{display:flex;gap:8px;margin-top:10px}.acts button{flex:1;padding:12px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{color:var(--muted);font-weight:600}
+.msg{padding:10px;border-radius:10px;margin-bottom:10px;font-size:13px}
+.msg.e{background:#ffe3e3;color:#c92a2a}.msg.o{background:#d3f9d8;color:#2b8a3e}
+.modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
+.modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
+.modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
+.hide{display:none}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+/* ===== الإعدادات: ضع بيانات مشروعك من Supabase > Project Settings > API ===== */
+const SB_URL = 'https://mkptmejkcemdhlhdaort.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcHRtZWprY2VtZGhsaGRhb3J0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwODE2MTQsImV4cCI6MjEwOTY1NzYxNH0.ovPRrF8RDXPut2jY8HMHdO27sFvxmyDymBVAKBV7mC8';
+/* ============================================================================= */
+const sb = supabase.createClient(SB_URL, SB_KEY);
+const ST = {new:['جديد','#868e96'],received:['تم الاستلام','#1c7ed6'],out:['خرج للتوصيل','#e8590c'],
+  delivered:['تم التوصيل','#2f9e44'],failed:['تعذر التوصيل','#e03131'],cancelled:['ملغي','#adb5bd']};
+const REASONS = ['العميل لا يرد','العميل ألغى الطلب','العنوان غير صحيح','مشكلة في الطلب','سبب آخر'];
+const LATE_MIN = 45, PAGE = 25;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cairoDate = d => (d || new Date()).toLocaleDateString('en-CA', {timeZone:'Africa/Cairo'});
+const tm = t => t ? new Date(t).toLocaleTimeString('ar-EG', {timeZone:'Africa/Cairo', hour:'2-digit', minute:'2-digit'}) : '—';
+const mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000) : null;
+const isLate = o => ['new','received','out'].includes(o.status)
+  ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
+  : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
+let me = null, drivers = [], page = 0, timer = null, chan = null;
+const ORD = {};
+
+function flash(t, ok) {
+  const m = $('flash'); if (!m) return;
+  m.className = 'msg ' + (ok ? 'o' : 'e'); m.textContent = t;
+  setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
+}
+const shell = (inner) => `<header><img src="icon-192.png" alt="" style="width:46px;height:46px;border-radius:12px"><h1>واحة اليمن — متابعة الدليفري
+  <small>${esc(me.full_name)} · كود ${esc(me.employee_code)} · ${{driver:'دليفري',manager:'مدير دليفري',admin:'مدير النظام'}[me.role]}</small></h1>
+  <button id="out">خروج</button></header><div id="flash" class="hide"></div>${inner}`;
+
+/* ---------- الدخول ---------- */
+function loginView(err) {
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img src="icon-192.png" alt="" style="width:110px;height:110px;border-radius:22px;display:block;margin:0 auto 10px"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+    <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
+    <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
+    <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
+    <button class="p big" id="go" style="margin-top:14px">دخول</button></div>`;
+  $('go').onclick = async () => {
+    $('go').disabled = true;
+    const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
+    if (error) return loginView('بيانات الدخول غير صحيحة');
+    boot();
+  };
+}
+async function boot() {
+  const {data:{session}} = await sb.auth.getSession();
+  if (!session) return loginView();
+  const {data, error} = await sb.from('dlv_profiles').select('*').eq('user_id', session.user.id).maybeSingle();
+  if (error || !data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
+  me = data;
+  if (me.role !== 'driver') {
+    const r = await sb.from('dlv_profiles').select('user_id,full_name,employee_code').eq('role','driver').eq('active',true).order('full_name');
+    drivers = r.data || [];
+  }
+  me.role === 'driver' ? driverView() : managerView();
+  if (chan) sb.removeChannel(chan);
+  chan = sb.channel('dlv').on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, () => {
+    clearTimeout(timer); timer = setTimeout(() => me.role === 'driver' ? loadMine() : loadAll(), 400);
+  }).subscribe();
+}
+function bindOut() { $('out').onclick = async () => { if (watchId != null) await stopShare(); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+
+/* ---------- العمليات ---------- */
+async function setStatus(id, to, note) {
+  const {error} = await sb.rpc('dlv_set_status', {p_id: id, p_to: to, p_note: note || null});
+  if (error) return flash(error.message, false);
+  flash('تم التحديث', true);
+  me.role === 'driver' ? loadMine() : loadAll();
+}
+function newOrderForm() {
+  const isMgr = me.role !== 'driver';
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
+    <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
+    ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
+    <label>العنوان</label><input id="n_a">` : ''}
+    ${isMgr ? `<label>الدليفري *</label><select id="n_d"><option value="">اختر...</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>` : ''}
+    ${isMgr ? '<label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>' : ''}
+    <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
+  document.body.appendChild(d);
+  $('n_x').onclick = () => d.remove();
+  $('n_ok').onclick = async () => {
+    $('n_ok').disabled = true;
+    const {error} = await sb.rpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
+      p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: isMgr ? ($('n_d').value || null) : null});
+    if (error) { $('n_ok').disabled = false; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    d.remove(); flash('تم تسجيل الطلب', true); isMgr ? loadAll() : loadMine();
+  };
+}
+function failDialog(id) {
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = `<div><h2 style="font-size:16px">سبب تعذر التوصيل</h2><select id="fr">${REASONS.map(r => `<option>${r}</option>`).join('')}</select>
+    <div class="row" style="margin-top:14px"><button class="r big" id="fr_ok" style="flex:1">تأكيد</button><button class="big" id="fr_x" style="flex:0 0 90px">رجوع</button></div></div>`;
+  document.body.appendChild(d);
+  $('fr_x').onclick = () => d.remove();
+  $('fr_ok').onclick = () => { const r = $('fr').value; d.remove(); setStatus(id, 'failed', r); };
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const id = +b.dataset.id, a = b.dataset.act;
+  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else setStatus(id, a);
+});
+
+/* ---------- واجهة الدليفري ---------- */
+function driverView() {
+  $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
+    <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
+    <div class="card"><button class="g big" id="shr"></button><div class="meta" id="locst">الموقع بيتشارك وإنت شغّلته بس، والشاشة لازم تفضل مفتوحة.</div></div><button class="g big" id="nw">＋ طلب جديد</button><h2>طلبات اليوم</h2><div id="ol"></div>`);
+  bindOut(); $('nw').onclick = newOrderForm; $('shr').onclick = () => watchId != null ? stopShare() : startShare(); renderShare(); loadMine();
+}
+async function loadMine() {
+  const {data, error} = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).order('created_at', {ascending:false}).limit(100);
+  if (error) return flash(error.message, false);
+  const o = data || []; o.forEach(x => ORD[x.id] = x);
+  $('s1').textContent = o.filter(x => ['new','received','out'].includes(x.status)).length;
+  $('s2').textContent = o.filter(x => x.status === 'out').length;
+  $('s3').textContent = o.filter(x => x.status === 'delivered').length;
+  $('ol').innerHTML = o.map(x => {
+    const s = ST[x.status];
+    const acts = x.status === 'new' ? `<button class="p" data-act="received" data-id="${x.id}">استلام الطلب</button>`
+      : x.status === 'received' ? `<button class="p" data-act="out" data-id="${x.id}">خرج للتوصيل</button><button data-act="note" data-id="${x.id}">📝 ملاحظة</button>`
+      : x.status === 'out' ? `<button class="p" data-act="delivered" data-id="${x.id}">تم التوصيل</button><button class="r" data-act="failed" data-id="${x.id}">تعذر التوصيل</button><button data-act="note" data-id="${x.id}">📝 ملاحظة</button>` : '';
+    return `<div class="card"><div class="ord"><b style="font-size:18px">#${esc(x.order_no)}</b><span class="badge" style="background:${s[1]}">${s[0]}</span></div>
+      <div class="meta">${esc(x.customer_name || '')} ${x.phone ? '· <a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a>' : ''}<br>${esc(x.address || (x.customer_name || x.phone ? '' : 'بيانات العميل لم تُضف بعد'))}<br>
+      استلام ${tm(x.received_at)} · خروج ${tm(x.out_at)} · تسليم ${tm(x.delivered_at)}
+      ${x.failed_reason ? '<br>السبب: ' + esc(x.failed_reason) : ''}${x.driver_note ? '<br>📝 ' + esc(x.driver_note) : ''} ${isLate(x) ? '<br><span class="late">⚠ متأخر</span>' : ''}</div>
+      ${acts ? '<div class="acts">' + acts + '</div>' : ''}</div>`;
+  }).join('') || '<div class="meta">لا توجد طلبات اليوم</div>';
+}
+
+/* ---------- واجهة المدير ---------- */
+function managerView() {
+  const t = cairoDate();
+  $('app').innerHTML = shell(`<div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">
+    <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
+    <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
+    <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button id="ad">＋ إضافة طيار</button></div>
+    <div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
+    <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
+    <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
+  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; $('ad').onclick = addDriverForm; page = 0;
+  ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
+  let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
+  $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
+  $('nx').onclick = () => { page++; loadAll(); };
+  loadAll();
+}
+async function loadAll() {
+  const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
+  const q = $('f_q').value.replace(/[,()%*]/g, ' ').trim();
+  let qb = sb.from('dlv_orders').select('*, driver:driver_id(full_name)', {count:'exact'}).gte('order_date', from).lte('order_date', to)
+    .order('created_at', {ascending:false}).range(page * PAGE, page * PAGE + PAGE - 1);
+  if (st) qb = qb.eq('status', st); if (dr) qb = qb.eq('driver_id', dr);
+  if (q) qb = qb.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
+  const [o, s] = await Promise.all([qb, sb.rpc('dlv_stats', {p_from: from, p_to: to})]);
+  if (o.error) return flash(o.error.message, false);
+  (o.data || []).forEach(x => ORD[x.id] = x);
+  const rows = (s.data || []).filter(r => !dr || r.driver_id === dr);
+  const sum = k => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
+  const avgs = rows.filter(r => r.avg_min != null);
+  const avg = avgs.length ? Math.round(avgs.reduce((a, r) => a + Number(r.avg_min) * Number(r.delivered), 0) / Math.max(1, avgs.reduce((a, r) => a + Number(r.delivered), 0))) : '—';
+  $('kpi').innerHTML = [['إجمالي الطلبات', sum('total')], ['خرجت للتوصيل', sum('out_now')], ['تم توصيلها', sum('delivered')],
+    ['متأخرة', sum('late')], ['تعذر توصيلها', sum('failed')], ['متوسط التوصيل (د)', avg]]
+    .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
+  $('perf').innerHTML = `<table><tr><th>الدليفري</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
+    (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th></th></tr>` +
+    ((o.data || []).map(x => {
+      const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
+      const cancel = ['new','received'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
+      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
+    }).join('') || '<tr><td colspan="10">لا طلبات</td></tr>') + '</table>';
+  const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
+  $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
+  $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
+}
+/* ---------- مشاركة الموقع (الطيار) ---------- */
+let watchId = null, lastSend = 0, wake = null;
+function renderShare() {
+  const b = $('shr'); if (!b) return; const on = watchId != null;
+  b.textContent = on ? '⏹ إيقاف مشاركة الموقع' : '📍 ابدأ مشاركة الموقع';
+  b.style.background = on ? '#e03131' : ''; b.style.borderColor = on ? '#e03131' : '';
+}
+async function startShare() {
+  if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
+  watchId = navigator.geolocation.watchPosition(async p => {
+    if (Date.now() - lastSend < 15000) return; lastSend = Date.now();
+    const { error } = await sb.rpc('dlv_update_location', { p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy });
+    const s = $('locst'); if (s) s.textContent = error ? '⚠ ' + error.message : '🟢 الموقع شغال — آخر إرسال ' + tm(new Date());
+  }, e => { stopShare(); flash(e.code === 1 ? 'اسمح بالموقع من إعدادات المتصفح' : 'تعذر تحديد الموقع', false); },
+  { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  try { wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  renderShare();
+}
+async function stopShare() {
+  if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  try { wake && wake.release(); } catch (e) {} wake = null; lastSend = 0;
+  await sb.rpc('dlv_stop_location'); renderShare();
+  const s = $('locst'); if (s) s.textContent = 'مشاركة الموقع متوقفة.';
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId != null && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {});
+});
+
+/* ---------- خريطة الطيارين (المدير) ---------- */
+let map, markers = {}, mapTimer;
+function openMap() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
+  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">🗺️ مواقع الطيارين</b><span id="mcount" class="meta"></span><button id="mclose">إغلاق</button></div><div style="padding:0 10px 8px"><select id="msel"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1"></div>';
+  document.body.appendChild(d);
+  map = L.map('lmap').setView([30.0444, 31.2357], 12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  markers = {}; let fitted = false;
+  async function refresh() {
+    const [l, o] = await Promise.all([
+      sb.from('dlv_locations').select('driver_id,lat,lng,updated_at'),
+      sb.from('dlv_orders').select('driver_id,order_no,status').eq('order_date', cairoDate()).in('status', ['received', 'out'])]);
+    if (l.error) return;
+    const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
+    const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
+    const seen = new Set();
+    const only = $('msel').value;
+    (l.data || []).filter(r => !only || r.driver_id === only).forEach(r => {
+      seen.add(r.driver_id);
+      const live = (Date.now() - new Date(r.updated_at)) < 90000, nm = name[r.driver_id] || 'طيار';
+      const html = '<b>' + esc(nm) + '</b><br>' + (live ? '🟢 متصل' : '⚪ آخر ظهور ' + tm(r.updated_at)) + '<br>' + esc((ord[r.driver_id] || ['لا طلبات']).join(' · '));
+      const ic = L.divIcon({ className: '', iconSize: null, html: '<div style="transform:translate(-50%,-50%);display:inline-block;background:' + (live ? '#2f9e44' : '#868e96') + ';color:#fff;border:2px solid #fff;border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap">' + esc(nm) + '</div>' });
+      const m = markers[r.driver_id];
+      if (m) { m.setLatLng([r.lat, r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
+      else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
+    });
+    Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
+    $('mcount').textContent = only && !seen.size ? 'الطيار ده مش بيشارك موقعه' : seen.size + ' طيار';
+    if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
+  }
+  $('msel').onchange = () => { fitted = false; refresh(); };
+  refresh(); mapTimer = setInterval(refresh, 10000);
+  $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
+}
+
+/* ---------- إضافة طيار (المدير) ---------- */
+function addDriverForm() {
+  const A = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const pw = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => A[b % A.length]).join('');
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = '<div><h2 style="font-size:16px">إضافة طيار جديد</h2><div id="aerr" class="msg e hide"></div>' +
+    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c">' +
+    '<label>كلمة السر (8 أحرف على الأقل)</label><input id="a_p" value="' + pw + '">' +
+    '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
+  document.body.appendChild(d);
+  const mail = () => 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com';
+  $('a_c').oninput = () => { $('a_e').textContent = $('a_c').value.trim() ? mail() : '—'; };
+  $('a_x').onclick = () => d.remove();
+  $('a_ok').onclick = async () => {
+    const name = $('a_n').value.trim(), code = $('a_c').value.trim(), pass = $('a_p').value, email = mail();
+    const er = $('aerr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('a_ok').disabled = false; };
+    if (!name || !code) return fail('اكتب الاسم والكود');
+    $('a_ok').disabled = true;
+    const { data, error } = await sb.rpc('dlv_create_driver', { p_email: email, p_password: pass, p_name: name, p_code: code });
+    if (error) return fail(error.message);
+    drivers.push({ user_id: data, full_name: name, employee_code: code });
+    const f = $('f_dr'); if (f) f.insertAdjacentHTML('beforeend', '<option value="' + data + '">' + esc(name) + '</option>');
+    const txt = name + '\nالإيميل: ' + email + '\nكلمة السر: ' + pass;
+    d.firstChild.innerHTML = '<h2 style="font-size:16px">✅ تم إنشاء الحساب</h2><div class="card" style="white-space:pre-line;direction:rtl">' + esc(txt) + '</div>' +
+      '<div class="meta">احتفظ ببيانات الدخول وسلّمها للطيار، كلمة السر مش هتظهر تاني.</div>' +
+      '<div class="row" style="margin-top:14px"><button class="p big" id="a_cp" style="flex:1">نسخ</button><button class="big" id="a_x2" style="flex:0 0 90px">إغلاق</button></div>';
+    $('a_cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(txt); $('a_cp').textContent = 'اتنسخ ✓'; };
+    $('a_x2').onclick = () => d.remove();
+  };
+}
+
+/* ---------- تعديل بيانات الطلب ---------- */
+function editOrderForm(id) {
+  const o = ORD[id]; if (!o) return;
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = '<div><h2 style="font-size:16px">تعديل طلب #' + esc(o.order_no) + '</h2><div id="eerr" class="msg e hide"></div>' +
+    '<label>اسم العميل</label><input id="e_c" value="' + esc(o.customer_name) + '">' +
+    '<label>رقم الهاتف</label><input id="e_p" inputmode="tel" value="' + esc(o.phone) + '">' +
+    '<label>العنوان</label><input id="e_a" value="' + esc(o.address) + '">' +
+    '<label>ملاحظات</label><textarea id="e_n" rows="2">' + esc(o.notes) + '</textarea>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="e_ok" style="flex:1">حفظ</button><button class="big" id="e_x" style="flex:0 0 90px">إلغاء</button></div></div>';
+  document.body.appendChild(d);
+  $('e_x').onclick = () => d.remove();
+  $('e_ok').onclick = async () => {
+    $('e_ok').disabled = true;
+    const { error } = await sb.rpc('dlv_edit_order', { p_id: id, p_customer: $('e_c').value, p_phone: $('e_p').value, p_address: $('e_a').value, p_notes: $('e_n').value });
+    if (error) { $('e_ok').disabled = false; const e = $('eerr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    d.remove(); flash('تم حفظ التعديل', true); me.role === 'driver' ? loadMine() : loadAll();
+  };
+}
+
+/* ---------- ملاحظة الطيار ---------- */
+function noteForm(id) {
+  const o = ORD[id]; if (!o) return;
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = '<div><h2 style="font-size:16px">ملاحظة على طلب #' + esc(o.order_no) + '</h2><div id="nerr" class="msg e hide"></div>' +
+    '<label>مثال: رقم العمارة غلط، العميل في العمارة اللي جنبها</label><textarea id="nt" rows="4">' + esc(o.driver_note) + '</textarea>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="nt_ok" style="flex:1">حفظ</button><button class="big" id="nt_x" style="flex:0 0 90px">إلغاء</button></div></div>';
+  document.body.appendChild(d);
+  $('nt_x').onclick = () => d.remove();
+  $('nt_ok').onclick = async () => {
+    $('nt_ok').disabled = true;
+    const { error } = await sb.rpc('dlv_set_note', { p_id: id, p_note: $('nt').value });
+    if (error) { $('nt_ok').disabled = false; const e = $('nerr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    d.remove(); flash('تم حفظ الملاحظة', true); loadMine();
+  };
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+boot();
+</script>
+</body>
+</html>

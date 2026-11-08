@@ -76,7 +76,7 @@ function flash(t, ok) {
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
 const shell = (inner) => `<header><img src="icon-192.png" alt="" style="width:46px;height:46px;border-radius:12px"><h1>واحة اليمن — متابعة الدليفري
-  <small>${esc(me.full_name)} · كود ${esc(me.employee_code)} · ${{driver:'دليفري',manager:'مدير دليفري',admin:'مدير النظام'}[me.role]}</small></h1>
+  <small>${esc(me.full_name)} · كود ${esc(me.employee_code)} · ${me.role === 'manager' ? esc(me.job_title || 'مدير') : {driver:'دليفري',admin:'مدير النظام'}[me.role]}</small></h1>
   <button id="out">خروج</button></header><div id="flash" class="hide"></div>${inner}`;
 
 /* ---------- الدخول ---------- */
@@ -375,7 +375,7 @@ async function managePilots() {
     const q = $('psearch').value.trim().toLowerCase();
     $('plist').innerHTML = rows.filter(r => !q || (r.full_name + ' ' + r.employee_code + ' ' + r.email).toLowerCase().includes(q)).map(r =>
       '<div class="card"><div class="row"><div class="grow"><div class="name">' + esc(r.full_name) +
-      (r.role !== 'driver' ? ' <span class="badge" style="background:#5a3317">' + (r.role === 'admin' ? 'مدير عام' : 'مشرف') + '</span>' : '') +
+      (r.role !== 'driver' ? ' <span class="badge" style="background:#5a3317">' + (r.role === 'admin' ? 'مدير عام' : esc(r.job_title || 'مدير')) + '</span>' : '') +
       '</div><div class="meta" dir="ltr" style="text-align:right">' + esc(r.email) + ' · ' + esc(r.employee_code) + '</div></div>' +
       '<button data-pid="' + r.user_id + '">تعديل</button></div></div>').join('') || '<div class="meta">لا نتائج</div>';
   };
@@ -388,12 +388,23 @@ async function managePilots() {
   $('plist').onclick = e => { const b = e.target.closest('[data-pid]'); if (b) editPilotForm(rows.find(r => r.user_id === b.dataset.pid), load); };
   load();
 }
+async function refreshDrivers() {
+  const rr = await sb.from('dlv_profiles').select('user_id,full_name,employee_code').eq('role', 'driver').eq('active', true).order('full_name');
+  if (rr.data) drivers = rr.data;
+  const f = $('f_dr'); if (f) { const cur = f.value; f.innerHTML = '<option value="">كل الدليفري</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join(''); f.value = cur; }
+}
 function editPilotForm(r, done) {
   const A = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const self = r.user_id === me.user_id;
+  const JOBS = [['driver', 'طيار'], ['supervisor', 'مشرف'], ['manager', 'مدير'], ['admin', 'مدير عام']];
+  const curJob = r.role === 'admin' ? 'admin' : r.role === 'driver' ? 'driver' : (r.job_title === 'مشرف' ? 'supervisor' : 'manager');
   const d = document.createElement('div'); d.className = 'modal'; d.style.zIndex = 30;
   d.innerHTML = '<div><h2 style="font-size:16px">تعديل ' + esc(r.full_name) + '</h2><div id="perr" class="msg e hide"></div>' +
     '<label>الاسم</label><input id="p_n" value="' + esc(r.full_name) + '">' +
     '<label>كود الموظف</label><input id="p_c" value="' + esc(r.employee_code) + '">' +
+    '<label>الإيميل (بيه بيدخل)' + (self ? ' — إيميلك إنت مش بيتغيّر من هنا' : '') + '</label><input id="p_m" type="email" dir="ltr" value="' + esc(r.email) + '"' + (self ? ' disabled' : '') + '>' +
+    '<label>الوظيفة' + (self ? ' — وظيفة حسابك إنت مش بتتغيّر من هنا' : '') + '</label><select id="p_j"' + (self ? ' disabled' : '') + '>' +
+    JOBS.map(j => '<option value="' + j[0] + '"' + (j[0] === curJob ? ' selected' : '') + '>' + j[1] + '</option>').join('') + '</select>' +
     '<label>كلمة سر جديدة (سيبها فاضية لو مش عايز تغيّرها)</label><div class="row"><input id="p_p" style="flex:1" placeholder="8 أحرف على الأقل"><button id="p_g">توليد</button></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="p_ok" style="flex:1">حفظ</button><button class="big" id="p_x" style="flex:0 0 90px">إلغاء</button></div></div>';
   document.body.appendChild(d);
@@ -402,19 +413,23 @@ function editPilotForm(r, done) {
   $('p_ok').onclick = async () => {
     const er = $('perr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('p_ok').disabled = false; };
     const name = $('p_n').value.trim(), code = $('p_c').value.trim(), pw = $('p_p').value;
+    const mail = $('p_m').value.trim().toLowerCase(), job = $('p_j').value, oldMail = (r.email || '').toLowerCase();
     if (pw && pw.length < 8) return fail('كلمة السر 8 أحرف على الأقل');
     $('p_ok').disabled = true;
-    let res = await sb.rpc('dlv_update_pilot', { p_user: r.user_id, p_name: name, p_code: code });
-    if (res.error) return fail(res.error.message);
-    if (pw) {
-      res = await sb.rpc('dlv_set_pilot_password', { p_user: r.user_id, p_password: pw });
-      if (res.error) { done(); return fail('اتحفظ الاسم والكود، لكن كلمة السر فشلت: ' + res.error.message); }
+    const steps = [['dlv_update_pilot', { p_user: r.user_id, p_name: name, p_code: code }]];
+    if (!self && mail && mail !== oldMail) steps.push(['dlv_set_pilot_email', { p_user: r.user_id, p_email: mail }]);
+    if (!self && job !== curJob) steps.push(['dlv_set_pilot_job', { p_user: r.user_id, p_job: job }]);
+    if (pw) steps.push(['dlv_set_pilot_password', { p_user: r.user_id, p_password: pw }]);
+    for (let i = 0; i < steps.length; i++) {
+      const res = await sb.rpc(steps[i][0], steps[i][1]);
+      if (res.error) { if (i) { done(); refreshDrivers(); } return fail((i ? 'اتحفظ جزء من التعديل، لكن حصل خطأ: ' : '') + res.error.message); }
     }
-    done();
-    if (!pw) { d.remove(); return flash('تم حفظ التعديل', true); }
-    const txt = name + '\nالإيميل: ' + r.email + '\nكلمة السر الجديدة: ' + pw;
+    done(); refreshDrivers();
+    const mailChanged = !self && mail !== oldMail, jobChanged = !self && job !== curJob;
+    if (!pw && !mailChanged && !jobChanged) { d.remove(); return flash('تم حفظ التعديل', true); }
+    const txt = name + '\nالوظيفة: ' + JOBS.find(j => j[0] === (self ? curJob : job))[1] + '\nالإيميل: ' + (self ? r.email : mail) + (pw ? '\nكلمة السر الجديدة: ' + pw : '');
     d.firstChild.innerHTML = '<h2 style="font-size:16px">✅ تم الحفظ</h2><div class="card" style="white-space:pre-line">' + esc(txt) + '</div>' +
-      '<div class="meta">كلمة السر مش هتظهر تاني، انسخها وابعتها للطيار.</div>' +
+      '<div class="meta">' + (jobChanged ? 'لو الشخص داخل دلوقتي، لازم يخرج ويدخل تاني عشان وظيفته الجديدة تتفعّل. ' : '') + (pw ? 'كلمة السر مش هتظهر تاني، انسخها. ' : '') + (mailChanged ? 'جرّب الدخول بالإيميل الجديد.' : '') + '</div>' +
       '<div class="row" style="margin-top:14px"><button class="p big" id="p_cp" style="flex:1">نسخ</button><button class="big" id="p_x2" style="flex:0 0 90px">إغلاق</button></div>';
     $('p_cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(txt); $('p_cp').textContent = 'اتنسخ ✓'; };
     $('p_x2').onclick = () => d.remove();

@@ -44,7 +44,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
-.hide{display:none}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
+.hide{display:none}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}@media print{body>*:not(#rpt){display:none!important}body::before{display:none}#rpt{position:static!important;overflow:visible!important;background:#fff!important}.noprint{display:none!important}}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
 </style>
 </head>
 <body>
@@ -186,11 +186,11 @@ function managerView() {
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
-    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button id="ad">＋ إضافة طيار</button></div>
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button id="ad">＋ إضافة طيار</button>${me.role === 'admin' ? '<button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button>' : ''}</div>
     <div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; $('ad').onclick = addDriverForm; page = 0;
+  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; page = 0;
   ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
   let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
@@ -360,6 +360,117 @@ function noteForm(id) {
     if (error) { $('nt_ok').disabled = false; const e = $('nerr'); e.textContent = error.message; e.className = 'msg e'; return; }
     d.remove(); flash('تم حفظ الملاحظة', true); loadMine();
   };
+}
+
+/* ---------- إدارة الطيارين (المدير العام فقط) ---------- */
+async function managePilots() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
+  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">👥 إدارة الطيارين</b><button id="pclose">إغلاق</button></div>' +
+    '<div style="padding:0 10px 8px"><input id="psearch" placeholder="بحث بالاسم أو الكود أو الإيميل"></div><div id="plist" style="flex:1;overflow:auto;padding:0 10px 20px"></div>';
+  document.body.appendChild(d);
+  $('pclose').onclick = () => d.remove();
+  let rows = [];
+  const draw = () => {
+    const q = $('psearch').value.trim().toLowerCase();
+    $('plist').innerHTML = rows.filter(r => !q || (r.full_name + ' ' + r.employee_code + ' ' + r.email).toLowerCase().includes(q)).map(r =>
+      '<div class="card"><div class="row"><div class="grow"><div class="name">' + esc(r.full_name) +
+      (r.role !== 'driver' ? ' <span class="badge" style="background:#5a3317">' + (r.role === 'admin' ? 'مدير عام' : 'مشرف') + '</span>' : '') +
+      '</div><div class="meta" dir="ltr" style="text-align:right">' + esc(r.email) + ' · ' + esc(r.employee_code) + '</div></div>' +
+      '<button data-pid="' + r.user_id + '">تعديل</button></div></div>').join('') || '<div class="meta">لا نتائج</div>';
+  };
+  const load = async () => {
+    const { data, error } = await sb.rpc('dlv_list_pilots');
+    if (error) { $('plist').innerHTML = '<div class="msg e">' + esc(error.message) + '</div>'; return; }
+    rows = data || []; draw();
+  };
+  $('psearch').oninput = draw;
+  $('plist').onclick = e => { const b = e.target.closest('[data-pid]'); if (b) editPilotForm(rows.find(r => r.user_id === b.dataset.pid), load); };
+  load();
+}
+function editPilotForm(r, done) {
+  const A = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const d = document.createElement('div'); d.className = 'modal'; d.style.zIndex = 30;
+  d.innerHTML = '<div><h2 style="font-size:16px">تعديل ' + esc(r.full_name) + '</h2><div id="perr" class="msg e hide"></div>' +
+    '<label>الاسم</label><input id="p_n" value="' + esc(r.full_name) + '">' +
+    '<label>كود الموظف</label><input id="p_c" value="' + esc(r.employee_code) + '">' +
+    '<label>كلمة سر جديدة (سيبها فاضية لو مش عايز تغيّرها)</label><div class="row"><input id="p_p" style="flex:1" placeholder="8 أحرف على الأقل"><button id="p_g">توليد</button></div>' +
+    '<div class="row" style="margin-top:14px"><button class="p big" id="p_ok" style="flex:1">حفظ</button><button class="big" id="p_x" style="flex:0 0 90px">إلغاء</button></div></div>';
+  document.body.appendChild(d);
+  $('p_x').onclick = () => d.remove();
+  $('p_g').onclick = () => { $('p_p').value = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => A[b % A.length]).join(''); };
+  $('p_ok').onclick = async () => {
+    const er = $('perr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('p_ok').disabled = false; };
+    const name = $('p_n').value.trim(), code = $('p_c').value.trim(), pw = $('p_p').value;
+    if (pw && pw.length < 8) return fail('كلمة السر 8 أحرف على الأقل');
+    $('p_ok').disabled = true;
+    let res = await sb.rpc('dlv_update_pilot', { p_user: r.user_id, p_name: name, p_code: code });
+    if (res.error) return fail(res.error.message);
+    if (pw) {
+      res = await sb.rpc('dlv_set_pilot_password', { p_user: r.user_id, p_password: pw });
+      if (res.error) { done(); return fail('اتحفظ الاسم والكود، لكن كلمة السر فشلت: ' + res.error.message); }
+    }
+    done();
+    if (!pw) { d.remove(); return flash('تم حفظ التعديل', true); }
+    const txt = name + '\nالإيميل: ' + r.email + '\nكلمة السر الجديدة: ' + pw;
+    d.firstChild.innerHTML = '<h2 style="font-size:16px">✅ تم الحفظ</h2><div class="card" style="white-space:pre-line">' + esc(txt) + '</div>' +
+      '<div class="meta">كلمة السر مش هتظهر تاني، انسخها وابعتها للطيار.</div>' +
+      '<div class="row" style="margin-top:14px"><button class="p big" id="p_cp" style="flex:1">نسخ</button><button class="big" id="p_x2" style="flex:0 0 90px">إغلاق</button></div>';
+    $('p_cp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(txt); $('p_cp').textContent = 'اتنسخ ✓'; };
+    $('p_x2').onclick = () => d.remove();
+  };
+}
+
+/* ---------- تقرير الطلبات (المدير العام) ---------- */
+function openReport() {
+  const d = document.createElement('div'); d.id = 'rpt';
+  d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:env(safe-area-inset-top,0) 12px 24px';
+  d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button id="rcl">إغلاق</button></div>' +
+    '<div class="noprint" style="margin-bottom:10px"><input type="date" id="rdt" value="' + cairoDate() + '"></div><div id="rbody"><div class="meta">جاري التحميل...</div></div>';
+  document.body.appendChild(d);
+  let text = '';
+  $('rcl').onclick = () => d.remove();
+  $('rpr').onclick = () => window.print();
+  $('rcp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(text); const b = $('rcp'); b.textContent = 'اتنسخ ✓'; setTimeout(() => { b.textContent = 'نسخ كنص'; }, 2000); };
+  async function load() {
+    const day = $('rdt').value; let rows = [], from = 0;
+    for (;;) {
+      const { data, error } = await sb.from('dlv_orders').select('*, driver:driver_id(full_name)').eq('order_date', day).order('created_at').range(from, from + 999);
+      if (error) { $('rbody').innerHTML = '<div class="msg e">' + esc(error.message) + '</div>'; return; }
+      rows = rows.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
+    }
+    const c = st => rows.filter(o => o.status === st).length;
+    const durOf = o => mins(o.out_at, o.delivered_at);
+    const avgOf = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null;
+    const late = rows.filter(isLate).length, open = rows.filter(o => ['new', 'received', 'out'].includes(o.status)).length;
+    const avg = avgOf(rows.filter(o => o.status === 'delivered').map(durOf).filter(v => v != null));
+    const by = {};
+    rows.forEach(o => {
+      const n = o.driver ? o.driver.full_name : '؟';
+      const g = by[n] = by[n] || { t: 0, d: 0, o: 0, f: 0, l: 0, du: [] };
+      g.t++; if (o.status === 'delivered') { g.d++; const m = durOf(o); if (m != null) g.du.push(m); }
+      if (['new', 'received', 'out'].includes(o.status)) g.o++; if (o.status === 'failed') g.f++; if (isLate(o)) g.l++;
+    });
+    const names = Object.keys(by).sort((a, b) => by[b].t - by[a].t);
+    const fails = rows.filter(o => o.status === 'failed'), notes = rows.filter(o => o.driver_note);
+    const nm = o => o.driver ? o.driver.full_name : '؟';
+    text = '📊 تقرير الدليفري — واحة اليمن\nالتاريخ: ' + day + '\nإجمالي الطلبات: ' + rows.length + '\n✅ تم التوصيل: ' + c('delivered') + '\n🛵 خرج للتوصيل: ' + c('out') +
+      '\n📥 لم يخرج بعد: ' + (c('new') + c('received')) + '\n⛔ تعذر: ' + c('failed') + '\n❌ ملغي: ' + c('cancelled') + '\n⚠ متأخر: ' + late +
+      '\n⏱ متوسط مدة التوصيل: ' + (avg == null ? '—' : avg + ' د') + '\n\nحسب الطيار:\n' +
+      names.map(n => '- ' + n + ': ' + by[n].t + ' طلب · تم ' + by[n].d + ' · تعذر ' + by[n].f + ' · متأخر ' + by[n].l + ' · متوسط ' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du) + ' د')).join('\n') +
+      (fails.length ? '\n\nتعذر التوصيل:\n' + fails.map(o => '- #' + o.order_no + ' (' + nm(o) + '): ' + (o.failed_reason || '') + (o.driver_note ? ' | ' + o.driver_note : '')).join('\n') : '') +
+      (notes.length ? '\n\nملاحظات الطيارين:\n' + notes.map(o => '- #' + o.order_no + ' (' + nm(o) + '): ' + o.driver_note).join('\n') : '');
+    const kp = [['إجمالي الطلبات', rows.length], ['تم التوصيل', c('delivered')], ['خرجت للتوصيل', c('out')], ['لم تخرج بعد', c('new') + c('received')], ['تعذر', c('failed')], ['ملغي', c('cancelled')], ['متأخرة', late], ['متوسط التوصيل (د)', avg == null ? '—' : avg]];
+    $('rbody').innerHTML = '<h2 style="font-size:16px">واحة اليمن — تقرير يوم ' + esc(day) + '</h2>' +
+      '<div class="grid">' + kp.map(k => '<div class="stat"><b>' + k[1] + '</b><span>' + k[0] + '</span></div>').join('') + '</div>' +
+      '<h2>حسب الطيار</h2><div class="card tw"><table><tr><th>الطيار</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>تعذر</th><th>متأخر</th><th>متوسط (د)</th></tr>' +
+      (names.map(n => '<tr><td>' + esc(n) + '</td><td>' + by[n].t + '</td><td>' + by[n].d + '</td><td>' + by[n].o + '</td><td>' + by[n].f + '</td><td>' + by[n].l + '</td><td>' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du)) + '</td></tr>').join('') || '<tr><td colspan="7">لا طلبات</td></tr>') + '</table></div>' +
+      '<h2>كل الطلبات (' + rows.length + ')</h2><div class="card tw"><table><tr><th>الطلب</th><th>الطيار</th><th>العميل</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th></tr>' +
+      (rows.map(o => '<tr><td><b>#' + esc(o.order_no) + '</b></td><td>' + esc(nm(o)) + '</td><td>' + esc(o.customer_name || '') + '</td><td>' + tm(o.received_at) + '</td><td>' + tm(o.out_at) + '</td><td>' + tm(o.delivered_at) + '</td><td>' + (durOf(o) != null ? durOf(o) + ' د' : '—') + '</td>' +
+        '<td style="white-space:normal;min-width:150px"><span class="badge" style="background:' + ST[o.status][1] + '">' + ST[o.status][0] + '</span>' + (isLate(o) ? ' <span class="late">⚠</span>' : '') +
+        (o.failed_reason ? '<div class="meta">⛔ ' + esc(o.failed_reason) + '</div>' : '') + (o.driver_note ? '<div class="meta">📝 ' + esc(o.driver_note) + '</div>' : '') + '</td></tr>').join('') || '<tr><td colspan="8">لا طلبات في اليوم ده</td></tr>') + '</table></div>';
+  }
+  $('rdt').onchange = load; load();
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 

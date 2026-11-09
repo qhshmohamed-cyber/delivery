@@ -509,26 +509,3 @@ boot();
 </body>
 </html>
 
-async function sendOrderToKitchen(orderId) {
-  return updateDeliveryStage(
-    orderId,
-    "kitchen_received",
-    "تم إرسال الطلب للمطبخ"
-  );
-}
-
-async function markOrderReady(orderId) {
-  return updateDeliveryStage(
-    orderId,
-    "kitchen_ready",
-    "الطلب جاهز"
-  );
-}
-
-async function supervisorReceiveOrder(orderId) {
-  return updateDeliveryStage(
-    orderId,
-    "supervisor_received",
-    "استلم المشرف الطلب"
-  );
-}

@@ -1,0 +1,44 @@
+
+(() => {
+  "use strict";
+
+  if (window.__YOUR_STAFF_DELIVERY_TEST__) return;
+  window.__YOUR_STAFF_DELIVERY_TEST__ = true;
+
+  function showTest() {
+    if (document.getElementById("ys-delivery-test")) return;
+
+    const button = document.createElement("button");
+    button.id = "ys-delivery-test";
+    button.textContent = "اختبار Your Staff";
+    button.type = "button";
+
+    Object.assign(button.style, {
+      position: "fixed",
+      bottom: "18px",
+      left: "18px",
+      zIndex: "999999",
+      padding: "12px 18px",
+      borderRadius: "10px",
+      border: "0",
+      background: "#7b4b25",
+      color: "#fff",
+      fontWeight: "bold",
+      cursor: "pointer"
+    });
+
+    button.addEventListener("click", () => {
+      alert("Your Staff Delivery: الملف اتحمّل بنجاح ✅");
+    });
+
+    document.body.appendChild(button);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", showTest, { once: true });
+  } else {
+    showTest();
+  }
+
+  console.log("Your Staff Delivery test loaded.");
+})();

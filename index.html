@@ -508,26 +508,7 @@ boot();
 </script>
 </body>
 </html>
-// ===== Your Staff Delivery Workflow =====
 
-async function updateDeliveryStage(orderId, stage, note = "") {
-  const { data, error } = await supabase.rpc(
-    "dlv_update_workflow_stage",
-    {
-      p_order_id: Number(orderId),
-      p_stage: stage,
-      p_note: note
-    }
-  );
-
-  if (error) {
-    alert("تعذر تحديث الطلب: " + error.message);
-    return false;
-  }
-
-  alert("تم تحديث مرحلة الطلب بنجاح");
-  return true;
-}
 
 async function sendOrderToKitchen(orderId) {
   return updateDeliveryStage(

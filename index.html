@@ -149,7 +149,7 @@ function failDialog(id) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const id = +b.dataset.id, a = b.dataset.act;
-  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'kfwd') kitchenForward(id); else setStatus(id, a);
+  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'kfwd') kitchenForward(id); else setStatus(id, a);
 });
 
 /* ---------- واجهة الدليفري ---------- */
@@ -216,13 +216,13 @@ async function loadAll() {
     .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
   $('perf').innerHTML = `<table><tr><th>الدليفري</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
     (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
-  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th></th></tr>` +
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th></th></tr>` +
     ((o.data || []).map(x => {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
       const cancel = ['new','received'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
-      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
+      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
         <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
-    }).join('') || '<tr><td colspan="10">لا طلبات</td></tr>') + '</table>';
+    }).join('') || '<tr><td colspan="13">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
@@ -481,10 +481,10 @@ function openReport() {
       '<div class="grid">' + kp.map(k => '<div class="stat"><b>' + k[1] + '</b><span>' + k[0] + '</span></div>').join('') + '</div>' +
       '<h2>حسب الطيار</h2><div class="card tw"><table><tr><th>الطيار</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>تعذر</th><th>متأخر</th><th>متوسط (د)</th></tr>' +
       (names.map(n => '<tr><td>' + esc(n) + '</td><td>' + by[n].t + '</td><td>' + by[n].d + '</td><td>' + by[n].o + '</td><td>' + by[n].f + '</td><td>' + by[n].l + '</td><td>' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du)) + '</td></tr>').join('') || '<tr><td colspan="7">لا طلبات</td></tr>') + '</table></div>' +
-      '<h2>كل الطلبات (' + rows.length + ')</h2><div class="card tw"><table><tr><th>الطلب</th><th>الطيار</th><th>العميل</th><th>استلام</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th></tr>' +
-      (rows.map(o => '<tr><td><b>#' + esc(o.order_no) + '</b></td><td>' + esc(nm(o)) + '</td><td>' + esc(o.customer_name || '') + '</td><td>' + tm(o.received_at) + '</td><td>' + tm(o.out_at) + '</td><td>' + tm(o.delivered_at) + '</td><td>' + (durOf(o) != null ? durOf(o) + ' د' : '—') + '</td>' +
+      '<h2>كل الطلبات (' + rows.length + ')</h2><div class="card tw"><table><tr><th>الطلب</th><th>الطيار</th><th>العميل</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th></tr>' +
+      (rows.map(o => '<tr><td><b>#' + esc(o.order_no) + '</b></td><td>' + esc(nm(o)) + '</td><td>' + esc(o.customer_name || '') + '</td><td>' + tm(o.kitchen_ready_at) + '</td><td>' + tm(o.supervisor_received_at) + '</td><td>' + tm(o.pilot_assigned_at) + '</td><td>' + tm(o.received_at) + '</td><td>' + tm(o.out_at) + '</td><td>' + tm(o.delivered_at) + '</td><td>' + (durOf(o) != null ? durOf(o) + ' د' : '—') + '</td>' +
         '<td style="white-space:normal;min-width:150px"><span class="badge" style="background:' + ST[o.status][1] + '">' + ST[o.status][0] + '</span>' + (isLate(o) ? ' <span class="late">⚠</span>' : '') +
-        (o.failed_reason ? '<div class="meta">⛔ ' + esc(o.failed_reason) + '</div>' : '') + (o.driver_note ? '<div class="meta">📝 ' + esc(o.driver_note) + '</div>' : '') + '</td></tr>').join('') || '<tr><td colspan="8">لا طلبات في اليوم ده</td></tr>') + '</table></div>';
+        (o.failed_reason ? '<div class="meta">⛔ ' + esc(o.failed_reason) + '</div>' : '') + (o.driver_note ? '<div class="meta">📝 ' + esc(o.driver_note) + '</div>' : '') + '</td></tr>').join('') || '<tr><td colspan="11">لا طلبات في اليوم ده</td></tr>') + '</table></div>';
   }
   $('rdt').onchange = load; load();
 }
@@ -525,14 +525,20 @@ async function loadPending() {
   if (error) return;
   const wf = me.workflow_role || 'manager';
   const rows = (data || []).filter(o => wf !== 'supervisor' || o.workflow_stage === 'kitchen_ready' || o.workflow_stage === 'supervisor_received');
+  const recv = o => wf === 'supervisor' && o.workflow_stage === 'kitchen_ready';
   const opts = '<option value="">اختر الطيار...</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('');
-  box.innerHTML = rows.length ? '<h2>📥 طلبات منتظرة التحويل لطيار (' + rows.length + ')</h2>' + rows.map(o => ordCard(o, '<div class="row" style="margin-top:8px"><select id="as_' + o.id + '" style="flex:1">' + opts + '</select><button class="p" data-act="assign" data-id="' + o.id + '">تحويل للطيار</button></div>')).join('') : '';
+  box.innerHTML = rows.length ? '<h2>📥 طلبات منتظرة التحويل لطيار (' + rows.length + ')</h2>' + rows.map(o => ordCard(o, recv(o) ? '<div class="acts"><button class="p" data-act="srecv" data-id="' + o.id + '">✅ استلمت من المطبخ</button></div>' : '<div class="row" style="margin-top:8px"><select id="as_' + o.id + '" style="flex:1">' + opts + '</select><button class="p" data-act="assign" data-id="' + o.id + '">تحويل للطيار</button></div>')).join('') : '';
 }
 async function assignOrder(id) {
   const sel = $('as_' + id), pid = sel && sel.value; if (!pid) return flash('اختار الطيار الأول', false);
   const { error } = await sb.rpc('dlv_assign_driver', { p_order_id: id, p_driver: pid, p_note: null });
   if (error) return flash(error.message, false);
   flash('اتحوّل للطيار ✅', true); refreshView();
+}
+async function supervisorReceive(id) {
+  const { error } = await sb.rpc('dlv_supervisor_receive', { p_order_id: id, p_note: null });
+  if (error) return flash(error.message, false);
+  flash('اتسجّل استلامك من المطبخ ✅', true); refreshView();
 }
 async function kitchenForward(id) {
   const { error } = await sb.rpc('dlv_kitchen_forward', { p_order_id: id, p_note: null });

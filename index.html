@@ -438,34 +438,102 @@ async function loadAll() {
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
 }
 /* ---------- مشاركة الموقع (الطيار) ---------- */
-let watchId = null, lastSend = 0, wake = null;
+let watchId = null, lastSend = 0, wake = null, shareWanted = false, locationBusy = false;
 function renderShare() {
-  const b = $('shr'); if (!b) return; const on = watchId != null;
+  const b = $('shr'); if (!b) return;
+  const on = shareWanted;
   b.textContent = on ? '⏹ إيقاف مشاركة الموقع' : '📍 ابدأ مشاركة الموقع';
-  b.style.background = on ? '#e03131' : ''; b.style.borderColor = on ? '#e03131' : '';
+  b.style.background = on ? '#e03131' : '';
+  b.style.borderColor = on ? '#e03131' : '';
+}
+async function sendDriverPosition(p) {
+  if (!shareWanted || locationBusy) return;
+  // لا نرسل قراءات قديمة، ونحدّث فور أول قراءة ثم كل 15 ثانية كحد أقصى.
+  if (Date.now() - lastSend < 15000) return;
+  locationBusy = true;
+  try {
+    const { error } = await sb.rpc('dlv_update_location', {
+      p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy
+    });
+    const s = $('locst');
+    if (s) s.textContent = error
+      ? '⚠ تعذر إرسال الموقع: ' + error.message
+      : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
+    if (!error) lastSend = Date.now();
+  } finally { locationBusy = false; }
+}
+function attachLocationWatch() {
+  if (!shareWanted || watchId != null || !navigator.geolocation) return;
+  watchId = navigator.geolocation.watchPosition(sendDriverPosition, e => {
+    // أخطاء الشبكة/انتهاء المهلة مؤقتة؛ لا توقف مشاركة الطيار تلقائيًا.
+    const s = $('locst');
+    if (s) s.textContent = e.code === 1
+      ? '⚠ صلاحية الموقع مرفوضة — راجع إعدادات المتصفح'
+      : '⚠ الموقع غير متاح مؤقتًا — سنعيد المحاولة عند عودة الصفحة';
+    if (e.code === 1) { shareWanted = false; stopShare(true); }
+    else {
+      watchId = null;
+      // إعادة المحاولة المؤقتة فقط إذا كانت الصفحة ظاهرة؛ لا ننشئ حلقات إرسال بالخلفية.
+      if (document.visibilityState === 'visible' && shareWanted) {
+        setTimeout(() => {
+          if (shareWanted && watchId == null && document.visibilityState === 'visible') attachLocationWatch();
+        }, 5000);
+      }
+    }
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 25000 });
+}
+async function acquireWakeLock() {
+  if (!shareWanted || document.visibilityState !== 'visible' || !navigator.wakeLock || wake) return;
+  try {
+    wake = await navigator.wakeLock.request('screen');
+    wake.addEventListener('release', () => { wake = null; });
+  } catch (e) { /* Wake Lock تحسين اختياري وليس ضمانًا للتتبع بالخلفية */ }
 }
 async function startShare() {
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
-  watchId = navigator.geolocation.watchPosition(async p => {
-    if (Date.now() - lastSend < 15000) return; lastSend = Date.now();
-    const { error } = await sb.rpc('dlv_update_location', { p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy });
-    const s = $('locst'); if (s) s.textContent = error ? '⚠ ' + error.message : '🟢 الموقع شغال — آخر إرسال ' + tm(new Date());
-  }, e => { window._sd = e.code === 1; stopShare(); flash(e.code === 1 ? 'اسمح بالموقع من إعدادات المتصفح' : 'تعذر تحديد الموقع', false); },
-  { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
-  try { wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
+  shareWanted = true; lastSend = 0;
+  attachLocationWatch();
+  await acquireWakeLock();
   renderShare();
+  const s = $('locst');
+  if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… اترك الصفحة مفتوحة أثناء التوصيل';
 }
-async function stopShare() {
+async function stopShare(callServer = true) {
+  shareWanted = false;
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  try { wake && wake.release(); } catch (e) {} wake = null; lastSend = 0;
-  await sb.rpc('dlv_stop_location'); renderShare();
+  try { if (wake) await wake.release(); } catch (e) {}
+  wake = null; lastSend = 0; locationBusy = false;
+  if (callServer) await sb.rpc('dlv_stop_location');
+  renderShare();
   const s = $('locst'); if (s) s.textContent = 'مشاركة الموقع متوقفة.';
 }
+// عند رجوع الطيار للصفحة، أعد تشغيل مراقبة GPS فورًا وأرسل قراءة حديثة.
+// المتصفح قد يعلّق GPS عند إخفاء الصفحة/قفل الشاشة؛ هذا الاستئناف لا يحوّل
+// صفحة الويب إلى خدمة أندرويد تعمل في الخلفية.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && watchId != null && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {});
+  if (document.visibilityState === 'visible' && shareWanted) {
+    if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    attachLocationWatch();
+    acquireWakeLock();
+    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+      sendDriverPosition, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+  }
 });
-
-
+window.addEventListener('pageshow', () => {
+  if (shareWanted && document.visibilityState === 'visible') {
+    if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    watchId = null; attachLocationWatch(); acquireWakeLock();
+  }
+});
+window.addEventListener('pagehide', () => {
+  // لا نلغي watchPosition عند إخفاء الصفحة؛ إلغاء المراقبة هنا كان يوقف التتبع
+  // من طرفنا. قد يعلّق Android المتصفح رغم ذلك، ويُستأنف التتبع عند عودة الصفحة.
+  try { if (wake) wake.release(); } catch (e) {}
+  wake = null;
+});
 /* ---------- أيقونة موتوسيكل واحة اليمن واتجاه الحركة ---------- */
 function bikeBearing(a, b) {
   if (!a || !b || (a.lat === b.lat && a.lng === b.lng)) return 0;

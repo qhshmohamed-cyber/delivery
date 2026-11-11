@@ -71,6 +71,9 @@ const isLate = o => ['new','received','out'].includes(o.status)
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
 let me = null, drivers = [], page = 0, timer = null, chan = null, delayTimer = null;
 const ORD = {};
+// اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
+const isOwner = () => !!me && (me.role === 'admin' || me.workflow_role === 'admin');
+const canViewManagerBoard = () => !!me && (isOwner() || me.workflow_role === 'manager');
 
 function flash(t, ok) {
   const m = $('flash'); if (!m) return;
@@ -108,11 +111,11 @@ async function boot() {
   startKitchenDelayMonitor();
   if (chan) sb.removeChannel(chan);
   chan = sb.channel('dlv').on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, () => {
-    clearTimeout(timer); timer = setTimeout(() => refreshView(), 400);
+    clearTimeout(timer); timer = setTimeout(() => { refreshView(); if(canViewManagerBoard()){loadManagerLiveKpis();loadManagerOpsPending();loadManagerDelayed();loadManagerRatings();refreshKitchenDelayNotices();} }, 400);
   }).subscribe();
 }
 async function refreshKitchenDelayNotices() {
-  if (!me || !(me.role === 'admin' || me.workflow_role === 'callcenter_followup')) return;
+  if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
   // Any open owner/follow-up dashboard can perform the idempotent overdue scan.
   const scan = await sb.rpc('dlv_check_kitchen_delays');
   const {data, error} = await sb.rpc('dlv_list_notifications');
@@ -124,12 +127,12 @@ async function refreshKitchenDelayNotices() {
 }
 function startKitchenDelayMonitor() {
   clearInterval(delayTimer);
-  if (!me || !(me.role === 'admin' || me.workflow_role === 'callcenter_followup')) return;
+  if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
   refreshKitchenDelayNotices();
   delayTimer = setInterval(refreshKitchenDelayNotices, 60000);
 }
 
-function bindOut() { $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+function bindOut() { $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
 
 /* ---------- العمليات ---------- */
 async function setStatus(id, to, note) {
@@ -238,8 +241,8 @@ function managerView() {
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
-    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${me.role === 'admin' ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button><button class="g" id="ownerRatingsPage">⭐ التقييمات</button>' : ''}</div>
-    ${me.role === 'admin' ? `<h2>📊 شاشة متابعة المدير</h2><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏱️ الطلبات المتأخرة في المطبخ</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div>` : ''}
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${isOwner() ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button><button class="g" id="ownerRatingsPage">⭐ التقييمات</button>' : ''}</div>
+    ${canViewManagerBoard() ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 الطلبات المتأخرة في المطبخ (+25 دقيقة)</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
     <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
@@ -249,8 +252,25 @@ function managerView() {
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
   $('nx').onclick = () => { page++; loadAll(); };
   loadAll(); loadPending(); loadCodes();
-  if (me.role === 'admin') { refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); }
+  if (canViewManagerBoard()) { refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh(); }
 }
+let managerBoardTimer = null, managerClockTimer = null, managerBoardBusy = false;
+async function loadManagerOpsPending() {
+  const box=$('managerOpsPending'); if(!box) return;
+  const {data,error}=await sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status').eq('order_date',cairoDate()).eq('status','new').order('created_at',{ascending:true});
+  if(error){box.innerHTML='<div class="msg e">تعذر تحميل طلبات الانتظار</div>';return;}
+  const rows=data||[];
+  box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · منذ ${elapsed} دقيقة</div></div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
+}
+function startManagerBoardRefresh(){
+  clearInterval(managerBoardTimer); clearInterval(managerClockTimer);
+  managerBoardTimer=setInterval(async()=>{
+    if(!canViewManagerBoard() || document.visibilityState!=='visible' || managerBoardBusy) return;
+    managerBoardBusy=true; try { await Promise.all([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),loadManagerRatings(),refreshKitchenDelayNotices()]); const u=$('managerUpdatedAt'); if(u) u.textContent='آخر تحديث: '+tm(new Date().toISOString()); } finally { managerBoardBusy=false; }
+  },5000);
+  managerClockTimer=setInterval(()=>{const u=$('managerUpdatedAt');if(u && document.visibilityState==='visible')u.textContent='الشاشة نشطة · '+tm(new Date().toISOString());},1000);
+}
+
 async function loadManagerLiveKpis() {
   const box=$('managerLiveKpi'); if(!box) return;
   const {data,error}=await sb.from('dlv_orders').select('id,status,workflow_stage,created_at').eq('order_date',cairoDate());
@@ -275,7 +295,7 @@ async function loadManagerRatings() {
   box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">الطيار: ${r.delivery_rating}/5 ⭐ · المطعم: ${r.restaurant_rating}/5 ⭐ · الكول سنتر: ${r.callcenter_rating}/5 ⭐</div>${r.comment?`<div>تعليق العميل: ${esc(r.comment)}</div>`:''}</div>`).join(''):'<div class="msg">لا توجد تقييمات مسجلة حتى الآن.</div>';
 }
 function ownerRatingsView() {
-  if (!me || me.role !== 'admin') return managerView();
+  if (!me || !isOwner()) return managerView();
   const today = cairoDate();
   $('app').innerHTML = shell(`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>⭐ التقييمات</h2><button id="ratingsBack">رجوع للوحة الرئيسية</button></div>
     <div class="card"><div class="meta">سجل جميع تقييمات العملاء المسجلة — لصاحب النظام فقط.</div>
@@ -287,7 +307,7 @@ function ownerRatingsView() {
   loadOwnerRatingsPage();
 }
 async function loadOwnerRatingsPage() {
-  const box=$('owner_ratings'); if(!box || !me || me.role !== 'admin') return;
+  const box=$('owner_ratings'); if(!box || !me || !isOwner()) return;
   const from=$('r_from')?.value || '2000-01-01';
   const to=$('r_to')?.value || cairoDate();
   box.innerHTML='<div class="meta">جاري تحميل كل التقييمات...</div>';

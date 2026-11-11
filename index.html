@@ -446,10 +446,10 @@ function renderShare() {
   b.style.background = on ? '#e03131' : '';
   b.style.borderColor = on ? '#e03131' : '';
 }
-async function sendDriverPosition(p) {
+async function sendDriverPosition(p, force = false) {
   if (!shareWanted || locationBusy) return;
-  // لا نرسل قراءات قديمة، ونحدّث فور أول قراءة ثم كل 15 ثانية كحد أقصى.
-  if (Date.now() - lastSend < 15000) return;
+  // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
+  if (!force && Date.now() - lastSend < 15000) return;
   locationBusy = true;
   try {
     const { error } = await sb.rpc('dlv_update_location', {
@@ -508,24 +508,49 @@ async function stopShare(callServer = true) {
   renderShare();
   const s = $('locst'); if (s) s.textContent = 'مشاركة الموقع متوقفة.';
 }
-// عند رجوع الطيار للصفحة، أعد تشغيل مراقبة GPS فورًا وأرسل قراءة حديثة.
-// المتصفح قد يعلّق GPS عند إخفاء الصفحة/قفل الشاشة؛ هذا الاستئناف لا يحوّل
-// صفحة الويب إلى خدمة أندرويد تعمل في الخلفية.
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && shareWanted) {
+// استئناف تلقائي من الموقع الحالي عند رجوع الطيار للتبويب/الصفحة.
+let resumeLocationBusy = false;
+async function resumeDriverLocationNow() {
+  if (!me || me.role !== 'driver' || !shareWanted || document.visibilityState !== 'visible' || resumeLocationBusy) return;
+  resumeLocationBusy = true;
+  try {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
     watchId = null;
     attachLocationWatch();
-    acquireWakeLock();
-    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
-      sendDriverPosition, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    await acquireWakeLock();
+    const status = $('locst');
+    if (status) status.textContent = '📍 بنحدد موقعك الحالي ونحدّث الخريطة…';
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        // إرسال إجباري للقراءة الحالية، دون انتظار مهلة الـ 15 ثانية.
+        sendDriverPosition(position, true);
+      },
+      error => {
+        const box = $('locst');
+        if (box) box.textContent = error.code === 1
+          ? '⚠ صلاحية الموقع مرفوضة — فعّل إذن الموقع للمتصفح'
+          : '⚠ لم نتمكن من تحديد الموقع الآن — سنحاول تلقائيًا مرة أخرى';
+        // لا نوقف المشاركة بسبب مهلة أو خطأ GPS عابر.
+        if (error.code !== 1 && shareWanted) {
+          setTimeout(() => {
+            if (document.visibilityState === 'visible' && shareWanted) resumeDriverLocationNow();
+          }, 5000);
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
+  } finally {
+    setTimeout(() => { resumeLocationBusy = false; }, 1000);
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && me && me.role === 'driver' && shareWanted) {
+    resumeDriverLocationNow();
   }
 });
 window.addEventListener('pageshow', () => {
-  if (shareWanted && document.visibilityState === 'visible') {
-    if (watchId != null) navigator.geolocation.clearWatch(watchId);
-    watchId = null; attachLocationWatch(); acquireWakeLock();
+  if (document.visibilityState === 'visible' && me && me.role === 'driver' && shareWanted) {
+    resumeDriverLocationNow();
   }
 });
 window.addEventListener('pagehide', () => {
@@ -862,7 +887,12 @@ async function kitchenForward(id) {
   if (error) return flash(error.message, false);
   flash('اتحوّل للمشرف ✅', true); refreshView();
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && me && me.role === 'driver' && watchId == null && !window._sd) startShare(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && me && me.role === 'driver') {
+    if (!shareWanted && watchId == null && !window._sd) startShare();
+    else if (shareWanted) resumeDriverLocationNow();
+  }
+});
 
 /* ---------- أكواد متابعة العملاء (للموظفين) ---------- */
 const trackMsg = o => 'أهلًا ' + (o.customer_name || '') + '، تابع طلبك رقم #' + o.order_no + ' من هنا:\n' + location.origin + location.pathname + '?t=' + o.track_code + '\nكود المتابعة: ' + o.track_code;

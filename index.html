@@ -69,7 +69,8 @@ const mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000
 const isLate = o => ['new','received','out'].includes(o.status)
   ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
-let me = null, drivers = [], page = 0, timer = null, chan = null, delayTimer = null;
+let me = null, drivers = [], page = 0, timer = null, chan = null, delayTimer = null, selectedBranch = null;
+const branchQuery = q => (isOwner() && selectedBranch ? q.eq('branch_id', selectedBranch) : q);
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
 const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
@@ -104,6 +105,7 @@ async function boot() {
   const {data, error} = await sb.from('dlv_profiles').select('*').eq('user_id', session.user.id).maybeSingle();
   if (error || !data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
+  if (isOwner()) { await ownerBranchPicker(); return; }
   if (me.role !== 'driver') {
     const r = await sb.from('dlv_profiles').select('user_id,full_name,employee_code').eq('role','driver').eq('active',true).order('full_name');
     drivers = r.data || [];
@@ -115,6 +117,22 @@ async function boot() {
     clearTimeout(timer); timer = setTimeout(() => { refreshView(); if(canViewManagerBoard()){loadManagerLiveKpis();loadManagerOpsPending();loadManagerDelayed();loadManagerRatings();refreshKitchenDelayNotices();} }, 400);
   }).subscribe();
 }
+async function ownerBranchPicker(){
+  const {data,error}=await sb.rpc('dlv_list_branches');
+  if(error){ await sb.auth.signOut(); me=null; return loginView('تعذر تحميل قائمة الفروع: '+error.message); }
+  const branches=data||[];
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img src="icon-192.png" style="width:90px;height:90px;border-radius:18px"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
+  $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+}
+async function enterOwnerDashboard(){
+  const r=await sb.from('dlv_profiles').select('user_id,full_name,employee_code,branch_id').eq('role','driver').eq('active',true).order('full_name');
+  drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);
+  managerView(); startKitchenDelayMonitor();
+  if(chan) sb.removeChannel(chan);
+  chan=sb.channel('dlv').on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{clearTimeout(timer);timer=setTimeout(()=>{refreshView();if(canViewManagerBoard()){loadManagerLiveKpis();loadManagerOpsPending();loadManagerDelayed();loadManagerRatings();refreshKitchenDelayNotices();}},400);}).subscribe();
+}
+
 async function refreshKitchenDelayNotices() {
   if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
   await sb.rpc('dlv_check_kitchen_delays');
@@ -147,6 +165,7 @@ function newOrderForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
     <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
+    ${isOwner() ? `<label>الفرع *</label><select id="n_branch"><option value="1" ${selectedBranch===1?'selected':''}>فرع المهندسين</option><option value="2" ${selectedBranch===2?'selected':''}>فرع الشيخ زايد</option></select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
     <label>العنوان</label><input id="n_a">` : ''}
     ${isMgr && !['kitchen','callcenter_followup'].includes(me.workflow_role) ? `<label>الدليفري (اختياري — تقدر تحوّله بعدين)</label><select id="n_d"><option value="">اختر...</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>` : ''}
@@ -157,7 +176,7 @@ function newOrderForm() {
   $('n_ok').onclick = async () => {
     $('n_ok').disabled = true;
     const {data: createdId, error} = await sb.rpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
-      p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: isMgr && $('n_d') ? ($('n_d').value || null) : null});
+      p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: isMgr && $('n_d') ? ($('n_d').value || null) : null, p_branch_id: isOwner() ? Number($('n_branch').value) : null});
     if (error) { $('n_ok').disabled = false; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
     let codeText = '';
     if (createdId) {
@@ -189,7 +208,7 @@ function driverView() {
   bindOut(); $('nw').onclick = newOrderForm; if (watchId == null) startShare(); loadMine();
 }
 async function loadMine() {
-  const {data, error} = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).order('created_at', {ascending:false}).limit(100);
+  const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('order_date', cairoDate()).order('created_at', {ascending:false}).limit(100);
   if (error) return flash(error.message, false);
   const o = data || []; o.forEach(x => ORD[x.id] = x);
   $('s1').textContent = o.filter(x => ['new','received','out'].includes(x.status)).length;
@@ -219,7 +238,7 @@ function callcenterView() {
 async function loadCallcenterOrders() {
   const box=$('cc_orders'); if(!box) return;
   const q=($('cc_q')?.value || '').trim().replace(/[,()%*]/g,' ');
-  let req=sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)').eq('order_date',cairoDate()).order('created_at',{ascending:false}).limit(100);
+  let req=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)')).eq('order_date',cairoDate()).order('created_at',{ascending:false}).limit(100);
   if(q) req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
   const {data,error}=await req;
   if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
@@ -229,7 +248,7 @@ async function loadCallcenterOrders() {
 
 async function loadCallcenterRatings() {
   const box=$('cc_ratings'); if(!box) return;
-  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:cairoDate(),p_to:cairoDate()});
+  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:cairoDate(),p_to:cairoDate(),p_branch_id:selectedBranch});
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=data||[];
   box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.branch_name||'')} · ${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الدليفري: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>متابعة الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات اليوم حتى الآن.</div>';
@@ -266,7 +285,7 @@ function managerView() {
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap;
   if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView;
   if (managerScreen) {
-    $('managerSearch').onclick = async () => { const q=$('f_q').value.trim(); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at').or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div></div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    $('managerSearch').onclick = async () => { const q=$('f_q').value.trim(); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div></div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
     return;
   }
@@ -279,7 +298,7 @@ function managerView() {
 let managerBoardTimer = null, managerClockTimer = null, managerBoardBusy = false;
 async function loadManagerOpsPending() {
   const box=$('managerOpsPending'); if(!box) return;
-  const {data,error}=await sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status').eq('order_date',cairoDate()).eq('status','new').order('created_at',{ascending:true});
+  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status')).eq('order_date',cairoDate()).eq('status','new').order('created_at',{ascending:true});
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل طلبات الانتظار</div>';return;}
   const rows=data||[];
   box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · منذ ${elapsed} دقيقة</div></div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
@@ -295,7 +314,7 @@ function startManagerBoardRefresh(){
 
 async function loadManagerLiveKpis() {
   const box=$('managerLiveKpi'); if(!box) return;
-  const {data,error}=await sb.from('dlv_orders').select('id,status,workflow_stage,created_at').eq('order_date',cairoDate());
+  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,status,workflow_stage,created_at')).eq('order_date',cairoDate());
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل ملخص الطلبات</div>';return;}
   const rows=data||[], pending=rows.filter(o=>o.status==='new' && ['new','kitchen_ready','supervisor_received'].includes(o.workflow_stage)).length;
   const kitchen=rows.filter(o=>o.status==='new' && o.workflow_stage==='new').length;
@@ -304,7 +323,7 @@ async function loadManagerLiveKpis() {
 }
 async function loadManagerDelayed() {
   const box=$('managerDelayed'); if(!box) return;
-  const {data,error}=await sb.from('dlv_orders').select('id,order_no,customer_name,phone,created_at,kitchen_received_at,workflow_stage,status').eq('order_date',cairoDate()).eq('status','new').eq('workflow_stage','new').order('created_at');
+  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,created_at,kitchen_received_at,workflow_stage,status')).eq('order_date',cairoDate()).eq('status','new').eq('workflow_stage','new').order('created_at');
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل الطلبات المتأخرة: '+esc(error.message)+'</div>';return;}
   const now=Date.now(), rows=(data||[]).map(o=>({...o,elapsed:Math.floor((now-new Date(o.kitchen_received_at||o.created_at).getTime())/60000)})).filter(o=>o.elapsed>=25);
   box.innerHTML=rows.length?rows.map(o=>`<div class="card" style="border:2px solid #e8590c"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:#e8590c">متأخر ${o.elapsed} دقيقة</span></div><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(o.phone||'')}<br>منذ: ${tm(o.kitchen_received_at||o.created_at)}</div></div>`).join(''):'<div class="msg">لا توجد طلبات تجاوزت 25 دقيقة في المطبخ حاليًا.</div>';
@@ -333,7 +352,7 @@ async function loadOwnerRatingsPage() {
   const from=$('r_from')?.value || '2000-01-01';
   const to=$('r_to')?.value || cairoDate();
   box.innerHTML='<div class="meta">جاري تحميل كل التقييمات...</div>';
-  const branchValue=$('r_branch')?.value || '';
+  const branchValue=$('r_branch')?.value || (selectedBranch ? String(selectedBranch) : '');
   const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:from,p_to:to,p_branch_id:branchValue?Number(branchValue):null});
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=data||[];
@@ -344,11 +363,11 @@ async function loadOwnerRatingsPage() {
 async function loadAll() {
   const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
   const q = $('f_q').value.replace(/[,()%*]/g, ' ').trim();
-  let qb = sb.from('dlv_orders').select('*, driver:driver_id(full_name)', {count:'exact'}).gte('order_date', from).lte('order_date', to)
+  let qb = branchQuery(sb.from('dlv_orders').select('*, driver:driver_id(full_name)', {count:'exact'})).gte('order_date', from).lte('order_date', to)
     .order('created_at', {ascending:false}).range(page * PAGE, page * PAGE + PAGE - 1);
   if (st) qb = qb.eq('status', st); if (dr) qb = qb.eq('driver_id', dr);
   if (q) qb = qb.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
-  const [o, s] = await Promise.all([qb, sb.rpc('dlv_stats', {p_from: from, p_to: to})]);
+  const [o, s] = await Promise.all([qb, sb.rpc('dlv_stats', {p_from: from, p_to: to, p_branch_id: selectedBranch})]);
   if (o.error) return flash(o.error.message, false);
   (o.data || []).forEach(x => ORD[x.id] = x);
   const rows = (s.data || []).filter(r => !dr || r.driver_id === dr);
@@ -437,7 +456,7 @@ function openMap() {
   async function refresh() {
     const [l, o] = await Promise.all([
       sb.from('dlv_locations').select('driver_id,lat,lng,updated_at'),
-      sb.from('dlv_orders').select('driver_id,order_no,status').eq('order_date', cairoDate()).in('status', ['received', 'out'])]);
+      branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).eq('order_date', cairoDate()).in('status', ['received', 'out'])]);
     if (l.error) return;
     const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
     const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
@@ -625,7 +644,7 @@ function openReport() {
   async function load() {
     const day = $('rdt').value; let rows = [], from = 0;
     for (;;) {
-      const { data, error } = await sb.from('dlv_orders').select('*, driver:driver_id(full_name)').eq('order_date', day).order('created_at').range(from, from + 999);
+      const { data, error } = await branchQuery(sb.from('dlv_orders').select('*, driver:driver_id(full_name)')).eq('order_date', day).order('created_at').range(from, from + 999);
       if (error) { $('rbody').innerHTML = '<div class="msg e">' + esc(error.message) + '</div>'; return; }
       rows = rows.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
     }
@@ -687,7 +706,7 @@ function kitchenView() {
   bindOut(); $('nw').onclick = newOrderForm; loadKitchen();
 }
 async function loadKitchen() {
-  const { data, error } = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).eq('status', 'new').is('driver_id', null).in('workflow_stage', ['new', 'kitchen_ready']).order('created_at');
+  const { data, error } = await branchQuery(sb.from('dlv_orders').select('*')).eq('order_date', cairoDate()).eq('status', 'new').is('driver_id', null).in('workflow_stage', ['new', 'kitchen_ready']).order('created_at');
   if (error) return flash(error.message, false);
   const rows = data || [], a = rows.filter(o => o.workflow_stage === 'new'), b = rows.filter(o => o.workflow_stage === 'kitchen_ready');
   $('kq').innerHTML = '<h2>🍳 عند المطبخ (' + a.length + ')</h2>' + (a.map(o => ordCard(o, '<div class="acts"><button class="p" data-act="kfwd" data-id="' + o.id + '">✅ جاهز — حوّل للمشرف</button></div>')).join('') || '<div class="meta">لا يوجد</div>') +
@@ -695,7 +714,7 @@ async function loadKitchen() {
 }
 async function loadPending() {
   const box = $('pend'); if (!box) return;
-  const { data, error } = await sb.from('dlv_orders').select('*').eq('order_date', cairoDate()).eq('status', 'new').is('driver_id', null).order('created_at');
+  const { data, error } = await branchQuery(sb.from('dlv_orders').select('*')).eq('order_date', cairoDate()).eq('status', 'new').is('driver_id', null).order('created_at');
   if (error) return;
   const wf = me.workflow_role || 'manager';
   const rows = (data || []).filter(o => wf !== 'supervisor' || o.workflow_stage === 'kitchen_ready' || o.workflow_stage === 'supervisor_received');
@@ -730,7 +749,7 @@ function waMsg(id) {
 }
 async function loadCodes() {
   const box = $('codes'); if (!box) return;
-  const { data, error } = await sb.from('dlv_orders').select('*, driver:driver_id(full_name)').eq('order_date', cairoDate()).not('track_code', 'is', null).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false });
+  const { data, error } = await branchQuery(sb.from('dlv_orders').select('*, driver:driver_id(full_name)')).eq('order_date', cairoDate()).not('track_code', 'is', null).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false });
   if (error) return;
   const rows = data || []; rows.forEach(o => ORD[o.id] = o);
   box.innerHTML = rows.length ? '<h2>🔑 أكواد متابعة العملاء (' + rows.length + ')</h2>' + rows.map(o => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><b dir="ltr" style="font-size:22px;letter-spacing:2px;color:#4e2c12">' + esc(o.track_code) + '</b></div><div class="meta">' + esc([o.customer_name, o.phone].filter(Boolean).join(' · ')) + ' — الطيار: ' + esc(o.driver ? o.driver.full_name : '') + '</div><div class="acts"><button class="p" data-act="cpmsg" data-id="' + o.id + '">نسخ رسالة العميل</button>' + (o.phone ? '<button class="g" data-act="wa" data-id="' + o.id + '">واتساب</button>' : '') + '</div></div>').join('') : '';

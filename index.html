@@ -45,7 +45,25 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
 .hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}@media print{body>*:not(#rpt){display:none!important}body::before{display:none}#rpt{position:static!important;overflow:visible!important;background:#fff!important}.noprint{display:none!important}}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
-.ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}.ys-bike-marker div{filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}\n.rateRow{display:flex;gap:8px;margin:6px 0 14px;direction:ltr}.rateStar{font-size:30px;color:#b8862b;background:#fff8e8;border:1px solid #d9b36a;border-radius:10px;padding:2px 9px;min-width:42px}.rateRow .rateStar:focus{outline:2px solid #7b1717}
+.ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}.ys-bike-marker div{filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
+.ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}
+.ys-bike-pin{position:relative;border-radius:50%;display:grid;place-items:center;filter:drop-shadow(0 5px 9px rgba(25,15,8,.35))}
+.ys-bike-core{width:56px;height:56px;border-radius:50%;background:linear-gradient(145deg,#8c2420,#54100f);border:3px solid #e7c477;box-shadow:inset 0 0 0 2px rgba(255,244,218,.22),0 0 0 3px rgba(123,23,23,.16);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.ys-bike-crown{font-size:7px;font-weight:900;letter-spacing:.1px;color:#f5d995;line-height:9px;margin-top:2px}
+.ys-bike-core svg{display:block;margin-top:-1px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+.ys-bike-status{position:absolute;right:2px;top:3px;width:13px;height:13px;border-radius:50%;background:var(--bike-status);border:2px solid #fff;z-index:3}
+.ys-bike-pulse{position:absolute;inset:2px;border:2px solid var(--bike-status);border-radius:50%;opacity:.55;animation:ysBikePulse 2s ease-out infinite}
+@keyframes ysBikePulse{0%{transform:scale(.82);opacity:.65}100%{transform:scale(1.35);opacity:0}}
+.ys-map-shell{background:#f7f4ed;border-top:1px solid #d8c59c}
+.ys-map-head{background:linear-gradient(110deg,#4d100f,#7b1717 65%,#9a3027);color:#fff;padding:12px 14px;box-shadow:0 3px 12px #32100e33}
+.ys-map-head .meta{color:#f4dfb4!important}
+.ys-map-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#fffaf0;color:#55351f;font-size:12px;border-top:1px solid #e7d8b8}
+.ys-map-legend span{display:inline-flex;align-items:center;gap:5px}
+.ys-map-dot{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid #fff;box-shadow:0 0 0 1px #aaa}
+.leaflet-popup-content-wrapper{border-radius:14px!important;border:1px solid #d8b76e;box-shadow:0 8px 24px #24140f33!important}
+.leaflet-popup-content{margin:12px 15px!important;line-height:1.8!important}
+.leaflet-control-zoom a{color:#6b1717!important}
+\n.rateRow{display:flex;gap:8px;margin:6px 0 14px;direction:ltr}.rateStar{font-size:30px;color:#b8862b;background:#fff8e8;border:1px solid #d9b36a;border-radius:10px;padding:2px 9px;min-width:42px}.rateRow .rateStar:focus{outline:2px solid #7b1717}
 </style>
 </head>
 <body>
@@ -156,7 +174,6 @@ async function enterOwnerDashboard(){
 
 async function refreshKitchenDelayNotices() {
   if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
-  await sb.rpc('dlv_check_kitchen_delays');
   const {data,error} = await sb.rpc('dlv_list_notifications');
   const box = $('delayNotices'); if (!box) return;
   if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل التنبيهات: '+esc(error.message)+'</div>'; return; }
@@ -165,11 +182,17 @@ async function refreshKitchenDelayNotices() {
   box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ تمت المعالجة وإخفاء التنبيه</button></div>').join('')+'</section>' : '';
   box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { b.disabled=true; await sb.rpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); refreshKitchenDelayNotices(); });
 }
+async function runKitchenDelayCheck() {
+  if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
+  const {error} = await sb.rpc('dlv_check_kitchen_delays');
+  if (error) console.warn('Kitchen delay check:', error.message);
+  await refreshKitchenDelayNotices();
+}
 function startKitchenDelayMonitor() {
   clearInterval(delayTimer);
   if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
-  refreshKitchenDelayNotices();
-  delayTimer = setInterval(refreshKitchenDelayNotices, 60000);
+  runKitchenDelayCheck();
+  delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
 function bindOut() { const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
@@ -284,7 +307,7 @@ function managerView() {
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
-      <div class="ord"><div><b style="font-size:18px">شاشة متابعة الفرع</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">ملخص التشغيل والطلبات لحظة بلحظة</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
+      <div class="ord"><div><b style="font-size:18px">مركز قيادة واحة اليمن</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">مركز التحكم التشغيلي · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
       <div class="meta" id="managerUpdatedAt" style="color:#f1dfc3">جاري تحديث البيانات...</div>
     </section>
     <div id="delayNotices"></div>
@@ -328,9 +351,12 @@ function startManagerBoardRefresh(){
   clearInterval(managerBoardTimer); clearInterval(managerClockTimer);
   managerBoardTimer=setInterval(async()=>{
     if(!canViewManagerBoard() || document.visibilityState!=='visible' || managerBoardBusy) return;
-    managerBoardBusy=true; try { await Promise.all([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),loadManagerRatings(),refreshKitchenDelayNotices()]); const u=$('managerUpdatedAt'); if(u) u.textContent='آخر تحديث: '+tm(new Date().toISOString()); } finally { managerBoardBusy=false; }
-  },5000);
-  managerClockTimer=setInterval(()=>{const u=$('managerUpdatedAt');if(u && document.visibilityState==='visible')u.textContent='الشاشة نشطة · '+tm(new Date().toISOString());},1000);
+    managerBoardBusy=true;
+    try {
+      await Promise.all([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),loadManagerRatings(),refreshKitchenDelayNotices()]);
+      const u=$('managerUpdatedAt'); if(u) u.textContent='آخر تحديث للبيانات: '+tm(new Date().toISOString());
+    } finally { managerBoardBusy=false; }
+  },15000);
 }
 
 async function loadManagerLiveKpis() {
@@ -351,7 +377,7 @@ async function loadManagerDelayed() {
 }
 async function loadManagerRatings() {
   const box=$('managerRatings'); if(!box) return;
-  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:'2000-01-01',p_to:cairoDate()});
+  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:'2000-01-01',p_to:cairoDate(),p_branch_id:selectedBranch});
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=(data||[]).slice(0,5);
   box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">الطيار: ${r.delivery_rating}/5 ⭐ · المطعم: ${r.restaurant_rating}/5 ⭐ · الكول سنتر: ${r.callcenter_rating}/5 ⭐</div>${r.comment?`<div>تعليق العميل: ${esc(r.comment)}</div>`:''}</div>`).join(''):'<div class="msg">لا توجد تقييمات مسجلة حتى الآن.</div>';
@@ -447,29 +473,34 @@ function bikeBearing(a, b) {
   const x = Math.cos(a.lat*rad)*Math.sin(b.lat*rad)-Math.sin(a.lat*rad)*Math.cos(b.lat*rad)*Math.cos((b.lng-a.lng)*rad);
   return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
-function bikeIcon(bearing=0, live=true, size=64) {
-  const color = live ? '#2f9e44' : '#868e96';
-  const svg = `<svg viewBox="0 0 120 82" width="${size}" height="${Math.round(size*82/120)}" xmlns="http://www.w3.org/2000/svg">
-    <g transform="rotate(${bearing} 60 48)">
-      <circle cx="27" cy="61" r="13" fill="#222" stroke="#d9b36a" stroke-width="4"/>
-      <circle cx="91" cy="61" r="13" fill="#222" stroke="#d9b36a" stroke-width="4"/>
-      <path d="M27 59 L43 38 L69 38 L91 59 L63 59 L51 46 L43 59Z" fill="#7b1717" stroke="#f4d28b" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M45 38 Q55 22 72 35 L82 47 L61 47 L51 42" fill="#9d2420" stroke="#f4d28b" stroke-width="3"/>
-      <path d="M61 34 L69 23 L83 24 L87 39 L74 40" fill="#222" stroke="#d9b36a" stroke-width="3"/>
-      <circle cx="72" cy="18" r="8" fill="#292929" stroke="#d9b36a" stroke-width="2"/>
-      <path d="M35 22 L57 22 L57 42 L35 42Z" fill="#6b1717" stroke="#e8c16d" stroke-width="3"/>
-      <path d="M38 26 L54 26 L54 38 L38 38Z" fill="#f4e3bc"/>
-      <path d="M40 30 L52 30 M40 33 L52 33" stroke="#7b1717" stroke-width="2"/>
-      <path d="M20 44 L11 38" stroke="#f4d28b" stroke-width="3" stroke-linecap="round"/>
+function bikeIcon(bearing=0, live=true, size=66) {
+  const status = live ? '#27ae60' : '#9aa0a6';
+  const pulse = live ? `<span class="ys-bike-pulse"></span>` : '';
+  const svg = `<svg viewBox="0 0 64 44" width="46" height="34" xmlns="http://www.w3.org/2000/svg" aria-label="موتوسيكل واحة اليمن">
+    <g transform="rotate(${bearing} 32 22)">
+      <circle cx="13" cy="32" r="8" fill="#231b16" stroke="#f0cf82" stroke-width="2.7"/>
+      <circle cx="51" cy="32" r="8" fill="#231b16" stroke="#f0cf82" stroke-width="2.7"/>
+      <path d="M13 31 L23 17 L39 17 L51 31 L34 31 L27 22 L22 31Z" fill="#f0cf82" stroke="#fff5df" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M23 17 Q28 7 39 15 L45 23 L31 23 L27 20" fill="#fff5df" stroke="#f0cf82" stroke-width="1.5"/>
+      <path d="M35 15 L41 8 L49 9 L52 19 L44 20" fill="#f0cf82" stroke="#fff5df" stroke-width="1.3"/>
+      <path d="M21 14 L14 11 M45 9 L53 7" stroke="#f0cf82" stroke-width="2" stroke-linecap="round"/>
+      <path d="M28 13 L38 13" stroke="#7b1717" stroke-width="2.5" stroke-linecap="round"/>
     </g></svg>`;
-  return L.divIcon({className:'ys-bike-marker', html:`<div style="position:relative;width:${size}px;height:${Math.round(size*82/120)}px"><span style="position:absolute;right:0;top:0;background:${color};width:9px;height:9px;border:2px solid white;border-radius:50%"></span>${svg}<small style="position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);white-space:nowrap;background:#6b1717;color:#fff;border:1px solid #d9b36a;border-radius:8px;padding:1px 5px;font-size:8px">واحة اليمن</small></div>`, iconSize:[size,Math.round(size*82/120)], iconAnchor:[size/2,Math.round(size*0.34)]});
+  return L.divIcon({
+    className:'ys-bike-marker',
+    html:`<div class="ys-bike-pin" style="--bike-status:${status};width:${size}px;height:${size}px">
+      ${pulse}<div class="ys-bike-core"><span class="ys-bike-crown">واحة اليمن</span>${svg}</div>
+      <span class="ys-bike-status"></span>
+    </div>`,
+    iconSize:[size,size], iconAnchor:[size/2,size/2], popupAnchor:[0,-size/2]
+  });
 }
 /* ---------- خريطة الطيارين (المدير) ---------- */
 let map, markers = {}, mapTimer;
 function openMap() {
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
-  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">🗺️ مواقع الطيارين</b><span id="mcount" class="meta"></span><button id="mclose">إغلاق</button></div><div style="padding:0 10px 8px"><select id="msel"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1"></div>';
+  d.innerHTML = '<div class="ys-map-head"><div class="row"><div style="flex:1"><b style="font-size:16px">خريطة أسطول واحة اليمن</b><div class="meta">متابعة مواقع الطيارين لحظيًا</div></div><span id="mcount" class="meta">0 طيار</span><button id="mclose" style="background:#f2dfb7;color:#551412;border:1px solid #d5b36c">إغلاق</button></div></div><div class="ys-map-shell" style="padding:9px 12px"><select id="msel" style="width:100%;border:1px solid #d8c59c;border-radius:10px;background:#fffdf8;padding:10px"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1;min-height:240px"></div><div class="ys-map-legend"><span><i class="ys-map-dot" style="background:#27ae60"></i> متصل الآن</span><span><i class="ys-map-dot" style="background:#9aa0a6"></i> آخر ظهور</span><span>🛵 شعار الموتوسيكل بألوان واحة اليمن</span></div>';
   document.body.appendChild(d);
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -486,7 +517,7 @@ function openMap() {
     (l.data || []).filter(r => !only || r.driver_id === only).forEach(r => {
       seen.add(r.driver_id);
       const live = (Date.now() - new Date(r.updated_at)) < 90000, nm = name[r.driver_id] || 'طيار';
-      const html = '<b>' + esc(nm) + '</b><br>' + (live ? '🟢 متصل' : '⚪ آخر ظهور ' + tm(r.updated_at)) + '<br>' + esc((ord[r.driver_id] || ['لا طلبات']).join(' · '));
+      const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '● آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
       const oldPos = prevPos[r.driver_id], bearing = oldPos ? bikeBearing(oldPos, {lat:r.lat,lng:r.lng}) : 0; prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 66);
       const m = markers[r.driver_id];
@@ -789,9 +820,27 @@ function trackView(code0) {
   let tmr, mapT, mk, lastTrackPos = null;
   async function go() {
     const code = $('tc') ? $('tc').value.trim().toUpperCase() : ''; if (!code) return;
-    const { data: j, error } = await sb.rpc('dlv_track', { p_code: code });
+    let result;
+    try { result = await sb.rpc('dlv_track', { p_code: code }); }
+    catch (e) { result = { error: e }; }
+    const { data: j, error } = result || {};
     const box = $('tinfo'); if (!box) return clearInterval(tmr);
-    if (error || !j || !j.found) { box.innerHTML = '<div class="msg e">' + (j && j.expired ? 'انتهت صلاحية الكود' : 'الكود غير صحيح، راجع الكود مع خدمة العملاء') + '</div>'; $('tmap').style.display = 'none'; clearInterval(tmr); return; }
+    if (error) {
+      // Transient network/API errors must never terminate the customer's tracking session.
+      const warn = $('trackConnectionNotice');
+      if (!warn) box.insertAdjacentHTML('afterbegin','<div class="msg" id="trackConnectionNotice" style="background:#fff4d6;color:#72521a">الاتصال بالخريطة متقطع مؤقتًا؛ سنحاول التحديث تلقائيًا دون إغلاق المتابعة.</div>');
+      return;
+    }
+    if (!j || !j.found) {
+      if (j && j.limited) {
+        const warn = $('trackConnectionNotice');
+        if (!warn) box.insertAdjacentHTML('afterbegin','<div class="msg" id="trackConnectionNotice" style="background:#fff4d6;color:#72521a">ضغط مؤقت على خدمة التتبع؛ سنعيد المحاولة تلقائيًا.</div>');
+        return;
+      }
+      box.innerHTML = '<div class="msg e">' + (j && j.expired ? 'انتهت صلاحية الكود' : 'الكود غير صحيح، راجع الكود مع خدمة العملاء') + '</div>';
+      $('tmap').style.display = 'none'; clearInterval(tmr); return;
+    }
+    const oldNotice = $('trackConnectionNotice'); if (oldNotice) oldNotice.remove();
     const S = ['تم تسجيل طلبك', 'جاري التجهيز في المطبخ', 'جاهز ومع المشرف', 'اتعيّن لك طيار', 'الطيار خرج لك', 'تم التسليم'];
     const idx = j.status === 'delivered' ? 5 : j.status === 'out' ? 4 : j.pilot_name ? 3 : (j.stage === 'kitchen_ready' || j.stage === 'supervisor_received') ? 2 : 1;
     let h = '<div class="card"><b style="font-size:20px">طلب رقم #' + esc(j.order_no) + '</b>';
@@ -824,15 +873,23 @@ function trackView(code0) {
         document.querySelectorAll('.rateRow').forEach(row=>row.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{const key=row.dataset.rate;scores[key]=Number(btn.dataset.v);row.querySelectorAll('button').forEach(b=>b.textContent=Number(b.dataset.v)<=scores[key]?'★':'☆');}));
         $('sendRating').onclick=async()=>{if(!scores.delivery||!scores.restaurant||!scores.callcenter){$('rateMsg').textContent='من فضلك قيّم الأقسام الثلاثة';return;}
           $('sendRating').disabled=true;$('rateMsg').textContent='جارٍ إرسال تقييمك...';
-          const {data,error}=await sb.rpc('dlv_submit_customer_rating',{p_code:code,p_delivery:scores.delivery,p_restaurant:scores.restaurant,p_callcenter:scores.callcenter,p_comment:$('rateComment').value||null});
-          if(error){$('sendRating').disabled=false;$('rateMsg').textContent=error.message;return;}
-          $('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">وصل تقييمك لصاحب النظام وفريق متابعة الكول سنتر.</div>';
+          try {
+            const {data,error}=await sb.rpc('dlv_submit_customer_rating',{p_code:code,p_delivery:scores.delivery,p_restaurant:scores.restaurant,p_callcenter:scores.callcenter,p_comment:$('rateComment').value||null});
+            if(error){$('sendRating').disabled=false;$('rateMsg').textContent=error.message;return;}
+            if(data?.rate_limited){$('sendRating').disabled=false;$('rateMsg').textContent=data.message||'محاولات كثيرة. حاول مرة أخرى بعد دقيقة';return;}
+            if(data?.already_rated){$('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">تم استلام تقييم هذا الطلب من قبل.</div>';return;}
+            if(data?.success!==true){$('sendRating').disabled=false;$('rateMsg').textContent=data?.message||'لم نتمكن من حفظ التقييم. حاول مرة أخرى.';return;}
+            $('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">وصل تقييمك لصاحب النظام وفريق متابعة الكول سنتر.</div>';
+          } catch(e) {
+            $('sendRating').disabled=false;
+            $('rateMsg').textContent='تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.';
+          }
         };
       }
       clearInterval(tmr);
     }
   }
-  $('tg').onclick = () => { clearInterval(tmr); go(); tmr = setInterval(go, 10000); };
+  $('tg').onclick = () => { clearInterval(tmr); go(); tmr = setInterval(go, 15000); };
   if (code0) $('tg').onclick();
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -72,8 +72,9 @@ const isLate = o => ['new','received','out'].includes(o.status)
 let me = null, drivers = [], page = 0, timer = null, chan = null, delayTimer = null;
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
-const isOwner = () => !!me && (me.role === 'admin' || me.workflow_role === 'admin');
-const canViewManagerBoard = () => !!me && (isOwner() || me.workflow_role === 'manager');
+const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
+const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
+const canViewManagerBoard = () => isOwner() || isLocationManager();
 
 function flash(t, ok) {
   const m = $('flash'); if (!m) return;
@@ -116,14 +117,14 @@ async function boot() {
 }
 async function refreshKitchenDelayNotices() {
   if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
-  // Any open owner/follow-up dashboard can perform the idempotent overdue scan.
-  const scan = await sb.rpc('dlv_check_kitchen_delays');
-  const {data, error} = await sb.rpc('dlv_list_notifications');
+  await sb.rpc('dlv_check_kitchen_delays');
+  const {data,error} = await sb.rpc('dlv_list_notifications');
   const box = $('delayNotices'); if (!box) return;
-  if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل تنبيهات التأخير: '+esc(error.message)+'</div>'; return; }
-  const rows = (data || []).filter(n => n.notification_type === 'kitchen_delay' || !n.notification_type);
-  box.innerHTML = rows.length ? '<div class="card" style="border:2px solid #e8590c"><b>🔔 تنبيهات تأخير المطبخ</b>' + rows.map(n => '<div class="msg '+(n.read_at?'':'e')+'" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+(n.read_at?' · تمت القراءة':' · جديد')+'</div>'+(n.read_at?'':'<button data-delay-read="'+n.id+'" style="margin-top:6px">تمت القراءة</button>')+'</div>').join('')+'</div>' : '';
-  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { await sb.rpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); refreshKitchenDelayNotices(); });
+  if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل التنبيهات: '+esc(error.message)+'</div>'; return; }
+  // التنبيه المقروء يختفي من الشاشة نهائيًا، مع بقائه محفوظًا في السجل.
+  const rows = (data || []).filter(n => !n.read_at && (n.notification_type === 'kitchen_delay' || !n.notification_type));
+  box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ تمت المعالجة وإخفاء التنبيه</button></div>').join('')+'</section>' : '';
+  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { b.disabled=true; await sb.rpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); refreshKitchenDelayNotices(); });
 }
 function startKitchenDelayMonitor() {
   clearInterval(delayTimer);
@@ -237,22 +238,43 @@ async function loadCallcenterRatings() {
 /* ---------- واجهة المدير ---------- */
 function managerView() {
   const t = cairoDate();
-  $('app').innerHTML = shell(`<div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">
+  const owner = isOwner();
+  const board = canViewManagerBoard();
+  const ownerTools = owner ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الحسابات</button><button id="rp">📊 التقارير</button><button class="g" id="ownerRatingsPage">⭐ سجل التقييمات</button>' : '';
+  const managerScreen = !owner && isLocationManager();
+  $('app').innerHTML = shell(managerScreen ? `
+    <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
+      <div class="ord"><div><b style="font-size:18px">شاشة متابعة الفرع</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">ملخص التشغيل والطلبات لحظة بلحظة</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
+      <div class="meta" id="managerUpdatedAt" style="color:#f1dfc3">جاري تحديث البيانات...</div>
+    </section>
+    <div id="delayNotices"></div>
+    <div class="grid" id="managerLiveKpi"></div>
+    <section class="card"><div class="ord"><h2>⏳ الطلبات المنتظرة</h2><span class="badge" style="background:#b9832e">قيد التنفيذ</span></div><div id="managerOpsPending"></div></section>
+    <section class="card"><div class="ord"><h2>🚨 تأخير المطبخ</h2><span class="badge" style="background:#e8590c">أكثر من 25 دقيقة</span></div><div id="managerDelayed"></div></section>
+    <section class="card"><div class="ord"><h2>⭐ تقييمات العملاء</h2><span class="meta">أحدث 5 تقييمات</span></div><div id="managerRatings"></div></section>
+    <section class="card"><h2>🔎 البحث عن طلب</h2><div class="row"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></section>
+    <div class="row"><button class="p" id="mp">🗺️ خريطة الطيارين</button><button class="g" id="nw">＋ طلب جديد</button></div>
+  ` : `
+    <div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
-    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${isOwner() ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button><button class="g" id="ownerRatingsPage">⭐ التقييمات</button>' : ''}</div>
-    ${canViewManagerBoard() ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 الطلبات المتأخرة في المطبخ (+25 دقيقة)</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
-    <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
-    <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
-    <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; page = 0;
-  ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${ownerTools}</div>
+    ${board ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 الطلبات المتأخرة في المطبخ (+25 دقيقة)</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
+    <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div><h2>الطلبات</h2><div class="card tw" id="tbl"></div><div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>
+  `);
+  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap;
+  if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView;
+  if (managerScreen) {
+    $('managerSearch').onclick = async () => { const q=$('f_q').value.trim(); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at').or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div></div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
+    return;
+  }
+  page = 0; ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
   let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
-  $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
-  $('nx').onclick = () => { page++; loadAll(); };
+  $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } }; $('nx').onclick = () => { page++; loadAll(); };
   loadAll(); loadPending(); loadCodes();
-  if (canViewManagerBoard()) { refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh(); }
+  if (board) { refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh(); }
 }
 let managerBoardTimer = null, managerClockTimer = null, managerBoardBusy = false;
 async function loadManagerOpsPending() {

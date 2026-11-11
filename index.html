@@ -69,7 +69,7 @@ const mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000
 const isLate = o => ['new','received','out'].includes(o.status)
   ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
-let me = null, drivers = [], page = 0, timer = null, chan = null;
+let me = null, drivers = [], page = 0, timer = null, chan = null, delayTimer = null;
 const ORD = {};
 
 function flash(t, ok) {
@@ -78,7 +78,7 @@ function flash(t, ok) {
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
 const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير'}[u.workflow_role] || u.job_title || 'مدير') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
-const shell = (inner) => `<header><img src="icon-192.png" alt="" style="width:46px;height:46px;border-radius:12px"><div style="flex:1;min-width:0"><small style="opacity:.8">واحة اليمن — متابعة الدليفري</small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small></div><button id="out">خروج</button></header><div id="flash" class="hide"></div>${inner}`;
+const shell = (inner) => `<header><img src="icon-192.png" alt="" style="width:46px;height:46px;border-radius:12px"><div style="flex:1;min-width:0"><small style="opacity:.8">واحة اليمن — متابعة الدليفري</small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small></div><button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${inner}`;
 
 /* ---------- الدخول ---------- */
 function loginView(err) {
@@ -105,12 +105,31 @@ async function boot() {
     drivers = r.data || [];
   }
   me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : managerView();
+  startKitchenDelayMonitor();
   if (chan) sb.removeChannel(chan);
   chan = sb.channel('dlv').on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, () => {
     clearTimeout(timer); timer = setTimeout(() => refreshView(), 400);
   }).subscribe();
 }
-function bindOut() { $('out').onclick = async () => { if (watchId != null) await stopShare(); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+async function refreshKitchenDelayNotices() {
+  if (!me || !(me.role === 'admin' || me.workflow_role === 'callcenter_followup')) return;
+  // Any open owner/follow-up dashboard can perform the idempotent overdue scan.
+  const scan = await sb.rpc('dlv_check_kitchen_delays');
+  const {data, error} = await sb.rpc('dlv_list_notifications');
+  const box = $('delayNotices'); if (!box) return;
+  if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل تنبيهات التأخير: '+esc(error.message)+'</div>'; return; }
+  const rows = (data || []).filter(n => n.notification_type === 'kitchen_delay' || !n.notification_type);
+  box.innerHTML = rows.length ? '<div class="card" style="border:2px solid #e8590c"><b>🔔 تنبيهات تأخير المطبخ</b>' + rows.map(n => '<div class="msg '+(n.read_at?'':'e')+'" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+(n.read_at?' · تمت القراءة':' · جديد')+'</div>'+(n.read_at?'':'<button data-delay-read="'+n.id+'" style="margin-top:6px">تمت القراءة</button>')+'</div>').join('')+'</div>' : '';
+  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { await sb.rpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); refreshKitchenDelayNotices(); });
+}
+function startKitchenDelayMonitor() {
+  clearInterval(delayTimer);
+  if (!me || !(me.role === 'admin' || me.workflow_role === 'callcenter_followup')) return;
+  refreshKitchenDelayNotices();
+  delayTimer = setInterval(refreshKitchenDelayNotices, 60000);
+}
+
+function bindOut() { $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
 
 /* ---------- العمليات ---------- */
 async function setStatus(id, to, note) {

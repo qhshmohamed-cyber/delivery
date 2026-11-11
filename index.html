@@ -85,7 +85,7 @@ function loginView(err) {
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
-    <button class="p big" id="go" style="margin-top:14px">دخول</button></div>`;
+    <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#4e2c12;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div></div>`;
   $('go').onclick = async () => {
     $('go').disabled = true;
     const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
@@ -149,7 +149,7 @@ function failDialog(id) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const id = +b.dataset.id, a = b.dataset.act;
-  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'kfwd') kitchenForward(id); else setStatus(id, a);
+  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'cpmsg') copyMsg(id); else if (a === 'wa') waMsg(id); else if (a === 'kfwd') kitchenForward(id); else setStatus(id, a);
 });
 
 /* ---------- واجهة الدليفري ---------- */
@@ -187,7 +187,7 @@ function managerView() {
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
     <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${me.role === 'admin' ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button>' : ''}</div>
-    <div id="pend"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
+    <div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; page = 0;
@@ -195,7 +195,7 @@ function managerView() {
   let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
   $('nx').onclick = () => { page++; loadAll(); };
-  loadAll(); loadPending();
+  loadAll(); loadPending(); loadCodes();
 }
 async function loadAll() {
   const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
@@ -216,13 +216,13 @@ async function loadAll() {
     .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
   $('perf').innerHTML = `<table><tr><th>الدليفري</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
     (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
-  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th></th></tr>` +
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
     ((o.data || []).map(x => {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
       const cancel = ['new','received'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
       return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
-        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
-    }).join('') || '<tr><td colspan="13">لا طلبات</td></tr>') + '</table>';
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${esc(x.track_code || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
+    }).join('') || '<tr><td colspan="14">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
@@ -402,7 +402,7 @@ function editPilotForm(r, done) {
   const d = document.createElement('div'); d.className = 'modal'; d.style.zIndex = 30;
   d.innerHTML = '<div><h2 style="font-size:16px">تعديل ' + esc(r.full_name) + '</h2><div id="perr" class="msg e hide"></div>' +
     '<label>الاسم</label><input id="p_n" value="' + esc(r.full_name) + '">' +
-    '<label>كود الموظف</label><input id="p_c" value="' + esc(r.employee_code) + '">' +
+    '<label>كود الموظف</label><input id="p_c" value="' + esc(r.employee_code) + '">' + '<label>رقم موبايل الطيار (بيظهر للعميل)</label><input id="p_ph" type="tel" dir="ltr" value="' + esc(r.phone) + '">' +
     '<label>الإيميل (بيه بيدخل)' + (self ? ' — إيميلك إنت مش بيتغيّر من هنا' : '') + '</label><input id="p_m" type="email" dir="ltr" value="' + esc(r.email) + '"' + (self ? ' disabled' : '') + '>' +
     '<label>الوظيفة' + (self ? ' — وظيفة حسابك إنت مش بتتغيّر من هنا' : '') + '</label><select id="p_j"' + (self ? ' disabled' : '') + '>' +
     JOBS.map(j => '<option value="' + j[0] + '"' + (j[0] === curJob ? ' selected' : '') + '>' + j[1] + '</option>').join('') + '</select>' +
@@ -420,6 +420,7 @@ function editPilotForm(r, done) {
     const steps = [['dlv_update_pilot', { p_user: r.user_id, p_name: name, p_code: code }]];
     if (!self && mail && mail !== oldMail) steps.push(['dlv_set_pilot_email', { p_user: r.user_id, p_email: mail }]);
     if (!self && job !== curJob) steps.push(['dlv_set_pilot_job', { p_user: r.user_id, p_job: job }]);
+    const ph = $('p_ph').value.trim(); if (ph !== (r.phone || '')) steps.push(['dlv_set_pilot_phone', { p_user: r.user_id, p_phone: ph }]);
     if (pw) steps.push(['dlv_set_pilot_password', { p_user: r.user_id, p_password: pw }]);
     for (let i = 0; i < steps.length; i++) {
       const res = await sb.rpc(steps[i][0], steps[i][1]);
@@ -506,7 +507,7 @@ setInterval(refreshMe, 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshMe(); });
 
 /* ---------- مسار الطلب: مطبخ ← مشرف ← طيار ---------- */
-function refreshView() { if (!me) return; if (me.role === 'driver') loadMine(); else if (me.workflow_role === 'kitchen') loadKitchen(); else { loadAll(); loadPending(); } }
+function refreshView() { if (!me) return; if (me.role === 'driver') loadMine(); else if (me.workflow_role === 'kitchen') loadKitchen(); else { loadAll(); loadPending(); loadCodes(); } }
 const ordCard = (o, btn) => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><span class="badge" style="background:' + (o.workflow_stage === 'new' ? '#868e96' : '#2f9e44') + '">' + (STG[o.workflow_stage] || '') + '</span></div><div class="meta">' + esc([o.customer_name, o.phone, o.address].filter(Boolean).join(' · ')) + '</div>' + btn + '</div>';
 function kitchenView() {
   $('app').innerHTML = shell('<button class="g big" id="nw">＋ طلب جديد (جاهز من المطبخ)</button><div id="kq"></div>');
@@ -546,9 +547,56 @@ async function kitchenForward(id) {
   flash('اتحوّل للمشرف ✅', true); refreshView();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && me && me.role === 'driver' && watchId == null && !window._sd) startShare(); });
+
+/* ---------- أكواد متابعة العملاء (للموظفين) ---------- */
+const trackMsg = o => 'أهلًا ' + (o.customer_name || '') + '، تابع طلبك رقم #' + o.order_no + ' من هنا:\n' + location.origin + location.pathname + '?t=' + o.track_code + '\nكود المتابعة: ' + o.track_code;
+function copyMsg(id) { const o = ORD[id]; if (!o) return; navigator.clipboard && navigator.clipboard.writeText(trackMsg(o)); flash('اتنسخت رسالة العميل، ابعتها له', true); }
+function waMsg(id) {
+  const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);
+  window.open('https://wa.me/' + d + '?text=' + encodeURIComponent(trackMsg(o)), '_blank');
+}
+async function loadCodes() {
+  const box = $('codes'); if (!box) return;
+  const { data, error } = await sb.from('dlv_orders').select('*, driver:driver_id(full_name)').eq('order_date', cairoDate()).not('track_code', 'is', null).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false });
+  if (error) return;
+  const rows = data || []; rows.forEach(o => ORD[o.id] = o);
+  box.innerHTML = rows.length ? '<h2>🔑 أكواد متابعة العملاء (' + rows.length + ')</h2>' + rows.map(o => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><b dir="ltr" style="font-size:22px;letter-spacing:2px;color:#4e2c12">' + esc(o.track_code) + '</b></div><div class="meta">' + esc([o.customer_name, o.phone].filter(Boolean).join(' · ')) + ' — الطيار: ' + esc(o.driver ? o.driver.full_name : '') + '</div><div class="acts"><button class="p" data-act="cpmsg" data-id="' + o.id + '">نسخ رسالة العميل</button>' + (o.phone ? '<button class="g" data-act="wa" data-id="' + o.id + '">واتساب</button>' : '') + '</div></div>').join('') : '';
+}
+
+/* ---------- صفحة العميل: تتبع الطلب بالكود (من غير دخول) ---------- */
+function trackView(code0) {
+  document.title = 'تتبع طلبك — واحة اليمن';
+  $('app').innerHTML = '<header><img src="icon-192.png" alt="" style="width:46px;height:46px;border-radius:12px"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small>واحة اليمن</small></div></header>' +
+    '<div class="card"><label style="font-size:12px">كود المتابعة</label><div class="row"><input id="tc" dir="ltr" style="flex:1;text-transform:uppercase" placeholder="مثال: 7K2M9QXA" value="' + esc((code0 || '').toUpperCase()) + '"><button class="p" id="tg">تتبّع</button></div></div>' +
+    '<div id="tinfo"></div><div id="tmap" class="card" style="height:320px;display:none;padding:0;overflow:hidden"></div>';
+  let tmr, mapT, mk;
+  async function go() {
+    const code = $('tc') ? $('tc').value.trim().toUpperCase() : ''; if (!code) return;
+    const { data: j, error } = await sb.rpc('dlv_track', { p_code: code });
+    const box = $('tinfo'); if (!box) return clearInterval(tmr);
+    if (error || !j || !j.found) { box.innerHTML = '<div class="msg e">' + (j && j.expired ? 'انتهت صلاحية الكود' : 'الكود غير صحيح، راجع الكود مع خدمة العملاء') + '</div>'; $('tmap').style.display = 'none'; clearInterval(tmr); return; }
+    const S = ['تم تسجيل طلبك', 'جاري التجهيز في المطبخ', 'جاهز ومع المشرف', 'اتعيّن لك طيار', 'الطيار خرج لك', 'تم التسليم'];
+    const idx = j.status === 'delivered' ? 5 : j.status === 'out' ? 4 : j.pilot_name ? 3 : (j.stage === 'kitchen_ready' || j.stage === 'supervisor_received') ? 2 : 1;
+    let h = '<div class="card"><b style="font-size:20px">طلب رقم #' + esc(j.order_no) + '</b>';
+    if (j.status === 'failed') h += '<div class="msg e" style="margin-top:10px">تعذر توصيل الطلب، هيتواصل معاك فريق الخدمة.</div>';
+    else if (j.status === 'cancelled') h += '<div class="msg e" style="margin-top:10px">تم إلغاء الطلب.</div>';
+    else h += S.map((t, i) => '<div class="od" style="margin-top:8px;opacity:' + (i <= idx ? 1 : .45) + '"><span>' + (i < idx ? '✓ ' : i === idx ? '● ' : '○ ') + t + '</span>' + (i === 4 && j.out_at ? '<span class="meta">' + tm(j.out_at) + '</span>' : i === 5 && j.delivered_at ? '<span class="meta">' + tm(j.delivered_at) + '</span>' : '') + '</div>').join('');
+    h += '</div>';
+    if (j.pilot_name && j.status !== 'failed' && j.status !== 'cancelled') h += '<div class="card"><div class="meta">الطيار</div><b style="font-size:20px">' + esc(j.pilot_name) + '</b>' + (j.pilot_phone ? '<div style="margin-top:8px"><a href="tel:' + esc(j.pilot_phone) + '" style="color:#4e2c12;font-weight:700;font-size:18px" dir="ltr">' + esc(j.pilot_phone) + '</a> <span class="meta">(اضغط للاتصال)</span></div>' : '') + '</div>';
+    box.innerHTML = h;
+    const m = $('tmap');
+    if (j.lat != null) {
+      m.style.display = 'block';
+      if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapT); mk = L.circleMarker([j.lat, j.lng], { radius: 11, color: '#fff', weight: 3, fillColor: '#e8590c', fillOpacity: 1 }).addTo(mapT); }
+      else { mk.setLatLng([j.lat, j.lng]); mapT.panTo([j.lat, j.lng]); }
+    } else m.style.display = 'none';
+  }
+  $('tg').onclick = () => { clearInterval(tmr); go(); tmr = setInterval(go, 10000); };
+  if (code0) $('tg').onclick();
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-boot();
+const _t = new URLSearchParams(location.search).get('t'); if (_t !== null) trackView(_t); else boot();
 </script>
 </body>
 </html>

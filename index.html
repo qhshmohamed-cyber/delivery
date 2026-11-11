@@ -70,7 +70,7 @@ const isLate = o => ['new','received','out'].includes(o.status)
   ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
 let me = null, drivers = [], page = 0, timer = null, chan = null, delayTimer = null, selectedBranch = null;
-const branchQuery = q => (isOwner() && selectedBranch ? q.eq('branch_id', selectedBranch) : q);
+const branchQuery = q => (selectedBranch ? q.eq('branch_id', selectedBranch) : q);
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
 const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
@@ -106,6 +106,9 @@ async function boot() {
   if (error || !data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
   if (isOwner()) { await ownerBranchPicker(); return; }
+  const permitted = Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id];
+  if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
+  selectedBranch = me.branch_id;
   if (me.role !== 'driver') {
     const r = await sb.from('dlv_profiles').select('user_id,full_name,employee_code').eq('role','driver').eq('active',true).order('full_name');
     drivers = r.data || [];
@@ -116,6 +119,21 @@ async function boot() {
   chan = sb.channel('dlv').on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, () => {
     clearTimeout(timer); timer = setTimeout(() => { refreshView(); if(canViewManagerBoard()){loadManagerLiveKpis();loadManagerOpsPending();loadManagerDelayed();loadManagerRatings();refreshKitchenDelayNotices();} }, 400);
   }).subscribe();
+}
+async function employeeBranchPicker(permitted){
+  const {data,error}=await sb.rpc('dlv_my_branches');
+  if(error){await sb.auth.signOut();me=null;return loginView('تعذر تحميل فروع حسابك: '+error.message);}
+  const branches=(data||[]).filter(b=>permitted.includes(b.id));
+  if(!branches.length){await sb.auth.signOut();me=null;return loginView('لا يوجد فرع مسموح لهذا الحساب');}
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=Number(b.dataset.empBranch);await enterEmployeeDashboard();});
+  $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+}
+async function enterEmployeeDashboard(){
+  if(me.role!=='driver'){const r=await branchQuery(sb.from('dlv_profiles').select('user_id,full_name,employee_code,branch_id').eq('role','driver').eq('active',true).order('full_name'));drivers=r.data||[];}
+  me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():managerView();
+  startKitchenDelayMonitor();if(chan)sb.removeChannel(chan);
+  chan=sb.channel('dlv').on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{clearTimeout(timer);timer=setTimeout(()=>{refreshView();if(canViewManagerBoard()){loadManagerLiveKpis();loadManagerOpsPending();loadManagerDelayed();loadManagerRatings();refreshKitchenDelayNotices();}},400);}).subscribe();
 }
 async function ownerBranchPicker(){
   const {data,error}=await sb.rpc('dlv_list_branches');
@@ -165,7 +183,7 @@ function newOrderForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
     <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
-    ${isOwner() ? `<label>الفرع *</label><select id="n_branch"><option value="1" ${selectedBranch===1?'selected':''}>فرع المهندسين</option><option value="2" ${selectedBranch===2?'selected':''}>فرع الشيخ زايد</option></select>` : ''}
+    ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch"><option value="1" ${selectedBranch===1?'selected':''}>فرع المهندسين</option><option value="2" ${selectedBranch===2?'selected':''}>فرع الشيخ زايد</option></select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
     <label>العنوان</label><input id="n_a">` : ''}
     ${isMgr && !['kitchen','callcenter_followup'].includes(me.workflow_role) ? `<label>الدليفري (اختياري — تقدر تحوّله بعدين)</label><select id="n_d"><option value="">اختر...</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>` : ''}
@@ -176,7 +194,7 @@ function newOrderForm() {
   $('n_ok').onclick = async () => {
     $('n_ok').disabled = true;
     const {data: createdId, error} = await sb.rpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
-      p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: isMgr && $('n_d') ? ($('n_d').value || null) : null, p_branch_id: isOwner() ? Number($('n_branch').value) : null});
+      p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: isMgr && $('n_d') ? ($('n_d').value || null) : null, p_branch_id: (isOwner() || (me.allowed_branch_ids||[]).length>1) ? Number($('n_branch').value) : null});
     if (error) { $('n_ok').disabled = false; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
     let codeText = '';
     if (createdId) {
@@ -557,17 +575,17 @@ function noteForm(id) {
 async function managePilots() {
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
-  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">👥 إدارة الطيارين</b><button id="pclose">إغلاق</button></div>' +
+  d.innerHTML = '<div class="row" style="padding:10px"><b style="flex:1">👥 إدارة الموظفين والفروع</b><button id="pclose">إغلاق</button></div>' +
     '<div style="padding:0 10px 8px"><input id="psearch" placeholder="بحث بالاسم أو الكود أو الإيميل"></div><div id="plist" style="flex:1;overflow:auto;padding:0 10px 20px"></div>';
   document.body.appendChild(d);
   $('pclose').onclick = () => d.remove();
   let rows = [];
   const draw = () => {
     const q = $('psearch').value.trim().toLowerCase();
-    $('plist').innerHTML = rows.filter(r => !q || (r.full_name + ' ' + r.employee_code + ' ' + r.email).toLowerCase().includes(q)).map(r =>
+    $('plist').innerHTML = rows.filter(r => !q || (r.full_name + ' ' + r.employee_code + ' ' + r.email + ' ' + (r.branch_id===1?'المهندسين':'زايد')).toLowerCase().includes(q)).map(r =>
       '<div class="card"><div class="row"><div class="grow"><div class="name">' + esc(r.full_name) +
       (r.role !== 'driver' ? ' <span class="badge" style="background:#5a3317">' + (r.role === 'admin' ? 'مدير عام' : esc(r.job_title || 'مدير')) + '</span>' : '') +
-      '</div><div class="meta" dir="ltr" style="text-align:right">' + esc(r.email) + ' · ' + esc(r.employee_code) + '</div></div>' +
+      '</div><div class="meta" dir="ltr" style="text-align:right">' + esc(r.email) + ' · ' + esc(r.employee_code) + ' · الأساسي: ' + (r.branch_id===1?'المهندسين':'الشيخ زايد') + ' · الصلاحية: ' + ((r.allowed_branch_ids||[r.branch_id]).length>1?'الفرعين':'فرع واحد') + '</div></div>' +
       '<button data-pid="' + r.user_id + '">تعديل</button></div></div>').join('') || '<div class="meta">لا نتائج</div>';
   };
   const load = async () => {
@@ -594,7 +612,9 @@ function editPilotForm(r, done) {
   const d = document.createElement('div'); d.className = 'modal'; d.style.zIndex = 30;
   d.innerHTML = '<div><h2 style="font-size:16px">تعديل ' + esc(r.full_name) + '</h2><div id="perr" class="msg e hide"></div>' +
     '<label>الاسم</label><input id="p_n" value="' + esc(r.full_name) + '">' +
-    '<label>كود الموظف</label><input id="p_c" value="' + esc(r.employee_code) + '">' + '<label>رقم موبايل الطيار (بيظهر للعميل)</label><input id="p_ph" type="tel" dir="ltr" value="' + esc(r.phone) + '">' +
+    '<label>كود الموظف</label><input id="p_c" value="' + esc(r.employee_code) + '">' + '<label>رقم الموبايل</label><input id="p_ph" type="tel" dir="ltr" value="' + esc(r.phone) + '">' +
+    '<label>الفرع الأساسي</label><select id="p_home_branch"><option value="1"' + (Number(r.branch_id)===1?' selected':'') + '>فرع المهندسين</option><option value="2"' + (Number(r.branch_id)===2?' selected':'') + '>فرع الشيخ زايد</option></select>' +
+    '<label>الفروع المسموح للحساب بالدخول إليها</label><div class="card"><label><input type="checkbox" id="p_b1" style="width:auto"' + ((r.allowed_branch_ids||[r.branch_id]).includes(1)?' checked':'') + '> المهندسين</label><label><input type="checkbox" id="p_b2" style="width:auto"' + ((r.allowed_branch_ids||[r.branch_id]).includes(2)?' checked':'') + '> الشيخ زايد</label><div class="meta">تقدر تنقل الموظف لفرع أو تسمح له بالفرعين معًا.</div></div>' +
     '<label>الإيميل (بيه بيدخل)' + (self ? ' — إيميلك إنت مش بيتغيّر من هنا' : '') + '</label><input id="p_m" type="email" dir="ltr" value="' + esc(r.email) + '"' + (self ? ' disabled' : '') + '>' +
     '<label>الوظيفة' + (self ? ' — وظيفة حسابك إنت مش بتتغيّر من هنا' : '') + '</label><select id="p_j"' + (self ? ' disabled' : '') + '>' +
     JOBS.map(j => '<option value="' + j[0] + '"' + (j[0] === curJob ? ' selected' : '') + '>' + j[1] + '</option>').join('') + '</select>' +
@@ -614,6 +634,8 @@ function editPilotForm(r, done) {
     if (!self && job !== curJob) steps.push(['dlv_set_pilot_job', { p_user: r.user_id, p_job: job }]);
     const ph = $('p_ph').value.trim(); if (ph !== (r.phone || '')) steps.push(['dlv_set_pilot_phone', { p_user: r.user_id, p_phone: ph }]);
     if (pw) steps.push(['dlv_set_pilot_password', { p_user: r.user_id, p_password: pw }]);
+    const homeBranch=Number($('p_home_branch').value), allowed=[]; if($('p_b1').checked)allowed.push(1); if($('p_b2').checked)allowed.push(2); if(!allowed.includes(homeBranch))allowed.push(homeBranch);
+    steps.push(['dlv_admin_set_user_branches',{p_user:r.user_id,p_home_branch:homeBranch,p_allowed_branches:allowed}]);
     for (let i = 0; i < steps.length; i++) {
       const res = await sb.rpc(steps[i][0], steps[i][1]);
       if (res.error) { if (i) { done(); refreshDrivers(); } return fail((i ? 'اتحفظ جزء من التعديل، لكن حصل خطأ: ' : '') + res.error.message); }

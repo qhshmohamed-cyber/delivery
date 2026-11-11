@@ -196,7 +196,7 @@ function callcenterView() {
 async function loadCallcenterOrders() {
   const box=$('cc_orders'); if(!box) return;
   const q=($('cc_q')?.value || '').trim().replace(/[,()%*]/g,' ');
-  let req=sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)').gte('order_date',cairoDate()).order('created_at',{ascending:false}).limit(60);
+  let req=sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)').eq('order_date',cairoDate()).order('created_at',{ascending:false}).limit(100);
   if(q) req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
   const {data,error}=await req;
   if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
@@ -219,16 +219,40 @@ function managerView() {
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
-    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${me.role === 'admin' ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button>' : ''}</div>
+    <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${me.role === 'admin' ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button><button class="g" id="ownerRatingsPage">⭐ التقييمات</button>' : ''}</div>
     <div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; page = 0;
+  bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; page = 0;
   ['f_from','f_to','f_st','f_dr'].forEach(i => $(i).onchange = () => { page = 0; loadAll(); });
   let q; $('f_q').oninput = () => { clearTimeout(q); q = setTimeout(() => { page = 0; loadAll(); }, 350); };
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
   $('nx').onclick = () => { page++; loadAll(); };
   loadAll(); loadPending(); loadCodes();
+}
+function ownerRatingsView() {
+  if (!me || me.role !== 'admin') return managerView();
+  const today = cairoDate();
+  $('app').innerHTML = shell(`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>⭐ التقييمات</h2><button id="ratingsBack">رجوع للوحة الرئيسية</button></div>
+    <div class="card"><div class="meta">سجل جميع تقييمات العملاء المسجلة — لصاحب النظام فقط.</div>
+      <div class="f"><label>من تاريخ<input type="date" id="r_from" value="2000-01-01"></label><label>إلى تاريخ<input type="date" id="r_to" value="${today}"></label></div>
+      <button class="p big" id="r_refresh">عرض التقييمات</button></div>
+    <div class="grid" id="r_summary"></div><div id="owner_ratings"></div>`);
+  bindOut(); $('ratingsBack').onclick = managerView;
+  $('r_refresh').onclick = loadOwnerRatingsPage;
+  loadOwnerRatingsPage();
+}
+async function loadOwnerRatingsPage() {
+  const box=$('owner_ratings'); if(!box || !me || me.role !== 'admin') return;
+  const from=$('r_from')?.value || '2000-01-01';
+  const to=$('r_to')?.value || cairoDate();
+  box.innerHTML='<div class="meta">جاري تحميل كل التقييمات...</div>';
+  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:from,p_to:to});
+  if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
+  const rows=data||[];
+  const avg=k=>rows.length?(rows.reduce((a,r)=>a+Number(r[k]||0),0)/rows.length).toFixed(1):'—';
+  $('r_summary').innerHTML=[['عدد التقييمات',rows.length],['متوسط تقييم الطيار',avg('delivery_rating')+'/5'],['متوسط تقييم المطعم',avg('restaurant_rating')+'/5'],['متوسط تقييم الكول سنتر',avg('callcenter_rating')+'/5']].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
+  box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الطيار: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات في الفترة المحددة.</div>';
 }
 async function loadAll() {
   const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
@@ -669,7 +693,7 @@ function trackView(code0) {
           $('sendRating').disabled=true;$('rateMsg').textContent='جارٍ إرسال تقييمك...';
           const {data,error}=await sb.rpc('dlv_submit_customer_rating',{p_code:code,p_delivery:scores.delivery,p_restaurant:scores.restaurant,p_callcenter:scores.callcenter,p_comment:$('rateComment').value||null});
           if(error){$('sendRating').disabled=false;$('rateMsg').textContent=error.message;return;}
-          $('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">وصل تقييمك لفريق متابعة الكول سنتر.</div>';
+          $('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">وصل تقييمك لصاحب النظام وفريق متابعة الكول سنتر.</div>';
         };
       }
       clearInterval(tmr);

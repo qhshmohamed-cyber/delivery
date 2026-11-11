@@ -232,7 +232,7 @@ async function loadCallcenterRatings() {
   const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:cairoDate(),p_to:cairoDate()});
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=data||[];
-  box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الدليفري: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>متابعة الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات اليوم حتى الآن.</div>';
+  box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.branch_name||'')} · ${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الدليفري: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>متابعة الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات اليوم حتى الآن.</div>';
 }
 
 /* ---------- واجهة المدير ---------- */
@@ -321,7 +321,7 @@ function ownerRatingsView() {
   const today = cairoDate();
   $('app').innerHTML = shell(`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>⭐ التقييمات</h2><button id="ratingsBack">رجوع للوحة الرئيسية</button></div>
     <div class="card"><div class="meta">سجل جميع تقييمات العملاء المسجلة — لصاحب النظام فقط.</div>
-      <div class="f"><label>من تاريخ<input type="date" id="r_from" value="2000-01-01"></label><label>إلى تاريخ<input type="date" id="r_to" value="${today}"></label></div>
+      <div class="f"><label>من تاريخ<input type="date" id="r_from" value="2000-01-01"></label><label>إلى تاريخ<input type="date" id="r_to" value="${today}"></label><label>الفرع<select id="r_branch"><option value="">كل الفروع</option><option value="1">فرع المهندسين</option><option value="2">فرع الشيخ زايد</option></select></label></div>
       <button class="p big" id="r_refresh">عرض التقييمات</button></div>
     <div class="grid" id="r_summary"></div><div id="owner_ratings"></div>`);
   bindOut(); $('ratingsBack').onclick = managerView;
@@ -333,12 +333,13 @@ async function loadOwnerRatingsPage() {
   const from=$('r_from')?.value || '2000-01-01';
   const to=$('r_to')?.value || cairoDate();
   box.innerHTML='<div class="meta">جاري تحميل كل التقييمات...</div>';
-  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:from,p_to:to});
+  const branchValue=$('r_branch')?.value || '';
+  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:from,p_to:to,p_branch_id:branchValue?Number(branchValue):null});
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=data||[];
   const avg=k=>rows.length?(rows.reduce((a,r)=>a+Number(r[k]||0),0)/rows.length).toFixed(1):'—';
   $('r_summary').innerHTML=[['عدد التقييمات',rows.length],['متوسط تقييم الطيار',avg('delivery_rating')+'/5'],['متوسط تقييم المطعم',avg('restaurant_rating')+'/5'],['متوسط تقييم الكول سنتر',avg('callcenter_rating')+'/5']].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
-  box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الطيار: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات في الفترة المحددة.</div>';
+  box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.branch_name||'')} · ${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الطيار: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات في الفترة المحددة.</div>';
 }
 async function loadAll() {
   const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
@@ -468,6 +469,7 @@ function addDriverForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
     '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option></select>' +
+    '<label>الفرع *</label><select id="a_branch"><option value="1">فرع المهندسين</option><option value="2">فرع الشيخ زايد</option></select>' +
     '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (8 أحرف على الأقل)</label><input id="a_p" value="' + pw + '">' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
@@ -481,11 +483,12 @@ function addDriverForm() {
     if (!name || !code) return fail('اكتب الاسم والكود');
     if (!$('a_m').value.includes('@') && !/[a-z0-9]/i.test(code)) return fail('اكتب كود بأرقام أو حروف إنجليزي، أو اكتب الإيميل بنفسك');
     $('a_ok').disabled = true;
-    const { data, error } = await sb.rpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value });
+    const { data, error } = await sb.rpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value, p_branch_id: Number($('a_branch').value) });
     if (error) return fail(error.message);
     const jobSel = $('a_j'), jobVal = jobSel.value, jobName = jobSel.options[jobSel.selectedIndex].text; if (jobVal === 'driver') drivers.push({ user_id: data, full_name: name, employee_code: code });
     const f = $('f_dr'); if (f && jobVal === 'driver') f.insertAdjacentHTML('beforeend', '<option value="' + data + '">' + esc(name) + '</option>');
-    const txt = name + '\nالوظيفة: ' + jobName + '\nالإيميل: ' + email + '\nكلمة السر: ' + pass;
+    const branchName = $('a_branch').selectedOptions[0].text;
+    const txt = name + '\nالوظيفة: ' + jobName + '\nالفرع: ' + branchName + '\nالإيميل: ' + email + '\nكلمة السر: ' + pass;
     d.firstChild.innerHTML = '<h2 style="font-size:16px">✅ تم إنشاء الحساب</h2><div class="card" style="white-space:pre-line;direction:rtl">' + esc(txt) + '</div>' +
       '<div class="meta">احتفظ ببيانات الدخول وسلّمها للطيار، كلمة السر مش هتظهر تاني.</div>' +
       '<div class="row" style="margin-top:14px"><button class="p big" id="a_cp" style="flex:1">نسخ</button><button class="big" id="a_x2" style="flex:0 0 90px">إغلاق</button></div>';

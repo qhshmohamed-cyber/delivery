@@ -239,7 +239,8 @@ function managerView() {
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
     <div class="row" style="margin-bottom:10px"><button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${me.role === 'admin' ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الطيارين</button><button id="rp">📊 تقرير اليوم</button><button class="g" id="ownerRatingsPage">⭐ التقييمات</button>' : ''}</div>
-    <div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
+    ${me.role === 'admin' ? `<h2>📊 شاشة متابعة المدير</h2><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏱️ الطلبات المتأخرة في المطبخ</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div>` : ''}
+    <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div>
     <h2>الطلبات</h2><div class="card tw" id="tbl"></div>
     <div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>`);
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; page = 0;
@@ -248,6 +249,30 @@ function managerView() {
   $('pv').onclick = () => { if (page > 0) { page--; loadAll(); } };
   $('nx').onclick = () => { page++; loadAll(); };
   loadAll(); loadPending(); loadCodes();
+  if (me.role === 'admin') { refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); }
+}
+async function loadManagerLiveKpis() {
+  const box=$('managerLiveKpi'); if(!box) return;
+  const {data,error}=await sb.from('dlv_orders').select('id,status,workflow_stage,created_at').eq('order_date',cairoDate());
+  if(error){box.innerHTML='<div class="msg e">تعذر تحميل ملخص الطلبات</div>';return;}
+  const rows=data||[], pending=rows.filter(o=>o.status==='new' && ['new','kitchen_ready','supervisor_received'].includes(o.workflow_stage)).length;
+  const kitchen=rows.filter(o=>o.status==='new' && o.workflow_stage==='new').length;
+  const out=rows.filter(o=>o.status==='out').length;
+  box.innerHTML=[['طلبات اليوم',rows.length],['في الانتظار',pending],['عند المطبخ',kitchen],['خرجت للتوصيل',out]].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
+}
+async function loadManagerDelayed() {
+  const box=$('managerDelayed'); if(!box) return;
+  const {data,error}=await sb.from('dlv_orders').select('id,order_no,customer_name,phone,created_at,kitchen_received_at,workflow_stage,status').eq('order_date',cairoDate()).eq('status','new').eq('workflow_stage','new').order('created_at');
+  if(error){box.innerHTML='<div class="msg e">تعذر تحميل الطلبات المتأخرة: '+esc(error.message)+'</div>';return;}
+  const now=Date.now(), rows=(data||[]).map(o=>({...o,elapsed:Math.floor((now-new Date(o.kitchen_received_at||o.created_at).getTime())/60000)})).filter(o=>o.elapsed>=25);
+  box.innerHTML=rows.length?rows.map(o=>`<div class="card" style="border:2px solid #e8590c"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:#e8590c">متأخر ${o.elapsed} دقيقة</span></div><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(o.phone||'')}<br>منذ: ${tm(o.kitchen_received_at||o.created_at)}</div></div>`).join(''):'<div class="msg">لا توجد طلبات تجاوزت 25 دقيقة في المطبخ حاليًا.</div>';
+}
+async function loadManagerRatings() {
+  const box=$('managerRatings'); if(!box) return;
+  const {data,error}=await sb.rpc('dlv_list_customer_ratings',{p_from:'2000-01-01',p_to:cairoDate()});
+  if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
+  const rows=(data||[]).slice(0,5);
+  box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">الطيار: ${r.delivery_rating}/5 ⭐ · المطعم: ${r.restaurant_rating}/5 ⭐ · الكول سنتر: ${r.callcenter_rating}/5 ⭐</div>${r.comment?`<div>تعليق العميل: ${esc(r.comment)}</div>`:''}</div>`).join(''):'<div class="msg">لا توجد تقييمات مسجلة حتى الآن.</div>';
 }
 function ownerRatingsView() {
   if (!me || me.role !== 'admin') return managerView();

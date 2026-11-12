@@ -15,9 +15,6 @@
 :root{--bg:#dca86f;--card:#fff8ea;--text:#3a2412;--muted:#5b4128;--line:#dcc49a;--brand:#5a3317;--gold:#b9832e}
 
 *{box-sizing:border-box}
-.brand-logo-img{display:block;width:48px;height:48px;max-width:48px;max-height:48px;flex:0 0 48px;object-fit:contain;object-position:center;background:rgba(255,255,255,.10);padding:3px;border-radius:12px;image-rendering:auto}
-#br_preview_logo{display:block;width:112px!important;height:112px!important;max-width:112px;max-height:112px;object-fit:contain!important;object-position:center;background:#fffdf8;border:1px solid var(--line);padding:8px;border-radius:16px;margin:8px auto}
-
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
 .wrap{max-width:900px;margin:0 auto;padding:12px 0;position:relative;z-index:1}
 header{display:flex;align-items:center;gap:10px;margin-bottom:12px;background:#4e2c12;color:#f4e9d2;border-radius:16px;padding:10px 12px;border-bottom:3px solid #b9832e}
@@ -47,7 +44,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
-.hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}@media print{body>*:not(#rpt){display:none!important}body::before{display:none}#rpt{position:static!important;overflow:visible!important;background:#fff!important}.noprint{display:none!important}}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
+.hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(logo-original.png) center 42%/min(76vw,360px) auto no-repeat;opacity:.075;pointer-events:none;z-index:0}@media print{body>*:not(#rpt){display:none!important}body::before{display:none}#rpt{position:static!important;overflow:visible!important;background:#fff!important}.noprint{display:none!important}}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
 .ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}.ys-bike-marker div{filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
 .ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}
 .ys-bike-pin{position:relative;border-radius:50%;display:grid;place-items:center;filter:drop-shadow(0 5px 9px rgba(25,15,8,.35))}
@@ -103,35 +100,10 @@ const branchQuery = q => (selectedBranch ? q.eq('branch_id', selectedBranch) : q
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
 const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
-let brandConfig = {brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'icon-192.png',background_url:'',bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e'};
+let brandConfig = {brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:'',bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e'};
 let brandChannel = null;
 const OWNER_ONLY = () => isOwner();
-function applyBrandConfig(c){
- if(!c)return;
- brandConfig={...brandConfig,...c};
- document.title=(brandConfig.app_name||'متابعة الدليفري')+' — '+(brandConfig.brand_name||'واحة اليمن');
- const root=document.documentElement;
- root.style.setProperty('--bg',brandConfig.bg_color||'#dca86f');
- root.style.setProperty('--card',brandConfig.card_color||'#fff8ea');
- root.style.setProperty('--brand',brandConfig.brand_color||'#5a3317');
- root.style.setProperty('--gold',brandConfig.gold_color||'#b9832e');
- document.querySelectorAll('[data-brand-logo]').forEach(img=>{
-   const next=brandConfig.logo_url||'icon-192.png';
-   img.onerror=()=>{img.onerror=null;img.src='icon-192.png';};
-   if(img.src!==new URL(next,document.baseURI).href) img.src=next;
-   img.classList.add('brand-logo-img');
- });
- document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'واحة اليمن');
- document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'متابعة الدليفري');
- const oldStyle=document.getElementById('brand-bg-style');
- if(oldStyle)oldStyle.remove();
- if(brandConfig.background_url){
-   const st=document.createElement('style');
-   st.id='brand-bg-style';
-   st.textContent=`body::before{background-image:url("${String(brandConfig.background_url).replace(/["\\\\]/g,'')}");background-size:cover;background-position:center;background-repeat:no-repeat;opacity:.16}`;
-   document.head.appendChild(st);
- }
-}
+function applyBrandConfig(c){ if(!c)return; brandConfig={...brandConfig,...c}; document.title=(brandConfig.app_name||'متابعة الدليفري')+' — '+(brandConfig.brand_name||'واحة اليمن'); const root=document.documentElement; root.style.setProperty('--bg',brandConfig.bg_color||'#dca86f'); root.style.setProperty('--card',brandConfig.card_color||'#fff8ea'); root.style.setProperty('--brand',brandConfig.brand_color||'#5a3317'); root.style.setProperty('--gold',brandConfig.gold_color||'#b9832e'); document.querySelectorAll('[data-brand-logo]').forEach(i=>{i.src=brandConfig.logo_url||'logo-original.png';i.style.objectFit='contain';i.style.objectPosition='center';i.style.background='transparent';}); document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'واحة اليمن'); document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'متابعة الدليفري'); const old=document.getElementById('brand-bg-style'); if(old)old.remove(); if(brandConfig.background_url){const st=document.createElement('style');st.id='brand-bg-style';st.textContent=`body::before{background-image:url('${String(brandConfig.background_url).replace(/'/g,'%27')}'),url(icon-512.png);background-size:cover, min(88vw,480px);background-position:center,center 38%;background-repeat:no-repeat;opacity:.24}`;document.head.appendChild(st);} }
 async function loadBrandConfig(){try{const {data,error}=await sb.from('dlv_branding').select('*').eq('id',1).maybeSingle();if(!error&&data)applyBrandConfig(data);}catch(e){console.warn('Brand config unavailable',e);}}
 function subscribeBrandConfig(){if(brandChannel)sb.removeChannel(brandChannel);brandChannel=sb.channel('dlv-branding-live').on('postgres_changes',{event:'*',schema:'public',table:'dlv_branding',filter:'id=eq.1'},p=>{if(p.new)applyBrandConfig(p.new);}).subscribe();}
 
@@ -147,16 +119,16 @@ function flash(t, ok) {
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
 const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير'}[u.workflow_role] || u.job_title || 'مدير') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
-const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="icon-192.png" alt="شعار البراند" class="brand-logo-img"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>واحة اليمن</span> — <span data-brand-app>متابعة الدليفري</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${inner}`; };
+const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="logo-original.png" alt="شعار واحة اليمن" style="width:52px;height:52px;flex:0 0 52px;object-fit:contain;object-position:center;border-radius:10px;background:transparent"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>واحة اليمن</span> — <span data-brand-app>متابعة الدليفري</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${inner}`; };
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
-  $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="icon-192.png" alt="شعار مطاعم واحة اليمن" class="brand-logo-img" style="width:90px;height:90px;max-width:90px;max-height:90px;flex-basis:90px"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="logo-original.png" alt="شعار مطاعم واحة اليمن" style="width:110px;height:110px;display:block;margin:0 auto 10px;object-fit:contain;object-position:center;background:transparent"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
   $('retryBoot').onclick=()=>boot();
   $('retryLogout').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 function loginView(err) {
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img data-brand-logo src="icon-192.png" alt="شعار مطاعم واحة اليمن" class="brand-logo-img" style="width:110px;height:110px;max-width:110px;max-height:110px;flex-basis:110px;margin:0 auto 10px"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img data-brand-logo src="logo-original.png" alt="شعار مطاعم واحة اليمن" style="width:120px;height:120px;border-radius:0;display:block;margin:0 auto 10px;object-fit:contain;object-position:center;background:transparent"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -259,7 +231,7 @@ async function ownerBranchPicker(){
   const {data,error}=await safeRpc('dlv_list_branches');
   if(error){ console.warn('تعذر تحميل قائمة الفروع:',error.message); return reconnectView('تعذر تحميل قائمة الفروع الآن. جلسة الدخول محفوظة؛ أعد المحاولة.'); }
   const branches=data||[];
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="icon-192.png" class="brand-logo-img" style="width:90px;height:90px;max-width:90px;max-height:90px;flex-basis:90px"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:90px;height:90px;object-fit:contain;object-position:center;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
   $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
@@ -301,64 +273,31 @@ async function openBrandSettings(){
  if(!OWNER_ONLY()) return flash('إعدادات الهوية متاحة لمالك النظام فقط',false);
  await loadBrandConfig();
  const d=document.createElement('div');d.className='modal';
- d.innerHTML=`<div><div class="ord"><h2 style="font-size:18px">🎨 هوية النظام والتصميم</h2><button id="brandClose">إغلاق</button></div><p class="meta">أي تعديل تحفظه يظهر لجميع المستخدمين فورًا بعد المزامنة.</p>
- <label>اسم البراند</label><input id="br_name" maxlength="60" value="${esc(brandConfig.brand_name)}">
- <label>اسم التطبيق</label><input id="br_app" maxlength="60" value="${esc(brandConfig.app_name)}">
- <label>لوجو البراند (PNG أو JPG أو WebP)</label><input id="br_logo" type="file" accept="image/png,image/jpeg,image/webp">
- <div class="meta">سيتم ضبط مقاس اللوجو تلقائيًا مع الحفاظ على نسبه، بدون قص أو تمديد. يفضّل رفع النسخة الأصلية عالية الجودة.</div>
- <label>خلفية التطبيق (من الموبايل)</label><input id="br_bg" type="file" accept="image/png,image/jpeg,image/webp">
- <div class="meta">الخلفية تُعرض كخلفية خفيفة، ولا تؤثر على وضوح اللوجو.</div>
- <div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
- <div class="card" style="text-align:center"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'icon-192.png')}" alt="معاينة اللوجو"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div class="meta">معاينة اللوجو بالحجم الحقيقي — سيظهر كاملًا بدون قص</div></div>
- <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;
+ d.innerHTML=`<div style="max-width:560px">
+ <div class="ord"><h2 style="font-size:19px">🎨 هوية النظام والتصميم</h2><button id="brandClose">إغلاق</button></div>
+ <p class="meta">إعدادات مشتركة لكل المستخدمين. الحفظ ينشر التغييرات فورًا، والتحكم متاح لمالك النظام فقط.</p>
+ <section class="card"><h2>🏷️ أسماء النظام</h2><label>اسم البراند</label><input id="br_name" maxlength="60" value="${esc(brandConfig.brand_name)}" placeholder="واحة اليمن">
+ <label>اسم التطبيق</label><input id="br_app" maxlength="60" value="${esc(brandConfig.app_name)}" placeholder="متابعة الدليفري"></section>
+ <section class="card"><h2>🖼️ الصور والهوية البصرية</h2><label>لوجو البراند — PNG أو JPG أو WEBP</label><input id="br_logo" type="file" accept="image/png,image/jpeg,image/webp">
+ <div class="row" style="align-items:center;margin-top:8px"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'logo-original.png')}" alt="معاينة اللوجو" style="width:104px;height:104px;object-fit:contain;object-position:center;background:#f4e5cd;border:1px solid var(--line);border-radius:12px;padding:5px"><div class="grow"><b>معاينة اللوجو</b><div class="meta">سيظهر كاملًا دون قص أو تمديد، مع الحفاظ على أبعاده الأصلية.</div><button id="br_logo_default" type="button" class="g" style="margin-top:6px">استعادة لوجو واحة اليمن الأصلي</button></div></div>
+ <label>خلفية التطبيق</label><input id="br_bg" type="file" accept="image/png,image/jpeg,image/webp"><div class="row" style="margin-top:6px"><button id="br_bg_clear" type="button">إزالة الخلفية المخصصة</button><span class="meta" id="br_bg_status">${brandConfig.background_url?'توجد خلفية مخصصة محفوظة':'استخدام خلفية النظام الافتراضية'}</span></div></section>
+ <section class="card"><h2>🎨 ألوان التطبيق</h2><div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div></section>
+ <section class="card" id="br_live_preview" style="text-align:center"><div class="meta">معاينة مباشرة قبل النشر</div><img id="br_preview_logo_small" src="${esc(brandConfig.logo_url||'logo-original.png')}" style="width:76px;height:76px;object-fit:contain;object-position:center"><h3 id="br_preview_name" style="margin:6px 0">${esc(brandConfig.brand_name||'واحة اليمن')}</h3><div id="br_preview_app" class="meta">${esc(brandConfig.app_name||'متابعة الدليفري')}</div><div class="row" style="justify-content:center;margin-top:10px"><span style="padding:8px 12px;border-radius:9px;background:var(--brand);color:white">زر أساسي</span><span style="padding:8px 12px;border-radius:9px;background:var(--gold);color:white">زر ذهبي</span></div></section>
+ <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset" style="flex:1">استعادة التصميم الأصلي بالكامل</button></div><div id="br_msg" class="meta" aria-live="polite"></div></div>`;
  document.body.appendChild(d); $('brandClose').onclick=()=>d.remove();
+ const setPreviewLogo=src=>{ $('br_preview_logo').src=src; $('br_preview_logo_small').src=src; };
  $('br_name').oninput=()=>{$('br_preview_name').textContent=$('br_name').value||'اسم البراند';};
- let logoPreviewUrl=null;
- $('br_logo').onchange=()=>{
-   const f=$('br_logo').files[0];
-   if(!f)return;
-   if(logoPreviewUrl)URL.revokeObjectURL(logoPreviewUrl);
-   logoPreviewUrl=URL.createObjectURL(f);
-   $('br_preview_logo').onerror=()=>{$('br_msg').textContent='تعذر عرض الصورة المختارة؛ جرّب PNG أو JPG آخر.';};
-   $('br_preview_logo').src=logoPreviewUrl;
- };
- for(const [id,key] of [['br_bgcolor','bg_color'],['br_cardcolor','card_color'],['br_brandcolor','brand_color'],['br_goldcolor','gold_color']]) $(id).oninput=()=>{const map={bg_color:'--bg',card_color:'--card',brand_color:'--brand',gold_color:'--gold'};document.documentElement.style.setProperty(map[key],$(id).value);};
- async function prepareBrandImage(file,kind){
-   if(!file)return null;
-   if(!/^image\/(png|jpeg|webp)$/.test(file.type))throw new Error('الصورة يجب أن تكون PNG أو JPG أو WebP');
-   if(file.size>12*1024*1024)throw new Error('حجم الصورة كبير؛ الحد الأقصى 12 ميجابايت');
-   const bitmap=await createImageBitmap(file);
-   const isLogo=kind==='logo';
-   const maxSide=isLogo?1200:1920;
-   const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
-   const w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));
-   const canvas=document.createElement('canvas');
-   if(isLogo){
-     canvas.width=1024;canvas.height=1024;
-     const fit=Math.min(940/w,940/h);
-     const dw=Math.round(w*fit),dh=Math.round(h*fit);
-     const ctx=canvas.getContext('2d');
-     ctx.clearRect(0,0,1024,1024);
-     ctx.drawImage(bitmap,Math.round((1024-dw)/2),Math.round((1024-dh)/2),dw,dh);
-   }else{
-     canvas.width=w;canvas.height=h;
-     canvas.getContext('2d').drawImage(bitmap,0,0,w,h);
-   }
-   bitmap.close?.();
-   const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('فشل تجهيز الصورة')),'image/png'));
-   return new File([blob],isLogo?'brand-logo.png':'brand-background.png',{type:'image/png'});
- }
- async function uploadBrandFile(file,path,kind){
-   if(!file)return null;
-   const prepared=await prepareBrandImage(file,kind);
-   const key=path+'.png';
-   const {error}=await sb.storage.from('brand-assets').upload(key,prepared,{upsert:true,contentType:'image/png',cacheControl:'0'});
-   if(error)throw error;
-   const {data}=sb.storage.from('brand-assets').getPublicUrl(key);
-   return data.publicUrl+'?v='+Date.now();
- }
- $('br_save').onclick=async()=>{if(!OWNER_ONLY())return;const b=$('br_save');b.disabled=true;$('br_msg').textContent='جاري رفع الصور وحفظ الهوية...';try{const logo=await uploadBrandFile($('br_logo').files[0],'brand-logo','logo');const bg=await uploadBrandFile($('br_bg').files[0],'brand-background','background');const payload={id:1,brand_name:$('br_name').value.trim()||'واحة اليمن',app_name:$('br_app').value.trim()||'متابعة الدليفري',logo_url:logo||brandConfig.logo_url,background_url:bg||brandConfig.background_url,bg_color:$('br_bgcolor').value,card_color:$('br_cardcolor').value,brand_color:$('br_brandcolor').value,gold_color:$('br_goldcolor').value,updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error)throw error;applyBrandConfig(data);$('br_msg').textContent='تم الحفظ والنشر لجميع المستخدمين.';flash('تم تحديث هوية النظام للجميع',true);}catch(e){$('br_msg').textContent='تعذر الحفظ: '+(e.message||'خطأ غير معروف')+' — تأكد من تنفيذ إعدادات قاعدة البيانات المرفقة.';}finally{b.disabled=false;}};
- $('br_reset').onclick=async()=>{if(!OWNER_ONLY())return; if(!confirm('استعادة هوية واحة اليمن الأصلية ونشرها للجميع؟'))return; const payload={id:1,brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'icon-192.png',background_url:null,bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e',updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error){$('br_msg').textContent='تعذر الاستعادة: '+error.message;return;}applyBrandConfig(data);$('br_msg').textContent='تمت استعادة الهوية الأصلية للجميع.';};
+ $('br_app').oninput=()=>{$('br_preview_app').textContent=$('br_app').value||'اسم التطبيق';};
+ $('br_logo').onchange=()=>{const f=$('br_logo').files[0];if(f){if(!/^image\/(png|jpeg|webp)$/.test(f.type)){ $('br_msg').textContent='اختار صورة PNG أو JPG أو WEBP.';return;}if(f.size>5*1024*1024){$('br_msg').textContent='حجم الصورة أكبر من 5 ميجابايت.';return;}const u=URL.createObjectURL(f);setPreviewLogo(u);$('br_msg').textContent='تم تحميل معاينة اللوجو. اضغط حفظ ونشر لتطبيقه.';}};
+ $('br_logo_default').onclick=()=>{ $('br_logo').value='';setPreviewLogo('logo-original.png');$('br_msg').textContent='تم اختيار اللوجو الأصلي؛ اضغط حفظ ونشر لتطبيقه للجميع.';};
+ $('br_bg').onchange=()=>{const f=$('br_bg').files[0];if(f)$('br_bg_status').textContent='تم اختيار خلفية جديدة: '+f.name;};
+ $('br_bg_clear').onclick=()=>{$('br_bg').value='';$('br_bg_status').textContent='سيتم إزالة الخلفية المخصصة عند الحفظ.';$('br_bg').dataset.clear='1';};
+ const colorMap={br_bgcolor:['bg_color','--bg'],br_cardcolor:['card_color','--card'],br_brandcolor:['brand_color','--brand'],br_goldcolor:['gold_color','--gold']};
+ for(const [id,[key,css]] of Object.entries(colorMap)) $(id).oninput=()=>{document.documentElement.style.setProperty(css,$(id).value);$('br_live_preview').style.background=$('br_cardcolor').value;$('br_live_preview').style.borderColor=$('br_goldcolor').value;};
+ $('br_live_preview').style.background=brandConfig.card_color||'#fff8ea';
+ async function uploadBrandFile(file,path){if(!file)return null;if(file.size>5*1024*1024)throw new Error('حجم الصورة يجب ألا يتجاوز 5 ميجابايت');if(!/^image\/(png|jpeg|webp)$/.test(file.type))throw new Error('صيغة الصورة غير مدعومة');const ext=file.type==='image/jpeg'?'jpg':file.type.split('/')[1];const key=path+'.'+ext;const {error}=await sb.storage.from('brand-assets').upload(key,file,{upsert:true,contentType:file.type,cacheControl:'0'});if(error)throw error;const {data}=sb.storage.from('brand-assets').getPublicUrl(key);return data.publicUrl+'?v='+Date.now();}
+ $('br_save').onclick=async()=>{if(!OWNER_ONLY())return;const b=$('br_save');b.disabled=true;$('br_msg').textContent='جاري رفع الصور وحفظ الهوية...';try{const logoFile=$('br_logo').files[0];const bgFile=$('br_bg').files[0];const logo=await uploadBrandFile(logoFile,'brand-logo');const bg=await uploadBrandFile(bgFile,'brand-background');const payload={id:1,brand_name:$('br_name').value.trim()||'واحة اليمن',app_name:$('br_app').value.trim()||'متابعة الدليفري',logo_url:logo||( $('br_logo').value ? brandConfig.logo_url : ( $('br_preview_logo').src.endsWith('/logo-original.png') || $('br_preview_logo').src==='logo-original.png' ? 'logo-original.png' : brandConfig.logo_url)),background_url:bg?bg:($('br_bg').dataset.clear==='1'?null:brandConfig.background_url),bg_color:$('br_bgcolor').value,card_color:$('br_cardcolor').value,brand_color:$('br_brandcolor').value,gold_color:$('br_goldcolor').value,updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error)throw error;applyBrandConfig(data);$('br_msg').textContent='تم الحفظ والنشر لجميع المستخدمين بنجاح.';flash('تم تحديث هوية النظام للجميع',true);}catch(e){$('br_msg').textContent='تعذر الحفظ: '+(e.message||'خطأ غير معروف');}finally{b.disabled=false;}};
+ $('br_reset').onclick=async()=>{if(!OWNER_ONLY())return;if(!confirm('استعادة لوجو واحة اليمن الأصلي والألوان والخلفية الافتراضية ونشرها للجميع؟'))return;const payload={id:1,brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:null,bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e',updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error){$('br_msg').textContent='تعذر الاستعادة: '+error.message;return;}applyBrandConfig(data);$('br_msg').textContent='تمت استعادة الهوية الأصلية للجميع. حدّث الصفحة لرؤية كل التغييرات.';setPreviewLogo('logo-original.png');$('br_name').value='واحة اليمن';$('br_app').value='متابعة الدليفري';};
 }
 
 /* ---------- العمليات ---------- */
@@ -1131,7 +1070,7 @@ async function loadCodes() {
 /* ---------- صفحة العميل: تتبع الطلب بالكود (من غير دخول) ---------- */
 function trackView(code0) {
   document.title = 'تتبع طلبك — '+(brandConfig.brand_name||'واحة اليمن');
-  $('app').innerHTML = '<header><img data-brand-logo src="icon-192.png" alt="شعار البراند" class="brand-logo-img"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>واحة اليمن</small></div></header>' +
+  $('app').innerHTML = '<header><img data-brand-logo src="logo-original.png" alt="شعار واحة اليمن" style="width:52px;height:52px;flex:0 0 52px;object-fit:contain;object-position:center;border-radius:10px;background:transparent"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>واحة اليمن</small></div></header>' +
     '<div class="card"><label style="font-size:12px">كود المتابعة</label><div class="row"><input id="tc" dir="ltr" style="flex:1;text-transform:uppercase" placeholder="مثال: 7K2M9QXA" value="' + esc((code0 || '').toUpperCase()) + '"><button class="p" id="tg">تتبّع</button></div></div>' +
     '<div id="tinfo"></div><div id="tmap" class="card" style="height:320px;display:none;padding:0;overflow:hidden"></div>';
   let tmr, mapT, mk, lastTrackPos = null;

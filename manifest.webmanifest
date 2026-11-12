@@ -1,1 +1,27 @@
-{"name":"واحة اليمن — متابعة الدليفري","short_name":"واحة اليمن","start_url":"./","scope":"./","display":"standalone","orientation":"portrait","lang":"ar","dir":"rtl","background_color":"#dca86f","theme_color":"#4e2c12","icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
+{
+  "id": "./",
+  "name": "واحة اليمن — متابعة الدليفري",
+  "short_name": "واحة اليمن",
+  "description": "نظام متابعة وتشغيل طلبات التوصيل لفروع واحة اليمن",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#17130f",
+  "theme_color": "#6f4326",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

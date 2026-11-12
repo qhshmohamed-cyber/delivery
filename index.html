@@ -100,6 +100,13 @@ const branchQuery = q => (selectedBranch ? q.eq('branch_id', selectedBranch) : q
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
 const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
+let brandConfig = {brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'icon-192.png',background_url:'',bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e'};
+let brandChannel = null;
+const OWNER_ONLY = () => isOwner();
+function applyBrandConfig(c){ if(!c)return; brandConfig={...brandConfig,...c}; document.title=(brandConfig.app_name||'متابعة الدليفري')+' — '+(brandConfig.brand_name||'واحة اليمن'); const root=document.documentElement; root.style.setProperty('--bg',brandConfig.bg_color||'#dca86f'); root.style.setProperty('--card',brandConfig.card_color||'#fff8ea'); root.style.setProperty('--brand',brandConfig.brand_color||'#5a3317'); root.style.setProperty('--gold',brandConfig.gold_color||'#b9832e'); document.querySelectorAll('[data-brand-logo]').forEach(i=>i.src=brandConfig.logo_url||'icon-192.png'); document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'واحة اليمن'); document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'متابعة الدليفري'); const old=document.getElementById('brand-bg-style'); if(old)old.remove(); if(brandConfig.background_url){const st=document.createElement('style');st.id='brand-bg-style';st.textContent=`body::before{background-image:url('${String(brandConfig.background_url).replace(/'/g,'%27')}'),url(icon-512.png);background-size:cover, min(88vw,480px);background-position:center,center 38%;background-repeat:no-repeat;opacity:.24}`;document.head.appendChild(st);} }
+async function loadBrandConfig(){try{const {data,error}=await sb.from('dlv_branding').select('*').eq('id',1).maybeSingle();if(!error&&data)applyBrandConfig(data);}catch(e){console.warn('Brand config unavailable',e);}}
+function subscribeBrandConfig(){if(brandChannel)sb.removeChannel(brandChannel);brandChannel=sb.channel('dlv-branding-live').on('postgres_changes',{event:'*',schema:'public',table:'dlv_branding',filter:'id=eq.1'},p=>{if(p.new)applyBrandConfig(p.new);}).subscribe();}
+
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
 const branchTitle = id => ({1:'فرع المهندسين',2:'فرع الشيخ زايد'}[Number(id)] || 'فرع غير محدد');
 const permittedBranches = () => (Array.isArray(me?.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me?.branch_id]).filter(Boolean);
@@ -112,16 +119,16 @@ function flash(t, ok) {
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
 const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير'}[u.workflow_role] || u.job_title || 'مدير') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
-const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img src="icon-192.png" alt="شعار مطاعم واحة اليمن" style="width:46px;height:46px;border-radius:12px"><div style="flex:1;min-width:0"><small style="opacity:.8">واحة اليمن — متابعة الدليفري</small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${inner}`; };
+const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="icon-192.png" alt="شعار البراند" style="width:46px;height:46px;border-radius:12px;object-fit:contain"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>واحة اليمن</span> — <span data-brand-app>متابعة الدليفري</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${inner}`; };
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
-  $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img src="icon-192.png" alt="شعار مطاعم واحة اليمن" style="width:90px;height:90px;border-radius:18px"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="icon-192.png" alt="شعار مطاعم واحة اليمن" style="width:90px;height:90px;border-radius:18px"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
   $('retryBoot').onclick=()=>boot();
   $('retryLogout').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 function loginView(err) {
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img src="icon-192.png" alt="شعار مطاعم واحة اليمن" style="width:110px;height:110px;border-radius:22px;display:block;margin:0 auto 10px"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img data-brand-logo src="icon-192.png" alt="شعار مطاعم واحة اليمن" style="width:110px;height:110px;border-radius:22px;display:block;margin:0 auto 10px"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -190,6 +197,7 @@ async function boot() {
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
+  await loadBrandConfig(); subscribeBrandConfig();
   if (isOwner()) { await ownerBranchPicker(); return; }
   const permitted = Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id];
   if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
@@ -223,7 +231,7 @@ async function ownerBranchPicker(){
   const {data,error}=await safeRpc('dlv_list_branches');
   if(error){ console.warn('تعذر تحميل قائمة الفروع:',error.message); return reconnectView('تعذر تحميل قائمة الفروع الآن. جلسة الدخول محفوظة؛ أعد المحاولة.'); }
   const branches=data||[];
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img src="icon-192.png" style="width:90px;height:90px;border-radius:18px"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="icon-192.png" style="width:90px;height:90px;border-radius:18px"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
   $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
@@ -259,6 +267,28 @@ function startKitchenDelayMonitor() {
 }
 
 function bindOut() { const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+
+/* ---------- هوية النظام (مالك النظام فقط) ---------- */
+async function openBrandSettings(){
+ if(!OWNER_ONLY()) return flash('إعدادات الهوية متاحة لمالك النظام فقط',false);
+ await loadBrandConfig();
+ const d=document.createElement('div');d.className='modal';
+ d.innerHTML=`<div><div class="ord"><h2 style="font-size:18px">🎨 هوية النظام والتصميم</h2><button id="brandClose">إغلاق</button></div><p class="meta">أي تعديل تحفظه يظهر لجميع المستخدمين فورًا بعد المزامنة.</p>
+ <label>اسم البراند</label><input id="br_name" maxlength="60" value="${esc(brandConfig.brand_name)}">
+ <label>اسم التطبيق</label><input id="br_app" maxlength="60" value="${esc(brandConfig.app_name)}">
+ <label>لوجو البراند (من الموبايل)</label><input id="br_logo" type="file" accept="image/png,image/jpeg,image/webp">
+ <label>خلفية التطبيق (من الموبايل)</label><input id="br_bg" type="file" accept="image/png,image/jpeg,image/webp">
+ <div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
+ <div class="card" style="text-align:center"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'icon-192.png')}" style="width:76px;height:76px;object-fit:contain;border-radius:14px"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div class="meta">معاينة الهوية</div></div>
+ <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;
+ document.body.appendChild(d); $('brandClose').onclick=()=>d.remove();
+ $('br_name').oninput=()=>{$('br_preview_name').textContent=$('br_name').value||'اسم البراند';};
+ $('br_logo').onchange=()=>{const f=$('br_logo').files[0];if(f)$('br_preview_logo').src=URL.createObjectURL(f);};
+ for(const [id,key] of [['br_bgcolor','bg_color'],['br_cardcolor','card_color'],['br_brandcolor','brand_color'],['br_goldcolor','gold_color']]) $(id).oninput=()=>{const map={bg_color:'--bg',card_color:'--card',brand_color:'--brand',gold_color:'--gold'};document.documentElement.style.setProperty(map[key],$(id).value);};
+ async function uploadBrandFile(file,path){if(!file)return null;if(file.size>5*1024*1024)throw new Error('حجم الصورة يجب ألا يتجاوز 5 ميجابايت');if(!/^image\/(png|jpeg|webp)$/.test(file.type))throw new Error('صيغة الصورة غير مدعومة');const ext=file.type==='image/jpeg'?'jpg':file.type.split('/')[1];const key=path+'.'+ext;const {error}=await sb.storage.from('brand-assets').upload(key,file,{upsert:true,contentType:file.type,cacheControl:'0'});if(error)throw error;const {data}=sb.storage.from('brand-assets').getPublicUrl(key);return data.publicUrl+'?v='+Date.now();}
+ $('br_save').onclick=async()=>{if(!OWNER_ONLY())return;const b=$('br_save');b.disabled=true;$('br_msg').textContent='جاري رفع الصور وحفظ الهوية...';try{const logo=await uploadBrandFile($('br_logo').files[0],'brand-logo');const bg=await uploadBrandFile($('br_bg').files[0],'brand-background');const payload={id:1,brand_name:$('br_name').value.trim()||'واحة اليمن',app_name:$('br_app').value.trim()||'متابعة الدليفري',logo_url:logo||brandConfig.logo_url,background_url:bg||brandConfig.background_url,bg_color:$('br_bgcolor').value,card_color:$('br_cardcolor').value,brand_color:$('br_brandcolor').value,gold_color:$('br_goldcolor').value,updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error)throw error;applyBrandConfig(data);$('br_msg').textContent='تم الحفظ والنشر لجميع المستخدمين.';flash('تم تحديث هوية النظام للجميع',true);}catch(e){$('br_msg').textContent='تعذر الحفظ: '+(e.message||'خطأ غير معروف')+' — تأكد من تنفيذ إعدادات قاعدة البيانات المرفقة.';}finally{b.disabled=false;}};
+ $('br_reset').onclick=async()=>{if(!OWNER_ONLY())return; if(!confirm('استعادة هوية واحة اليمن الأصلية ونشرها للجميع؟'))return; const payload={id:1,brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'icon-192.png',background_url:null,bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e',updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error){$('br_msg').textContent='تعذر الاستعادة: '+error.message;return;}applyBrandConfig(data);$('br_msg').textContent='تمت استعادة الهوية الأصلية للجميع.';};
+}
 
 /* ---------- العمليات ---------- */
 async function safeRpc(name, args) {
@@ -385,7 +415,7 @@ function managerView() {
   const t = cairoDate();
   const owner = isOwner();
   const board = canViewManagerBoard();
-  const ownerTools = owner ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الحسابات</button><button id="rp">📊 التقارير</button><button class="g" id="ownerRatingsPage">⭐ سجل التقييمات</button>' : '';
+  const ownerTools = owner ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الحسابات</button><button id="rp">📊 التقارير</button><button class="g" id="ownerRatingsPage">⭐ سجل التقييمات</button><button class="p" id="brandSettings">🎨 هوية النظام والتصميم</button>' : '';
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
@@ -409,7 +439,7 @@ function managerView() {
     <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div><h2>الطلبات</h2><div class="card tw" id="tbl"></div><div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>
   `);
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap;
-  if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView;
+  if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
     $('managerSearch').onclick = async () => { const q=$('f_q').value.trim().replace(/[^\\p{L}\\p{N}\\s-]/gu,'').slice(0,60); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div></div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
@@ -1029,8 +1059,8 @@ async function loadCodes() {
 
 /* ---------- صفحة العميل: تتبع الطلب بالكود (من غير دخول) ---------- */
 function trackView(code0) {
-  document.title = 'تتبع طلبك — واحة اليمن';
-  $('app').innerHTML = '<header><img src="icon-192.png" alt="شعار مطاعم واحة اليمن" style="width:46px;height:46px;border-radius:12px"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small>واحة اليمن</small></div></header>' +
+  document.title = 'تتبع طلبك — '+(brandConfig.brand_name||'واحة اليمن');
+  $('app').innerHTML = '<header><img data-brand-logo src="icon-192.png" alt="شعار البراند" style="width:46px;height:46px;border-radius:12px;object-fit:contain"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>واحة اليمن</small></div></header>' +
     '<div class="card"><label style="font-size:12px">كود المتابعة</label><div class="row"><input id="tc" dir="ltr" style="flex:1;text-transform:uppercase" placeholder="مثال: 7K2M9QXA" value="' + esc((code0 || '').toUpperCase()) + '"><button class="p" id="tg">تتبّع</button></div></div>' +
     '<div id="tinfo"></div><div id="tmap" class="card" style="height:320px;display:none;padding:0;overflow:hidden"></div>';
   let tmr, mapT, mk, lastTrackPos = null;
@@ -1122,7 +1152,7 @@ function trackView(code0) {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-const _t = new URLSearchParams(location.search).get('t'); if (_t !== null) trackView(_t); else boot();
+const _t = new URLSearchParams(location.search).get('t'); (async()=>{await loadBrandConfig(); if (_t !== null) { subscribeBrandConfig(); trackView(_t); } else boot();})();
 </script>
 </body>
 </html>

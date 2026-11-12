@@ -6,8 +6,8 @@
 <title>واحة اليمن — متابعة الدليفري</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#4e2c12">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png?v=5">
+<link rel="icon" href="icon-192.png?v=5">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -44,10 +44,10 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
-.hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}
+.hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(icon-512.png?v=5) center 38%/min(88vw,480px) no-repeat;opacity:.22;pointer-events:none;z-index:0}
 /* Brand logo: always preserve the full image, never stretch or crop it. */
 .brand-logo-fit{display:block;box-sizing:border-box;max-width:100%;max-height:100%;object-fit:contain!important;object-position:center!important;flex:0 0 auto;background:#fffaf0;padding:5px;image-rendering:auto}
-img[data-brand-logo]{object-fit:contain!important;object-position:center!important;width:90px;height:90px;max-width:100%;background:#fffaf0;padding:5px;border:1px solid #dcc49a;border-radius:14px;display:block}
+img[data-brand-logo]{object-fit:contain!important;object-position:center!important;width:90px;height:90px;max-width:100%;background:#fffaf0;padding:5px;border:1px solid #dcc49a;border-radius:14px;display:block;image-rendering:auto}
 header img[data-brand-logo]{width:48px!important;height:48px!important;min-width:48px!important;min-height:48px!important;border-radius:10px!important;padding:3px}
 #br_preview_logo{display:block!important;box-sizing:border-box;width:160px!important;height:160px!important;max-width:100%;max-height:160px;margin:0 auto 10px;object-fit:contain!important;object-position:center!important;padding:10px;background:#fffaf0;border:1px solid var(--line);border-radius:16px}
 #br_logo,#br_bg{display:block;width:100%;max-width:100%;font-size:13px;padding:9px}
@@ -135,7 +135,7 @@ function applyBrandConfig(c){
    document.head.appendChild(st);
  }
 }
-async function loadBrandConfig(){try{const {data,error}=await sb.from('dlv_branding').select('*').eq('id',1).maybeSingle();if(!error&&data)applyBrandConfig(data);}catch(e){console.warn('Brand config unavailable',e);}}
+async function loadBrandConfig(){try{const query=sb.from('dlv_branding').select('*').eq('id',1).maybeSingle();const result=await Promise.race([query,new Promise(resolve=>setTimeout(()=>resolve({data:null,error:{message:'timeout'}}),3500))]);if(!result.error&&result.data)applyBrandConfig(result.data);}catch(e){console.warn('Brand config unavailable',e);}}
 function subscribeBrandConfig(){if(brandChannel)sb.removeChannel(brandChannel);brandChannel=sb.channel('dlv-branding-live').on('postgres_changes',{event:'*',schema:'public',table:'dlv_branding',filter:'id=eq.1'},p=>{if(p.new)applyBrandConfig(p.new);}).subscribe();}
 
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
@@ -159,7 +159,7 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
   $('retryLogout').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 function loginView(err) {
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img data-brand-logo src="logo-original.png" alt="شعار مطاعم واحة اليمن" style="width:110px;height:110px;border-radius:22px;display:block;margin:0 auto 10px"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto;text-align:center"><img data-brand-logo src="logo-original.png" alt="شعار مطاعم واحة اليمن" style="width:110px;height:110px;border-radius:22px;display:block;margin:0 auto 10px;object-fit:contain"><h2 data-brand-title style="font-size:22px;margin:4px 0;color:var(--brand)">واحة اليمن</h2><div data-brand-app class="meta" style="font-weight:700;margin-bottom:12px">متابعة الدليفري</div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -249,7 +249,8 @@ async function employeeBranchPicker(permitted){
   if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
   const branches=(data||[]).filter(b=>permitted.includes(b.id));
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" alt="شعار البراند" style="width:90px;height:90px;margin:0 auto 12px;border-radius:18px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
+  setBrandLogoImage(document.querySelector('[data-brand-logo]'),brandConfig.logo_url);
   document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=Number(b.dataset.empBranch);await enterEmployeeDashboard();});
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
@@ -262,7 +263,8 @@ async function ownerBranchPicker(){
   const {data,error}=await safeRpc('dlv_list_branches');
   if(error){ console.warn('تعذر تحميل قائمة الفروع:',error.message); return reconnectView('تعذر تحميل قائمة الفروع الآن. جلسة الدخول محفوظة؛ أعد المحاولة.'); }
   const branches=data||[];
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:90px;height:90px;border-radius:18px"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" alt="شعار البراند" style="width:90px;height:90px;margin:0 auto 12px;border-radius:18px"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  setBrandLogoImage(document.querySelector('[data-brand-logo]'),brandConfig.logo_url);
   document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
   $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
@@ -310,10 +312,11 @@ async function openBrandSettings(){
  <label>لوجو البراند (من الموبايل)</label><input id="br_logo" type="file" accept="image/png,image/jpeg,image/webp">
  <label>خلفية التطبيق (من الموبايل)</label><input id="br_bg" type="file" accept="image/png,image/jpeg,image/webp">
  <div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
- <div class="card" style="text-align:center"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'logo-original.png')}" class="brand-logo-fit"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div class="meta">معاينة الهوية</div></div>
+ <div class="card" style="text-align:center"><div class="meta" style="font-weight:700;margin-bottom:8px">معاينة شاشة تسجيل الدخول</div><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'logo-original.png')}" class="brand-logo-fit" alt="معاينة الشعار"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div id="br_preview_app" class="meta" style="font-weight:700">${esc(brandConfig.app_name)}</div><div class="meta">هيظهر بالشكل ده لكل المستخدمين</div></div>
  <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;
  document.body.appendChild(d); $('brandClose').onclick=()=>d.remove();
  $('br_name').oninput=()=>{$('br_preview_name').textContent=$('br_name').value||'اسم البراند';};
+ $('br_app').oninput=()=>{$('br_preview_app').textContent=$('br_app').value||'اسم التطبيق';};
  let previewLogoUrl=null;
  $('br_logo').onchange=()=>{const f=$('br_logo').files[0];if(!f)return;const fn=(f.name||'').toLowerCase();const ft=f.type||((fn.endsWith('.png'))?'image/png':((fn.endsWith('.jpg')||fn.endsWith('.jpeg'))?'image/jpeg':(fn.endsWith('.webp')?'image/webp':'')));if(!/^image\/(png|jpeg|webp)$/.test(ft)){ $('br_msg').textContent='اختار صورة PNG أو JPG أو WebP.'; $('br_logo').value=''; return; } if(previewLogoUrl)URL.revokeObjectURL(previewLogoUrl);previewLogoUrl=URL.createObjectURL(f);const preview=$('br_preview_logo');preview.onerror=()=>{$('br_msg').textContent='تعذر عرض معاينة الصورة. جرّب صورة PNG أو JPG أخرى.';};preview.onload=()=>{$('br_msg').textContent='تم تحميل المعاينة بالحجم الكامل دون قص أو تمديد.';};preview.src=previewLogoUrl;};
  for(const [id,key] of [['br_bgcolor','bg_color'],['br_cardcolor','card_color'],['br_brandcolor','brand_color'],['br_goldcolor','gold_color']]) $(id).oninput=()=>{const map={bg_color:'--bg',card_color:'--card',brand_color:'--brand',gold_color:'--gold'};document.documentElement.style.setProperty(map[key],$(id).value);};
@@ -332,9 +335,9 @@ async function openBrandSettings(){
        const scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
        const w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
        const canvas=document.createElement('canvas');
-       if(isLogo){canvas.width=1600;canvas.height=1600;}else{canvas.width=w;canvas.height=h;}
+       if(isLogo){const side=Math.max(w,h);canvas.width=side;canvas.height=side;}else{canvas.width=w;canvas.height=h;}
        const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-       if(isLogo){const pad=96,fit=Math.min((canvas.width-pad*2)/w,(canvas.height-pad*2)/h),dw=Math.round(w*fit),dh=Math.round(h*fit);ctx.drawImage(img,Math.round((canvas.width-dw)/2),Math.round((canvas.height-dh)/2),dw,dh);}
+       if(isLogo){ctx.drawImage(img,Math.round((canvas.width-w)/2),Math.round((canvas.height-h)/2),w,h);}
        else ctx.drawImage(img,0,0,w,h);
        canvas.toBlob(blob=>{URL.revokeObjectURL(url);if(!blob)return reject(new Error('تعذر تجهيز الصورة'));resolve(blob);},'image/png');
      }catch(e){URL.revokeObjectURL(url);reject(e);}};

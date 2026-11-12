@@ -64,6 +64,13 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .leaflet-popup-content{margin:12px 15px!important;line-height:1.8!important}
 .leaflet-control-zoom a{color:#6b1717!important}
 \n.rateRow{display:flex;gap:8px;margin:6px 0 14px;direction:ltr}.rateStar{font-size:30px;color:#b8862b;background:#fff8e8;border:1px solid #d9b36a;border-radius:10px;padding:2px 9px;min-width:42px}.rateRow .rateStar:focus{outline:2px solid #7b1717}
+
+.pilot-contact-card{border:1px solid #dcc49a;background:linear-gradient(135deg,#fff8ea,#f5e5c9)}
+.pilot-contact-actions{display:flex;gap:10px;margin-top:12px;direction:rtl}
+.pilot-contact-btn{display:flex;align-items:center;justify-content:center;gap:8px;flex:1;min-height:46px;padding:10px 14px;border-radius:12px;text-decoration:none;font-weight:800;font-size:15px;border:1px solid #b9832e;box-sizing:border-box}
+.pilot-call{background:#5a3317;color:#fff8ea}
+.pilot-wa{background:#b9832e;color:#fff}
+.pilot-disabled{background:#eee5d7;color:#8d806f;border-color:#d8cbb6;opacity:.8}
 </style>
 </head>
 <body>
@@ -1057,7 +1064,19 @@ function trackView(code0) {
     else if (j.status === 'cancelled') h += '<div class="msg e" style="margin-top:10px">تم إلغاء الطلب.</div>';
     else h += S.map((t, i) => '<div class="od" style="margin-top:8px;opacity:' + (i <= idx ? 1 : .45) + '"><span>' + (i < idx ? '✓ ' : i === idx ? '● ' : '○ ') + t + '</span>' + (i === 4 && j.out_at ? '<span class="meta">' + tm(j.out_at) + '</span>' : i === 5 && j.delivered_at ? '<span class="meta">' + tm(j.delivered_at) + '</span>' : '') + '</div>').join('');
     h += '</div>';
-    if (j.pilot_name && j.status !== 'failed' && j.status !== 'cancelled') h += '<div class="card"><div class="meta">الطيار</div><b style="font-size:20px">' + esc(j.pilot_name) + '</b>' + (j.pilot_phone ? '<div style="margin-top:8px"><a href="tel:' + esc(j.pilot_phone) + '" style="color:#4e2c12;font-weight:700;font-size:18px" dir="ltr">' + esc(j.pilot_phone) + '</a> <span class="meta">(اضغط للاتصال)</span></div>' : '') + '</div>';
+    if (j.pilot_name && j.status !== 'failed' && j.status !== 'cancelled') {
+      const rawPilotPhone = String(j.pilot_phone || '').trim();
+      let pilotDigits = rawPilotPhone.replace(/\D/g, '');
+      if (pilotDigits.startsWith('0')) pilotDigits = '20' + pilotDigits.slice(1);
+      const hasPilotPhone = pilotDigits.length >= 10;
+      const callAction = hasPilotPhone
+        ? '<a href="tel:+' + pilotDigits + '" class="pilot-contact-btn pilot-call" dir="rtl"><span aria-hidden="true">☎</span> اتصال</a>'
+        : '<button type="button" class="pilot-contact-btn pilot-disabled" disabled title="أضف رقم الطيار من إدارة الحسابات">☎ اتصال</button>';
+      const waAction = hasPilotPhone
+        ? '<a href="https://wa.me/' + pilotDigits + '" target="_blank" rel="noopener noreferrer" class="pilot-contact-btn pilot-wa" dir="rtl"><span aria-hidden="true">◉</span> واتساب</a>'
+        : '<button type="button" class="pilot-contact-btn pilot-disabled" disabled title="أضف رقم الطيار من إدارة الحسابات">◉ واتساب</button>';
+      h += '<div class="card pilot-contact-card"><div class="meta">الطيار</div><b style="font-size:20px">' + esc(j.pilot_name) + '</b><div class="pilot-contact-actions">' + callAction + waAction + '</div>' + (!hasPilotPhone ? '<div class="meta">أزرار التواصل جاهزة؛ ستعمل بعد إضافة رقم الطيار في إدارة الحسابات.</div>' : '<div class="meta" dir="ltr" style="text-align:right">' + esc(rawPilotPhone) + '</div>') + '</div>';
+    }
     box.innerHTML = h;
     const m = $('tmap');
     if (j.lat != null) {

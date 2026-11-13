@@ -493,7 +493,7 @@ async function loadMine() {
       استلام ${tm(x.received_at)} · خروج ${tm(x.out_at)} · تسليم ${tm(x.delivered_at)}
       ${x.failed_reason ? '<br>السبب: ' + esc(x.failed_reason) : ''}${x.driver_note ? '<br>📝 ' + esc(x.driver_note) : ''} ${isLate(x) ? '<br><span class="late">⚠ متأخر</span>' : ''}</div>
       ${acts ? '<div class="acts">' + acts + '</div>' : ''}</div>`;
-  }).join('') || '<div class="meta">لا توجد طلبات نشطة حاليًا</div>';
+  }).join('') || '<div class="meta">لا توجد طلبات مطابقة</div>';
 }
 
 /* ---------- واجهة متابعة الكول سنتر: إنشاء ومتابعة فقط ---------- */
@@ -577,9 +577,40 @@ function openManagementComplaints(){
   box.innerHTML=(data||[]).map(x=>'<div class="card"><b>طلب #'+esc(x.order_no||'—')+' · '+esc(x.title)+'</b><div class="meta">'+new Date(x.created_at).toLocaleString('ar-EG')+' · '+esc(branchTitle(x.branch_id))+' · رقم العميل: '+esc(x.customer_phone||'—')+'</div><p>'+esc(x.details||'')+'</p><div class="meta">الحالة: '+esc(x.status)+' · الإجراء: '+esc(x.followup_action||'لم يتم')+' · الموظف: '+esc(x.followup_employee||'—')+(x.followup_at?' · '+new Date(x.followup_at).toLocaleString('ar-EG'):'')+'</div></div>').join('')||'لا توجد شكاوى';
  });
 }
+let followupMapTimer=null;
+function openFollowupOrderMap(orderId){
+ if(!['callcenter_followup','manager','supervisor','admin'].includes(me?.workflow_role||me?.role))return flash('غير مصرح',false);
+ if($('followupOrderOverlay'))return;
+ const d=document.createElement('div');d.id='followupOrderOverlay';
+ d.style.cssText='position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;overflow:auto';
+ d.innerHTML='<div class="card"><div class="ord"><h2>متابعة الطلب #'+esc(ORD[orderId]?.order_no||orderId)+'</h2><button id="followupClose">إغلاق</button></div><div id="followupOrderStatus" class="meta">جاري تحميل حالة الطلب...</div></div><div id="followupOrderMap" style="flex:1;min-height:340px;display:none"></div><div class="meta" style="padding:12px">الموقع المعروض هو آخر إحداثيات أرسلها جهاز الطيار، وليس تأكيدًا على وصوله إلى عنوان العميل.</div>';
+ document.body.appendChild(d);
+ let localMap=null,localMarker=null,busy=false;
+ function close(){clearInterval(followupMapTimer);followupMapTimer=null;if(localMap)localMap.remove();d.remove();}
+ $('followupClose').onclick=close;
+ async function refresh(){
+  if(busy||!d.isConnected||document.visibilityState!=='visible')return;busy=true;
+  let result;try{result=await safeRpc('dlv_followup_order_position',{p_order_id:Number(orderId)});}catch(e){result={error:e};}finally{busy=false;}
+  if(!d.isConnected)return;
+  const {data,error}=result||{};
+  if(error){$('followupOrderStatus').textContent='تعذر المتابعة: '+error.message;return;}
+  if(!data||!data.found){$('followupOrderStatus').textContent='الطلب غير متاح';return;}
+  const statusText=(ST[data.status]||['غير معروف'])[0];
+  const stageText=STG[data.stage]||data.stage||'';
+  const when=data.updated_at?new Date(data.updated_at).toLocaleString('ar-EG'):'لم يرسل موقعًا';
+  const fresh=data.updated_at&&(Date.now()-new Date(data.updated_at).getTime()<90000);
+  $('followupOrderStatus').innerHTML='<b>الحالة: '+esc(statusText)+'</b><div>المرحلة: '+esc(stageText)+'</div><div>الطيار: '+esc(data.driver_name||(data.assigned?'غير متاح':'لم يتم التعيين'))+'</div><div>الموقع: '+(fresh?'متصل الآن':'آخر موقع معروف')+' · '+esc(when)+'</div>';
+  if(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng))||data.lat===null||data.lng===null){$('followupOrderMap').style.display='none';return;}
+  $('followupOrderMap').style.display='block';
+  if(!localMap){localMap=L.map('followupOrderMap').setView([data.lat,data.lng],16);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(localMap);setTimeout(()=>{if(d.isConnected)localMap.invalidateSize()},100);}
+  if(!localMarker){localMarker=L.marker([data.lat,data.lng],{icon:bikeIcon(0,!!fresh,90)}).addTo(localMap);}
+  else{localMarker.setLatLng([data.lat,data.lng]);localMarker.setIcon(bikeIcon(0,!!fresh,90));}
+ }
+ refresh();followupMapTimer=setInterval(refresh,15000);
+}
 function callcenterView() {
   const t = cairoDate();
-  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="بحث برقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
+  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
   bindOut(); bindOwnerQuickPanel(); $('nw').onclick = newOrderForm; $('cc_rf').onclick = loadCallcenterOrders;
   let qtimer; $('cc_q').oninput = () => { clearTimeout(qtimer); qtimer=setTimeout(loadCallcenterOrders,300); };
   loadCallcenterOrders(); loadCallcenterRatings();
@@ -587,12 +618,12 @@ function callcenterView() {
 async function loadCallcenterOrders() {
   const box=$('cc_orders'); if(!box) return;
   const q=($('cc_q')?.value || '').trim().replace(/[,()%*]/g,' ');
-  let req=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)')).in('status',['new','received','out']).order('created_at',{ascending:false}).limit(200);
+  let req=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?300:100);
   if(q) req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
   const {data,error}=await req;
   if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
   const rows=data||[]; rows.forEach(o=>ORD[o.id]=o);
-  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div><div class="row"><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات نشطة حاليًا</div>';
+  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div><div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 حالة وموقع الطيار</button><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات نشطة حاليًا</div>';
 }
 
 async function loadCallcenterRatings() {

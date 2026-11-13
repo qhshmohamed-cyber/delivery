@@ -6,10 +6,10 @@
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <title>Your Staff — تسجيل الدخول</title>
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest?v=2">
 <meta name="theme-color" content="#101827">
 
-<link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg">
+<link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg?v=2">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -319,7 +319,7 @@ async function boot() {
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
-  if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
+  if (permitted.length > 1) { resetPlatformBrand(); await employeeBranchPicker(permitted); return; }
   selectedBranch = permitted[0];
   try{await loadBrandConfig();subscribeBrandConfig();}catch(e){return reconnectView(e.message);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {

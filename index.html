@@ -7,9 +7,9 @@
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <title>Your Staff — تسجيل الدخول</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#4e2c12">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#101827">
+
+<link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -153,7 +153,7 @@ let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
   document.getElementById('brand-bg-style')?.remove();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">من شركائنا</div><img src="logo-original.png" alt="واحة اليمن" style="width:48px;height:48px;object-fit:contain;border-radius:10px;background:#fff4e3;padding:4px"></div><div style="text-align:center;margin-bottom:18px"><div style="font-size:11px;color:#d7c39d;margin-bottom:9px">شركاؤنا</div><div style="display:flex;justify-content:center;align-items:center;gap:12px"><div style="background:#fff6e9;border-radius:12px;padding:6px 12px"><img src="logo-original.png" alt="واحة اليمن — شركة متعاقدة" style="width:62px;height:62px;object-fit:contain"></div></div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -282,11 +282,11 @@ async function boot() {
   me = data;
   if (isOwner()) { document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
-  await loadBrandConfig(); subscribeBrandConfig();
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
   if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
   selectedBranch = permitted[0];
+  await loadBrandConfig(); subscribeBrandConfig();
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
     const r = await safeRpc('dlv_list_active_drivers');
     if (r.error) { drivers = []; console.error('تعذر تحميل الطيارين:', r.error.message); }
@@ -304,7 +304,7 @@ async function employeeBranchPicker(permitted){
   const branches=(data||[]).filter(b=>permitted.includes(b.id));
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
-  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;await enterEmployeeDashboard();});
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;await loadBrandConfig();subscribeBrandConfig();await enterEmployeeDashboard();});
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){

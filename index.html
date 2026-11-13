@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" class="ys-public">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
-<title>واحة اليمن — متابعة الدليفري</title>
+<title>Your Staff — تسجيل الدخول</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#4e2c12">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-:root{--bg:#dca86f;--card:#fff8ea;--text:#3a2412;--muted:#5b4128;--line:#dcc49a;--brand:#5a3317;--gold:#b9832e}
+:root{--bg:#101114;--card:#1b1d20;--text:#f7f0df;--muted:#d8cbb5;--line:#a77d3e;--brand:#a77d3e;--gold:#c69b53}
 
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
@@ -46,7 +46,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .modal>div{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:92vh;overflow:auto}
 .modal label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
-.hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:url(logo-original.png) center 34%/min(66vw,320px) auto no-repeat;opacity:.10;pointer-events:none;z-index:0}@media print{body>*:not(#rpt){display:none!important}body::before{display:none}#rpt{position:static!important;overflow:visible!important;background:#fff!important}.noprint{display:none!important}}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
+.hide{display:none}.grow{flex:1;min-width:0}h2{font-size:14px;margin:12px 0 6px}body{min-height:100vh}body::before{content:"";position:fixed;inset:0;background:none;opacity:0;pointer-events:none;z-index:0}@media print{body>*:not(#rpt){display:none!important}body::before{display:none}#rpt{position:static!important;overflow:visible!important;background:#fff!important}.noprint{display:none!important}}.leaflet-container{font:inherit}.leaflet-popup-content{direction:rtl;text-align:right}
 .ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}.ys-bike-marker div{filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
 .ys-bike-marker{background:transparent!important;border:0!important;overflow:visible!important}
 .ys-bike-pin{position:relative;border-radius:50%;display:grid;place-items:center;filter:drop-shadow(0 5px 9px rgba(25,15,8,.35))}
@@ -76,8 +76,8 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
  .ys-rider-photo{overflow:hidden;background:#f9d49b;border:3px solid #6b3514;display:grid;place-items:center}.ys-rider-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}.ys-bike-pin{isolation:isolate}
 \n.ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}\n
 /* Your Staff public and platform-owner surfaces: never inherit tenant wallpaper */
-body.ys-platform{background:#101114!important;color:#f7f0df!important}
-body.ys-platform::before{background:none!important;opacity:0!important}
+body.ys-platform,html.ys-public body{background:#101114!important;color:#f7f0df!important}
+body.ys-platform::before,html.ys-public body::before{background:none!important;opacity:0!important}
 body.ys-platform .card{background:#1b1d20;color:#f7f0df;border:1px solid #a77d3e}
 body.ys-platform input{background:#fff;color:#161616}
 body.ys-platform .meta{color:#d8cbb5}
@@ -151,8 +151,8 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
 }
 let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
-  document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;font-size:32px;font-weight:900;color:#e5b96c;letter-spacing:1px;margin:12px 0 20px">Your Staff</div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;font-size:32px;font-weight:900;color:#e5b96c;letter-spacing:1px;margin:12px 0 20px">Your Staff</div><div style="text-align:center;margin-bottom:18px"><div style="font-size:11px;color:#d7c39d;margin-bottom:9px">شركاؤنا</div><div style="display:flex;justify-content:center;align-items:center;gap:12px"><div style="background:#fff6e9;border-radius:12px;padding:6px 12px"><img src="logo-original.png" alt="واحة اليمن — شركة متعاقدة" style="width:62px;height:62px;object-fit:contain"></div></div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -280,7 +280,7 @@ async function boot() {
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
   if (isOwner()) { document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
-  document.body.classList.remove('ys-platform');
+  document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
   await loadBrandConfig(); subscribeBrandConfig();
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
@@ -414,7 +414,7 @@ async function ownerBranchPicker(companyId=1){
  $('backCompanies').onclick=ownerCompanyPicker;
 }
 async function enterOwnerDashboard(){
- document.body.classList.remove('ys-platform');
+ document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
 
   const r=await sb.from('dlv_profiles').select('user_id,full_name,employee_code,branch_id').eq('role','driver').eq('active',true).order('full_name');
   if(r.error){console.warn('تعذر تحميل الطيارين:',r.error.message);return reconnectView('تعذر تحميل بيانات الطيارين الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
@@ -1866,7 +1866,7 @@ function trackView(code0) {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-const _t = new URLSearchParams(location.search).get('t'); (async()=>{await loadBrandConfig(); if (_t !== null) { subscribeBrandConfig(); trackView(_t); } else boot();})();
+const _t = new URLSearchParams(location.search).get('t'); (async()=>{if (_t !== null) {document.documentElement.classList.remove('ys-public');await loadBrandConfig();subscribeBrandConfig();trackView(_t);} else boot();})();
 </script>
 </body>
 </html>

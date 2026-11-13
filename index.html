@@ -417,7 +417,7 @@ function newOrderForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
     <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
-    ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch"><option value="1" ${selectedBranch===1?'selected':''}>فرع المهندسين</option><option value="2" ${selectedBranch===2?'selected':''}>فرع الشيخ زايد</option></select>` : ''}
+    ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch">${Object.entries(branchNames).map(([id,name])=>`<option value="${id}" ${Number(selectedBranch)===Number(id)?'selected':''}>${esc(name)}</option>`).join('')}</select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="n_wa_consent" style="width:auto"> العميل وافق على استلام رابط المتابعة عبر واتساب</label>
     <label>العنوان</label><input id="n_a">` : ''}
@@ -688,7 +688,7 @@ function openOperationsRoom(){
  if(document.getElementById('operationsRoom')) return;
  const d=document.createElement('div');d.id='operationsRoom';
  d.style.cssText='position:fixed;inset:0;z-index:30;background:var(--bg);overflow:auto;padding:12px;padding-top:env(safe-area-inset-top,12px)';
- const ids=isOwner()?[1,2]:permittedBranches().map(Number).filter(x=>[1,2].includes(x));
+ const ids=isOwner()?Object.keys(branchNames).map(Number):permittedBranches().map(Number).filter(Number.isInteger);
  const allowed=[...new Set(ids)];
  d.innerHTML='<div class="card"><div class="ord"><h2>🚦 غرفة العمليات المباشرة</h2><button id="orClose">إغلاق</button></div><div class="meta">بيانات مباشرة حسب صلاحية الفرع · لا تظهر أرقام العملاء أو بياناتهم الشخصية</div><label>الفرع</label><select id="orBranch">'+
  (isOwner()||allowed.length>1?'<option value="all">جميع الفروع المصرح بها</option>':'')+
@@ -850,7 +850,7 @@ function ownerRatingsView() {
   const today = cairoDate();
   $('app').innerHTML = shell(`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>⭐ التقييمات</h2><button id="ratingsBack">رجوع للوحة الرئيسية</button></div>
     <div class="card"><div class="meta">سجل جميع تقييمات العملاء المسجلة — لصاحب النظام فقط.</div>
-      <div class="f"><label>من تاريخ<input type="date" id="r_from" value="2000-01-01"></label><label>إلى تاريخ<input type="date" id="r_to" value="${today}"></label><label>الفرع<select id="r_branch"><option value="">كل الفروع</option><option value="1">فرع المهندسين</option><option value="2">فرع الشيخ زايد</option></select></label></div>
+      <div class="f"><label>من تاريخ<input type="date" id="r_from" value="2000-01-01"></label><label>إلى تاريخ<input type="date" id="r_to" value="${today}"></label><label>الفرع<select id="r_branch"><option value="">كل الفروع</option>${Object.entries(branchNames).map(([id,name])=>`<option value="${id}">${esc(name)}</option>`).join('')}</select></label></div>
       <button class="p big" id="r_refresh">عرض التقييمات</button></div>
     <div class="grid" id="r_summary"></div><div id="owner_ratings"></div>`);
   bindOut(); $('ratingsBack').onclick = managerView;
@@ -1278,7 +1278,7 @@ function openReport() {
   d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button id="rcl">إغلاق</button></div>' +
     '<div class="noprint card" style="margin-bottom:10px"><label for="rbranch">اختر الفرع</label><select id="rbranch"></select><label for="rdt">تاريخ التقرير</label><input type="date" id="rdt" value="' + cairoDate() + '"><div class="meta">يُعرض تقرير اليوم المختار كاملًا، ويمكن نسخه أو طباعته PDF لإرساله للإدارة.</div></div><div id="rbody"><div class="meta">جاري التحميل...</div></div>';
   document.body.appendChild(d);
-  const available = isOwner() ? [1,2] : permittedBranches().map(Number).filter(id=>[1,2].includes(id));
+  const available = isOwner() ? Object.keys(branchNames).map(Number) : permittedBranches().map(Number).filter(Number.isInteger);
   const allowed = [...new Set(available)];
   $('rbranch').innerHTML = (isOwner() || allowed.length>1 ? '<option value="all">جميع الفروع</option>' : '') +
     allowed.map(id=>'<option value="'+id+'">'+esc(branchTitle(id))+'</option>').join('');

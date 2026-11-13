@@ -215,11 +215,24 @@ let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
   resetPlatformBrand();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><img src="yourstaff-icon.svg" width="104" height="104" alt="شعار Your Staff" decoding="async" style="display:block;width:104px;height:104px;object-fit:contain;margin:0 auto 12px;filter:drop-shadow(0 5px 15px #0007)"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
-    <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#4e2c12;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div></div>`;
+    <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#eac27b;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div><section aria-label="شركاؤنا" style="border-top:1px solid #a77d3e;margin-top:22px;padding-top:14px"><h2 style="text-align:center;color:#eac27b;font-size:15px">شركاؤنا</h2><div id="publicPartners" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;min-height:40px"></div></section></div>`;
+  // Public opt-in showcase: no branch, user or private tenant data is queried.
+  sb.from('dlv_public_partners').select('display_name,logo_url,display_order').eq('is_published',true).order('display_order').limit(20).then(({data,error})=>{
+   const target=$('publicPartners');if(!target||error)return;
+   const partners=data||[];
+   if(!partners.length){target.parentElement.style.display='none';return;}
+   target.replaceChildren(...partners.map(p=>{
+    const item=document.createElement('div');item.style.cssText='display:flex;flex-direction:column;align-items:center;gap:6px;max-width:112px;text-align:center;color:#f7f0df;font-size:12px';
+    const logo=document.createElement('img');const u=String(p.logo_url||'');
+    logo.src=/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u)?u:'yourstaff-icon.svg';
+    logo.alt='شعار '+p.display_name;logo.loading='lazy';logo.decoding='async';logo.style.cssText='width:68px;height:68px;object-fit:contain;border-radius:12px;background:#fff8ea;padding:5px';
+    const name=document.createElement('span');name.textContent=p.display_name;item.append(logo,name);return item;
+   }));
+  }).catch(()=>{});
   $('go').onclick = async () => {
     if(Date.now()<loginBlockedUntil){flash('انتظر قليلًا قبل إعادة محاولة تسجيل الدخول',false);return;}
     $('go').disabled = true;

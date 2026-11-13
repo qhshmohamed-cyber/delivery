@@ -428,9 +428,12 @@ function newOrderForm() {
     ${isMgr ? '<label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>' : ''}
     <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
   document.body.appendChild(d);
-  async function loadOrderStaff(){const branch=Number($('n_branch')?.value||selectedBranch||me.branch_id);const sel=$('n_staff');sel.innerHTML='<option value="">جاري تحميل الموظفين...</option>';const {data,error}=await safeRpc('dlv_callcenter_staff_list',{p_branch:branch});if(!d.isConnected)return;sel.innerHTML='<option value="">اختر الموظف صاحب الطلب</option>'+(data||[]).map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');if(error)flash(error.message,false);}\n  if($('n_branch'))$('n_branch').onchange=loadOrderStaff;loadOrderStaff();\n  $('n_x').onclick = () => d.remove();
+  async function loadOrderStaff(){const branch=Number($('n_branch')?.value||selectedBranch||me.branch_id);const sel=$('n_staff');sel.innerHTML='<option value="">جاري تحميل الموظفين...</option>';const {data,error}=await safeRpc('dlv_callcenter_staff_list',{p_branch:branch});if(!d.isConnected)return;sel.innerHTML='<option value="">اختر الموظف صاحب الطلب</option>'+(data||[]).map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');if(error)flash(error.message,false);}
+  if($('n_branch'))$('n_branch').onchange=loadOrderStaff;loadOrderStaff();
+  $('n_x').onclick = () => d.remove();
   $('n_ok').onclick = async () => {
-    if (!requireOnline('إنشاء الطلب')) return;\n    if(!$('n_staff')?.value){$('ferr').textContent='اختار موظف الكول سنتر صاحب الطلب';$('ferr').className='msg e';return;}
+    if (!requireOnline('إنشاء الطلب')) return;
+    if(!$('n_staff')?.value){$('ferr').textContent='اختار موظف الكول سنتر صاحب الطلب';$('ferr').className='msg e';return;}
     $('n_ok').disabled = true;
     const {data: createdId, error} = await safeRpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
       p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: null, p_callcenter_staff_id:Number($('n_staff').value), p_branch_id: (isOwner() || (me.allowed_branch_ids||[]).length>1) ? Number($('n_branch').value) : null});

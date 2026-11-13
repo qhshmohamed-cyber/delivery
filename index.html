@@ -2,7 +2,9 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
 <title>واحة اليمن — متابعة الدليفري</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#4e2c12">
@@ -149,7 +151,8 @@ function loginView(err) {
     <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#4e2c12;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div></div>`;
   $('go').onclick = async () => {
     if(Date.now()<loginBlockedUntil){flash('انتظر قليلًا قبل إعادة محاولة تسجيل الدخول',false);return;}
-    $('go').disabled = true;\n    try {
+    $('go').disabled = true;
+    try {
       const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
       if (error) {loginFailures++;if(loginFailures>=5)loginBlockedUntil=Date.now()+60000;loginView(error.message?.toLowerCase().includes('fetch') ? 'تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى' : 'بيانات الدخول غير صحيحة'); return; }
       loginFailures=0;loginBlockedUntil=0;await boot();

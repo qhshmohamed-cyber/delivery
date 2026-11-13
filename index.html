@@ -345,6 +345,7 @@ function newOrderForm() {
     const normalizedPhone = customerPhone.startsWith('0') ? '20'+customerPhone.slice(1) : customerPhone;
     // Until a verified WhatsApp Business sender is configured, never claim automatic delivery.
     const trackingCode = codeText.match(/[A-HJ-NP-Z2-9]{8}/)?.[0] || '';
+    refreshView();
     if (consent && /^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone) && trackingCode) {
       const link = location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
       const msg = 'واحة اليمن — تم تسجيل طلبك رقم '+$('n_no').value+'. تابع طلبك من هنا: '+link;
@@ -353,7 +354,7 @@ function newOrderForm() {
       go.style.cssText='display:block;padding:12px;background:#fff8ea;color:#5a3317;border:1px solid #b9832e;border-radius:10px;margin:12px 0;text-align:center';
       d.remove();const panel=document.createElement('div');panel.className='card';panel.append('تم حفظ الطلب. لم يتم إرسال واتساب تلقائيًا. اضغط لإرسال الرسالة من واتساب: ',go);$('app')?.prepend(panel);
     } else { d.remove(); }
-    flash('تم تسجيل الطلب' + codeText, true); refreshView();
+    flash('تم تسجيل الطلب' + codeText, true);
   };
 }
 function failDialog(id) {

@@ -1,12 +1,12 @@
 
-const CACHE_PREFIX = 'wahat-delivery-static-';
-const CACHE_NAME = CACHE_PREFIX + 'v1';
+const CACHE_PREFIX = 'yourstaff-static-';
+const LEGACY_CACHE_PREFIX = 'wahat-delivery-static-';
+const CACHE_NAME = CACHE_PREFIX + 'v2';
 const STATIC_FILES = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png'
+  './yourstaff-icon.svg'
 ];
 
 self.addEventListener('install', event => {
@@ -21,7 +21,7 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(
-      keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+      keys.filter(key => (key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME) || key.startsWith(LEGACY_CACHE_PREFIX))
         .map(key => caches.delete(key))
     );
     await self.clients.claim();

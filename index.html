@@ -119,7 +119,7 @@ function flash(t, ok) {
   m.className = 'msg ' + (ok ? 'o' : 'e'); m.textContent = t;
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
-const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير'}[u.workflow_role] || u.job_title || 'مدير') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
+const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير',complaints_officer:'مسؤول الشكاوى'}[u.workflow_role] || u.job_title || 'مدير') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
 const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="logo-original.png" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>واحة اليمن</span> — <span data-brand-app>متابعة الدليفري</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${inner}`; };
 
 /* ---------- الدخول ---------- */
@@ -531,6 +531,39 @@ function paintComplaintsInbox(){
   flash('تم حفظ الإجراء وإتاحته للإدارة',true);loadComplaintsInbox();
  });
 }
+function complaintsOfficerView(){
+ $('app').innerHTML=shell('<section class="card"><h2>📋 مكتب مسؤول الشكاوى</h2><div class="meta">الشكاوى حسب الفرع المصرح به · يتم حفظ كل إجراء واسم الموظف وتاريخه</div><div class="row"><button id="complaintsRefresh">تحديث الشكاوى</button></div><div id="complaintsInbox">جاري التحميل...</div></section>');
+ bindOut();$('complaintsRefresh').onclick=loadComplaintsInbox;loadComplaintsInbox();
+}
+async function loadComplaintsInbox(){
+ const box=$('complaintsInbox');if(!box)return;
+ const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});
+ if(!box.isConnected)return;
+ if(error){box.textContent='تعذر تحميل الشكاوى: '+error.message;return;}
+ box.innerHTML=(data||[]).map(x=>'<div class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'—')+'</b><span>'+esc(x.status)+'</span></div><div class="meta">تاريخ الشكوى: '+new Date(x.created_at).toLocaleString('ar-EG')+' · هاتف العميل: '+esc(x.customer_phone||'غير متاح')+' · فرع '+esc(branchTitle(x.branch_id))+'</div><b>'+esc(x.title)+'</b><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يتم اتخاذ إجراء بعد')+' · بواسطة: '+esc(x.followup_employee||'—')+(x.followup_at?' · '+new Date(x.followup_at).toLocaleString('ar-EG'):'')+'</div><div class="row"><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></div></div>').join('')||'<div class="meta">لا توجد شكاوى لهذا الفرع</div>';
+ box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=async()=>{
+  const action=prompt('ما الإجراء الذي تم اتخاذه؟');if(action===null)return;
+  if(action.trim().length<3)return flash('اكتب الإجراء بالتفصيل',false);
+  const state=prompt('حالة الشكوى: open أو in_progress أو resolved','in_progress');
+  if(state===null)return;
+  if(!['open','in_progress','resolved'].includes(state))return flash('حالة غير صحيحة',false);
+  b.disabled=true;
+  const {error}=await safeRpc('dlv_complaint_followup',{p_incident:Number(b.dataset.complaint),p_action:action.trim(),p_status:state});
+  if(error){flash(error.message,false);b.disabled=false;}else{flash('تم حفظ الإجراء',true);loadComplaintsInbox();}
+ });
+}
+function openManagementComplaints(){
+ if(!canViewManagerBoard())return flash('غير مصرح',false);
+ if($('managementComplaints'))return;
+ const d=document.createElement('div');d.id='managementComplaints';d.style.cssText='position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto;padding:14px';
+ d.innerHTML='<div class="card"><div class="ord"><h2>شكاوى العملاء وإجراءات المتابعة</h2><button id="complaintsClose">إغلاق</button></div><div id="complaintsManagementRows">جاري التحميل...</div></div>';
+ document.body.appendChild(d);$('complaintsClose').onclick=()=>d.remove();
+ safeRpc('dlv_complaint_inbox',{p_branch:isOwner()?null:selectedBranch}).then(({data,error})=>{
+  const box=$('complaintsManagementRows');if(!box)return;
+  if(error){box.textContent=error.message;return;}
+  box.innerHTML=(data||[]).map(x=>'<div class="card"><b>طلب #'+esc(x.order_no||'—')+' · '+esc(x.title)+'</b><div class="meta">'+new Date(x.created_at).toLocaleString('ar-EG')+' · '+esc(branchTitle(x.branch_id))+' · رقم العميل: '+esc(x.customer_phone||'—')+'</div><p>'+esc(x.details||'')+'</p><div class="meta">الحالة: '+esc(x.status)+' · الإجراء: '+esc(x.followup_action||'لم يتم')+' · الموظف: '+esc(x.followup_employee||'—')+(x.followup_at?' · '+new Date(x.followup_at).toLocaleString('ar-EG'):'')+'</div></div>').join('')||'لا توجد شكاوى';
+ });
+}
 function callcenterView() {
   const t = cairoDate();
   $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="بحث برقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
@@ -595,6 +628,7 @@ function openSecurityCommand(){
  const branch=()=>Number($('scBranch').value);
  const status=t=>{$('scStatus').textContent=t;};
  $('scClose').onclick=()=>d.remove();
+ {const btn=document.createElement('button');btn.textContent='📋 شكاوى العملاء وإجراءات المتابعة';btn.onclick=openManagementComplaints;d.querySelector('.card').appendChild(btn);}
  if(isOwner()){const btn=document.createElement('button');btn.textContent='⚙️ إعدادات صلاحيات المالك';btn.onclick=openOwnerPermissions;d.querySelector('.card').appendChild(btn);}
  async function reload(){
   if(!d.isConnected)return;const b=branch();if(!allowed.includes(b))return;

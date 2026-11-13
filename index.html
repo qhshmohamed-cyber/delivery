@@ -465,7 +465,17 @@ async function ownerBranchPicker(companyId=1){
  const branches=data||[];
  branchNames={...branchNames,...Object.fromEntries(branches.map(b=>[b.id,b.name]))};
  const active=company.onboarding_status==='active';
- $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1 style="font-size:22px">${esc(company.name)}</h1><p class="meta">إدارة فروع الشركة</p>${!active?'<p class="msg e">الشركة قيد تجهيز العزل الأمني. لا يمكن تشغيل فروعها حتى اكتمال المراجعة.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}" ${active?'':'disabled'}>${esc(b.name)}</button>`).join('')}${active?'<button class="g big" data-branch="all">عرض فروع هذه الشركة معًا</button><button id="addNewBranch" class="g big">＋ إضافة فرع داخل الشركة</button>':''}</div><button id="backCompanies" style="margin-top:12px">العودة إلى الشركات</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" decoding="async" style="width:88px;height:88px;object-fit:contain;border-radius:16px;background:#fff8ea;padding:7px;margin:0 auto 12px;display:block"><h1 style="font-size:22px">${esc(company.name)}</h1><p class="meta">إدارة فروع الشركة</p><button id="ownerEditCompanyBrand" style="margin:0 auto 14px;display:block">تعديل شعار وخلفية هذه الشركة</button>${!active?'<p class="msg e">الشركة قيد تجهيز العزل الأمني. لا يمكن تشغيل فروعها حتى اكتمال المراجعة.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}" ${active?'':'disabled'}>${esc(b.name)}</button>`).join('')}${active?'<button class="g big" data-branch="all">عرض فروع هذه الشركة معًا</button><button id="addNewBranch" class="g big">＋ إضافة فرع داخل الشركة</button>':''}</div><button id="backCompanies" style="margin-top:12px">العودة إلى الشركات</button></div>`;
+ $('ownerEditCompanyBrand').onclick=async()=>{
+  const current=ownerBrandCache.get(Number(companyId))||{};
+  const logo=prompt('رابط شعار الشركة HTTPS (أو ملف داخل المشروع)',current.logo_url||'yourstaff-icon.svg');if(logo===null)return;
+  const background=prompt('رابط صورة الخلفية HTTPS (اختياري)',current.background_url||'');if(background===null)return;
+  const valid=u=>!u||(/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u))&&!u.startsWith('//');
+  if(!valid(logo.trim())||!valid(background.trim()))return alert('الرابط غير صالح؛ استخدم HTTPS أو ملفًا محليًا');
+  const {data,error}=await sb.from('dlv_company_branding').update({logo_url:logo.trim()||'yourstaff-icon.svg',background_url:background.trim()||null,updated_at:new Date().toISOString()}).eq('company_id',companyId).select().single();
+  if(error)return alert('تعذر حفظ الهوية: '+error.message);
+  ownerBrandCache.set(Number(companyId),data);applyBrandConfig(data,true);await ownerBranchPicker(companyId);
+ };
  document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch);await enterOwnerDashboard();});
  if(active)$('addNewBranch').onclick=async()=>{
   const name=prompt('اسم الفرع الجديد داخل '+company.name);if(name===null)return;

@@ -228,6 +228,7 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
 }
 let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
+  tenantBrandCache.clear();tenantBranchCompanyCache.clear();
   resetPlatformBrand();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
   $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><img src="yourstaff-icon.svg" width="104" height="104" alt="شعار Your Staff" decoding="async" style="display:block;width:104px;height:104px;object-fit:contain;margin:0 auto 12px;filter:drop-shadow(0 5px 15px #0007)"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>

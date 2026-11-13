@@ -77,9 +77,9 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 \n.ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}\n
 /* Authenticated company theme: consistent contrast on mobile and desktop */
 body.ys-tenant{--bg:#24180f;--card:#211c1b;--text:#fff5e3;--muted:#e6d4b8;--line:#b78b50;background:linear-gradient(160deg,#2c1c12,#4a2e1b 52%,#21170f)!important;color:var(--text)!important}
-body.ys-tenant::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:var(--tenant-wallpaper,none),var(--tenant-logo,none)!important;background-size:cover,min(64vw,300px) auto!important;background-position:center,center 44%!important;background-repeat:no-repeat!important;opacity:.12!important}
-body.ys-tenant::after{display:none!important}
-body.ys-tenant .wrap{position:relative;z-index:1}
+body.ys-tenant::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:var(--tenant-wallpaper,none)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;opacity:.13!important}
+body.ys-tenant::after{content:"";display:block!important;position:fixed;inset:0;pointer-events:none;z-index:0;background-image:var(--tenant-logo,none)!important;background-size:min(68vw,340px) auto!important;background-position:center 48%!important;background-repeat:no-repeat!important;opacity:.3!important}
+body.ys-tenant .wrap,body.ys-tenant #app{position:relative;z-index:1}
 body.ys-tenant .card,body.ys-tenant .stat,body.ys-tenant .modal>div{background:#211c1b!important;color:#fff5e3!important;border-color:#b78b50!important}
 body.ys-tenant .meta,body.ys-tenant .stat span,body.ys-tenant th{color:#e6d4b8!important}
 body.ys-tenant h1,body.ys-tenant h2,body.ys-tenant h3,body.ys-tenant .ord,body.ys-tenant .stat b{color:#fff5e3!important}
@@ -151,7 +151,7 @@ function resetPlatformBrand(){
 function applyBrandConfig(c,ownerPreview=false){
  if(!c||(!ownerPreview&&(!selectedBranch||isOwner())))return;
  brandConfig={...PLATFORM_BRAND,...c};
- document.body.classList.add('ys-tenant');
+ document.documentElement.classList.remove('ys-public');document.body.classList.remove('ys-platform');document.body.classList.add('ys-tenant');
  const safeAsset=v=>{const url=String(v||'');return (/^https:\/\/[^\\\"'<>\s]+$/i.test(url)||/^[a-z0-9_./-]+$/i.test(url))&&!url.startsWith('//')?'url('+JSON.stringify(url)+')':'none'};
  document.body.style.setProperty('--tenant-logo',safeAsset(brandConfig.logo_url));
  document.body.style.setProperty('--tenant-wallpaper',safeAsset(brandConfig.background_url));
@@ -471,7 +471,7 @@ async function ownerBranchPicker(companyId=1){
  const branches=data||[];
  branchNames={...branchNames,...Object.fromEntries(branches.map(b=>[b.id,b.name]))};
  const active=company.onboarding_status==='active';
- $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" decoding="async" style="width:88px;height:88px;object-fit:contain;border-radius:16px;background:#fff8ea;padding:7px;margin:0 auto 12px;display:block"><h1 style="font-size:22px">${esc(company.name)}</h1><p class="meta">إدارة فروع الشركة</p><button id="ownerEditCompanyBrand" style="margin:0 auto 14px;display:block">تعديل شعار وخلفية هذه الشركة</button>${!active?'<p class="msg e">الشركة قيد تجهيز العزل الأمني. لا يمكن تشغيل فروعها حتى اكتمال المراجعة.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}" ${active?'':'disabled'}>${esc(b.name)}</button>`).join('')}${active?'<button class="g big" data-branch="all">عرض فروع هذه الشركة معًا</button><button id="addNewBranch" class="g big">＋ إضافة فرع داخل الشركة</button>':''}</div><button id="backCompanies" style="margin-top:12px">العودة إلى الشركات</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" decoding="async" style="width:110px;height:110px;object-fit:contain;border-radius:16px;background:#fff8ea;padding:7px;margin:0 auto 12px;display:block"><h1 style="font-size:22px">${esc(company.name)}</h1><p class="meta">إدارة فروع الشركة</p><button id="ownerEditCompanyBrand" style="margin:0 auto 14px;display:block">تعديل شعار وخلفية هذه الشركة</button>${!active?'<p class="msg e">الشركة قيد تجهيز العزل الأمني. لا يمكن تشغيل فروعها حتى اكتمال المراجعة.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}" ${active?'':'disabled'}>${esc(b.name)}</button>`).join('')}${active?'<button class="g big" data-branch="all">عرض فروع هذه الشركة معًا</button><button id="addNewBranch" class="g big">＋ إضافة فرع داخل الشركة</button>':''}</div><button id="backCompanies" style="margin-top:12px">العودة إلى الشركات</button></div>`;
  $('ownerEditCompanyBrand').onclick=async()=>{
   const current=ownerBrandCache.get(Number(companyId))||{};
   const logo=prompt('رابط شعار الشركة HTTPS (أو ملف داخل المشروع)',current.logo_url||'yourstaff-icon.svg');if(logo===null)return;

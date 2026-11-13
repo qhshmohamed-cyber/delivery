@@ -272,7 +272,7 @@ async function boot() {
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
   await loadBrandConfig(); subscribeBrandConfig();
-  if (isOwner()) { await ownerBranchPicker(); return; }
+  if (isOwner()) { if(!(await ownerPageGate()))return; await ownerBranchPicker(); return; }
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
   if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
@@ -301,6 +301,41 @@ async function enterEmployeeDashboard(){
   if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_active_drivers');if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);}
   me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():me.role==='complaints_officer'?complaintsOfficerView():managerView();
   startKitchenDelayMonitor();startOrderRealtime();
+}
+async function ownerPageGate(){
+ const r=await safeRpc('dlv_owner_page_status');
+ if(r.error)return reconnectView('تعذر التحقق من حماية صفحة المالك');
+ if(!r.data?.configured||r.data?.unlocked)return true;
+ $('app').innerHTML='<div class="card" style="max-width:420px;margin:35px auto;padding:22px"><h2>قفل صفحة المالك</h2><p>أدخل كلمة مرور الصفحة المستقلة.</p><input type="password" id="ownerPageUnlock" autocomplete="off" placeholder="كلمة مرور الصفحة"><div id="ownerPageError" class="msg e hide"></div><button class="p big" id="ownerPageUnlockBtn">فتح الصفحة</button><button id="ownerPageExit">تسجيل الخروج</button></div>';
+ $('ownerPageExit').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};
+ $('ownerPageUnlockBtn').onclick=async()=>{
+  const pass=$('ownerPageUnlock').value;$('ownerPageUnlock').value='';
+  $('ownerPageUnlockBtn').disabled=true;
+  const result=await safeRpc('dlv_owner_page_unlock',{p_password:pass});
+  if(!result.error&&result.data===true){await boot();return;}
+  $('ownerPageError').className='msg e';$('ownerPageError').textContent='كلمة مرور الصفحة غير صحيحة';
+  $('ownerPageUnlockBtn').disabled=false;
+ };
+ return false;
+}
+async function ownerPagePasswordSettings(){
+ if(!isOwner())return;
+ const status=await safeRpc('dlv_owner_page_status');
+ if(status.error)return reconnectView('تعذر قراءة إعدادات قفل المالك');
+ const configured=!!status.data?.configured;
+ $('app').innerHTML='<div class="card" style="max-width:440px;margin:35px auto;padding:20px"><h2>إنشاء / تغيير كلمة مرور صفحة المالك</h2><p class="meta">كلمة مرور مستقلة لا تقل عن 12 حرفًا وتحتوي على حروف كبيرة وصغيرة وأرقام ورموز.</p>'+(configured?'<label>كلمة مرور الصفحة الحالية</label><input id="ownerPageOld" type="password">':'')+'<label>كلمة مرور الصفحة الجديدة</label><input id="ownerPageNew" type="password" autocomplete="new-password"><label>تأكيد كلمة المرور</label><input id="ownerPageConfirm" type="password" autocomplete="new-password"><div id="ownerPageSettingMsg" role="status"></div><button class="p big" id="ownerPageSave">حفظ</button><button id="ownerPageCancel">رجوع</button></div>';
+ $('ownerPageCancel').onclick=()=>ownerBranchPicker();
+ $('ownerPageSave').onclick=async()=>{
+  const pw=$('ownerPageNew').value, confirm=$('ownerPageConfirm').value, old=configured?$('ownerPageOld').value:null;
+  const msg=$('ownerPageSettingMsg');const fail=t=>{msg.className='msg e';msg.textContent=t;};
+  if(pw!==confirm)return fail('تأكيد كلمة المرور غير مطابق');
+  if(pw.length<12||!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)||!/[^A-Za-z0-9]/.test(pw))return fail('كلمة المرور يجب أن تكون 12 حرفًا على الأقل مع حروف كبيرة وصغيرة ورقم ورمز');
+  $('ownerPageSave').disabled=true;
+  const res=await safeRpc('dlv_owner_page_set_password',{p_new:pw,p_old:old});
+  $('ownerPageSave').disabled=false;
+  if(res.error)return fail('تعذر الحفظ. تأكد من كلمة المرور الحالية.');
+  await ownerPageGate();
+ };
 }
 async function ownerPasswordSettings(){
  if(!isOwner())return;
@@ -332,10 +367,11 @@ async function ownerBranchPicker(){
   const {data,error}=await safeRpc('dlv_list_branches');
   if(error){ console.warn('تعذر تحميل قائمة الفروع:',error.message); return reconnectView('تعذر تحميل قائمة الفروع الآن. جلسة الدخول محفوظة؛ أعد المحاولة.'); }
   const branches=data||[];branchNames=Object.fromEntries(branches.map(b=>[b.id,b.name]));
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض جميع الفروع معًا</button><button id="addNewBranch" class="g big">➕ إضافة فرع جديد</button></div><button id="ownerChangePass" class="g big" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض جميع الفروع معًا</button><button id="addNewBranch" class="g big">➕ إضافة فرع جديد</button></div><button id="ownerPagePass" class="g big" style="margin-top:10px">إنشاء / تغيير كلمة مرور صفحة المالك</button><button id="ownerChangePass" class="g big" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
   $('addNewBranch').onclick=openOwnerBranchManager;
   $('ownerChangePass').onclick=ownerPasswordSettings;
+  $('ownerPagePass').onclick=ownerPagePasswordSettings;
   $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterOwnerDashboard(){

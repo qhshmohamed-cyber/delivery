@@ -722,6 +722,30 @@ function bikeBearing(a, b) {
   const x = Math.cos(a.lat*rad)*Math.sin(b.lat*rad)-Math.sin(a.lat*rad)*Math.cos(b.lat*rad)*Math.cos((b.lng-a.lng)*rad);
   return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
+// Animate only between real GPS samples; never invent additional location readings.
+const riderAnimations = new WeakMap();
+function animateRiderMarker(marker, lat, lng, duration=2500) {
+  if (!marker || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+  const target = L.latLng(Number(lat), Number(lng));
+  const prior = riderAnimations.get(marker);
+  if (prior) cancelAnimationFrame(prior);
+  const start = marker.getLatLng();
+  if (start.distanceTo(target) < 2 || start.distanceTo(target) > 2000 || document.visibilityState !== 'visible') {
+    marker.setLatLng(target); riderAnimations.delete(marker); return;
+  }
+  const startAt = performance.now();
+  const ease = t => t*t*(3-2*t);
+  function step(now) {
+    if (!marker._map || document.visibilityState !== 'visible') {
+      marker.setLatLng(target); riderAnimations.delete(marker); return;
+    }
+    const p = Math.min(1,(now-startAt)/duration), k=ease(p);
+    marker.setLatLng([start.lat+(target.lat-start.lat)*k,start.lng+(target.lng-start.lng)*k]);
+    if (p<1) riderAnimations.set(marker,requestAnimationFrame(step));
+    else riderAnimations.delete(marker);
+  }
+  riderAnimations.set(marker,requestAnimationFrame(step));
+}
 function bikeIcon(bearing=0, live=true, size=66) {
   // Rider branding shared by the fleet map and customer tracking map.
   // Never interpolate arbitrary HTML into a Leaflet marker.
@@ -766,7 +790,7 @@ function openMap() {
       const oldPos = prevPos[r.driver_id], bearing = oldPos ? bikeBearing(oldPos, {lat:r.lat,lng:r.lng}) : 0; prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 66);
       const m = markers[r.driver_id];
-      if (m) { m.setLatLng([r.lat, r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
+      if (m) { animateRiderMarker(m,r.lat,r.lng,2600); m.setIcon(ic); m.getPopup().setContent(html); }
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
@@ -1155,7 +1179,7 @@ function trackView(code0) {
     if (j.lat != null) {
       m.style.display = 'block';
       if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapT); mk = L.marker([j.lat, j.lng], { icon: bikeIcon(0, true, 72), keyboard: false }).addTo(mapT); lastTrackPos = {lat:j.lat,lng:j.lng}; }
-      else { const nextPos = {lat:j.lat,lng:j.lng}; const bearing = bikeBearing(lastTrackPos, nextPos); mk.setLatLng([j.lat, j.lng]); mk.setIcon(bikeIcon(bearing, true, 72)); mapT.panTo([j.lat, j.lng]); lastTrackPos = nextPos; }
+      else { const nextPos = {lat:j.lat,lng:j.lng}; const bearing = bikeBearing(lastTrackPos, nextPos); animateRiderMarker(mk,j.lat,j.lng,4200); mk.setIcon(bikeIcon(bearing, true, 72)); mapT.panTo([j.lat, j.lng],{animate:true,duration:1}); lastTrackPos = nextPos; }
     } else m.style.display = 'none';
     if (j.status === 'delivered') {
       m.style.display = 'none';

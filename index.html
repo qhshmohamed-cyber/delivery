@@ -1101,7 +1101,7 @@ function addDriverForm() {
   const pw = generateStrongPassword();
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
-    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option></select>' +
+    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option><option value="complaints_officer">مسؤول الشكاوى</option></select>' +
     '<label>الفرع *</label><select id="a_branch"><option value="1">فرع المهندسين</option><option value="2">فرع الشيخ زايد</option></select>' +
     '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (12 حرفًا على الأقل: كبير وصغير ورقم ورمز)</label><input id="a_p" value="' + pw + '">' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +

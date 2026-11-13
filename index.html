@@ -523,47 +523,59 @@ function openOperationsRoom(){
  (isOwner()||allowed.length>1?'<option value="all">جميع الفروع المصرح بها</option>':'')+
  allowed.map(id=>'<option value="'+id+'">'+esc(branchTitle(id))+'</option>').join('')+
  '</select><div class="meta" id="orStatus">جاري الاتصال...</div></div>'+
- '<div class="grid" id="orKpis"></div><div class="card"><h3>🚨 تنبيهات التشغيل</h3><div id="orAlerts">جاري التحميل...</div></div>'+
+ '<div class="card"><div class="row"><label>التاريخ <input type="date" id="orDate" value="'+cairoDate()+'"></label><label>الحالة <select id="orFilter"><option value="all">كل الحالات</option><option value="new">انتظار</option><option value="out">مع الطيار</option><option value="delivered">تم التوصيل</option><option value="cancelled">ملغي</option></select></label></div><div class="row"><input id="orSearch" placeholder="بحث برقم الطلب" maxlength="40"><button id="orMap">🗺️ خريطة الطيارين</button><button id="orReport">📄 تقرير الوردية / PDF</button><button id="orRefresh">↻ تحديث الآن</button></div></div><div class="grid" id="orKpis"></div><div class="card"><h3>👨‍🍳 مراحل المطبخ والتوصيل</h3><div id="orKitchen"></div></div><div class="card"><h3>🚨 تنبيهات التشغيل</h3><div id="orAlerts">جاري التحميل...</div></div>'+
  '<div class="card"><h3>📦 الطلبات الجارية</h3><div id="orOrders">جاري التحميل...</div></div>'+
  '<div class="card"><h3>🏍️ حالة GPS للطيارين</h3><div id="orDrivers">جاري التحميل...</div></div>';
  document.body.appendChild(d);
  $('orBranch').value=selectedBranch&&allowed.includes(Number(selectedBranch))?String(selectedBranch):(isOwner()?'all':String(allowed[0]||''));
- let closed=false,busy=false,again=false,refreshTimer=null,lastSuccess=0;
- const close=()=>{closed=true;clearInterval(refreshTimer);d.remove();};
+ let closed=false,busy=false,again=false,refreshTimer=null,lastSuccess=0,requestVersion=0;let roomRows=[],roomLocations=[];
+ const close=()=>{closed=true;requestVersion++;clearInterval(refreshTimer);d.remove();};
  $('orClose').onclick=close;
+ function paint(){
+  if(closed||!d.isConnected)return;
+  const branch=$('orBranch').value,needle=$('orSearch').value.trim().toLowerCase(),filter=$('orFilter').value;
+  const orders=roomRows,locations=roomLocations,now=Date.now();
+  const count=fn=>orders.filter(fn).length;
+  const active=orders.filter(o=>['new','received','out'].includes(o.status));
+  const stale=locations.filter(x=>!x.updated_at||now-new Date(x.updated_at).getTime()>120000);
+  const delayed=active.filter(o=>now-new Date(o.created_at).getTime()>45*60000);
+  const kitchen=orders.filter(o=>o.status==='new'&&o.workflow_stage==='new');
+  const ready=orders.filter(o=>o.status==='new'&&o.workflow_stage==='kitchen_ready');
+  const unassigned=active.filter(o=>!o.driver_id);
+  const finished=orders.filter(o=>o.delivered_at&&o.created_at&&new Date(o.delivered_at)>=new Date(o.created_at));
+  const avg=finished.length?Math.round(finished.reduce((sum,o)=>sum+(new Date(o.delivered_at)-new Date(o.created_at))/60000,0)/finished.length):null;
+  $('orKpis').innerHTML=[['طلبات اليوم المختار',orders.length],['في الانتظار',count(o=>o.status==='new')],['مع الطيار',count(o=>o.status==='out')],['تم التوصيل',count(o=>o.status==='delivered')],['طلبات تجاوزت 45 دقيقة',delayed.length],['GPS غير محدث',stale.length]].map(x=>'<div class="stat"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join('');
+  $('orKitchen').innerHTML=[['في المطبخ',kitchen.length],['جاهز للمشرف',ready.length],['دون طيار',unassigned.length],['متوسط زمن التسليم',avg===null?'غير متاح':avg+' دقيقة']].map(x=>'<div class="ord" style="padding:8px 0"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>').join('');
+  $('orAlerts').innerHTML=(delayed.length?'<div class="msg e">⚠ '+delayed.length+' طلب تجاوز 45 دقيقة منذ تسجيله</div>':'')+(stale.length?'<div class="msg e">⚠ '+stale.length+' جهاز GPS لم يحدّث موقعه منذ دقيقتين</div>':'')+(unassigned.length?'<div class="msg e">⚠ '+unassigned.length+' طلب جارٍ بدون طيار</div>':'')+(!delayed.length&&!stale.length&&!unassigned.length?'<div class="msg o">لا توجد تنبيهات وفق حدود المراقبة الحالية</div>':'');
+  const filtered=active.filter(o=>(filter==='all'||o.status===filter)&&(!needle||String(o.order_no||'').toLowerCase().includes(needle)));
+  const display=(filter==='all'?filtered:orders.filter(o=>o.status===filter&&(!needle||String(o.order_no||'').toLowerCase().includes(needle))));
+  $('orOrders').innerHTML=display.length?display.slice(0,100).map(o=>{const minutes=Math.max(0,Math.floor((now-new Date(o.created_at))/60000));return '<div class="ord" style="padding:8px 0;border-bottom:1px solid #d5b36c"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc(ST[o.status]?.[0]||o.status)+' · '+esc(branchTitle(o.branch_id))+' · '+minutes+' دقيقة</span></div>';}).join(''):'<div class="meta">لا توجد طلبات مطابقة</div>';
+  $('orDrivers').innerHTML='<div class="meta">أجهزة مشاركة الموقع: '+locations.length+' · تحديث حديث: '+(locations.length-stale.length)+' · قديم أو منقطع: '+stale.length+'</div>'+locations.slice(0,100).map(x=>'<div class="ord" style="padding:7px 0"><span>الطيار '+esc(String(x.driver_id).slice(0,8))+'…</span><span>'+(x.updated_at&&now-new Date(x.updated_at)<=120000?'🟢 موقع حديث':'🟠 تحديث متأخر')+'</span></div>').join('');
+ }
  async function refresh(){
   if(closed||!d.isConnected||document.visibilityState!=='visible'||!navigator.onLine)return;
   if(busy){again=true;return;}
   busy=true;
   try{
-   const branch=$('orBranch').value;
+   const version=++requestVersion;const branch=$('orBranch').value;
    if(branch!=='all'&&!allowed.includes(Number(branch)))throw Error('فرع غير مصرح به');
-   let q=sb.from('dlv_orders').select('id,order_no,branch_id,status,workflow_stage,created_at,driver_id').eq('order_date',cairoDate()).order('created_at',{ascending:false}).limit(1000);
+   let q=sb.from('dlv_orders').select('id,order_no,branch_id,status,workflow_stage,created_at,driver_id,kitchen_received_at,kitchen_ready_at,out_at,delivered_at').eq('order_date',$('orDate').value).order('created_at',{ascending:false}).limit(1000);
    let gps=sb.from('dlv_locations').select('driver_id,branch_id,updated_at,accuracy').limit(500);
    if(branch==='all'){q=q.in('branch_id',allowed);gps=gps.in('branch_id',allowed);}
    else{q=q.eq('branch_id',Number(branch));gps=gps.eq('branch_id',Number(branch));}
    const [ordersResult,gpsResult]=await Promise.all([q,gps]);
-   if(closed||!d.isConnected)return;
+   if(closed||!d.isConnected||version!==requestVersion)return;
    if(ordersResult.error)throw ordersResult.error;
    if(gpsResult.error)throw gpsResult.error;
-   const orders=ordersResult.data||[], locations=gpsResult.data||[];
-   const count=(fn)=>orders.filter(fn).length;
-   const active=orders.filter(o=>['new','received','out'].includes(o.status));
-   const waiting=count(o=>o.status==='new'),out=count(o=>o.status==='out'),delivered=count(o=>o.status==='delivered');
-   const now=Date.now(), stale=locations.filter(x=>!x.updated_at||now-new Date(x.updated_at).getTime()>120000);
-   const delayed=active.filter(o=>now-new Date(o.created_at).getTime()>45*60000);
-   $('orKpis').innerHTML=[['طلبات اليوم',orders.length],['في الانتظار',waiting],['مع الطيار',out],['تم التوصيل',delivered],['طلبات تجاوزت 45 دقيقة',delayed.length],['GPS غير محدث',stale.length]].map(x=>'<div class="stat"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join('');
-   $('orAlerts').innerHTML=(delayed.length?'<div class="msg e">⚠ '+delayed.length+' طلب تجاوز 45 دقيقة منذ تسجيله</div>':'')+
-    (stale.length?'<div class="msg e">⚠ '+stale.length+' جهاز GPS لم يحدّث موقعه منذ دقيقتين</div>':'')+
-    (!delayed.length&&!stale.length?'<div class="msg o">لا توجد تنبيهات وفق حدود المراقبة الحالية</div>':'');
-   $('orOrders').innerHTML=active.length?active.slice(0,100).map(o=>'<div class="ord" style="padding:8px 0;border-bottom:1px solid #d5b36c"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc(ST[o.status]?.[0]||o.status)+' · '+esc(branchTitle(o.branch_id))+'</span></div>').join(''):'<div class="meta">لا توجد طلبات جارية</div>';
-   $('orDrivers').innerHTML='<div class="meta">أجهزة مشاركة الموقع: '+locations.length+' · تحديث حديث: '+(locations.length-stale.length)+' · قديم أو منقطع: '+stale.length+'</div>'+
-    locations.slice(0,100).map(x=>'<div class="ord" style="padding:7px 0"><span>الطيار '+esc(String(x.driver_id).slice(0,8))+'…</span><span>'+(now-new Date(x.updated_at).getTime()<=120000?'🟢 موقع حديث':'🟠 تحديث متأخر')+'</span></div>').join('');
+   roomRows=ordersResult.data||[];roomLocations=gpsResult.data||[];paint();
    lastSuccess=Date.now();$('orStatus').textContent='آخر مزامنة ناجحة: '+new Date(lastSuccess).toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'});
   }catch(e){if(d.isConnected)$('orStatus').textContent='تعذر تحديث غرفة العمليات: '+(e.message||'خطأ اتصال');}
   finally{busy=false;if(again){again=false;setTimeout(refresh,300);}}
  }
- $('orBranch').onchange=refresh;
+ $('orBranch').onchange=refresh;$('orDate').onchange=refresh;$('orFilter').onchange=paint;$('orSearch').oninput=paint;
+ $('orRefresh').onclick=refresh;
+ $('orMap').onclick=()=>{close();openMap();};
+ $('orReport').onclick=()=>{const branch=$('orBranch').value,date=$('orDate').value;close();openReport();if($('rbranch'))$('rbranch').value=branch;if($('rdt'))$('rdt').value=date;if($('rdt'))$('rdt').dispatchEvent(new Event('change'));};
  refresh();refreshTimer=setInterval(refresh,5000);
 }
 function managerView() {

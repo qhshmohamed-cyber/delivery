@@ -304,8 +304,9 @@ async function openBrandSettings(){
  <div class="card"><h3>📲 إعدادات واتساب المطعم — المالك فقط</h3>
  <label>رقم واتساب المرسل (بكود الدولة، مثال: 201xxxxxxxxx)</label>
  <input id="br_wa_sender" dir="ltr" inputmode="tel" maxlength="15" value="" placeholder="201xxxxxxxxx">
- <label style="display:flex;align-items:center;gap:8px"><input id="br_wa_auto" type="checkbox" style="width:auto" disabled> الإرسال التلقائي (غير متاح حتى ربط WhatsApp Business API الرسمي)</label>
- <div class="meta">حفظ الرقم لا يرسل رسائل وحده. يلزم توثيق الرقم وربط مزود رسمي من السيرفر، ولا تُحفظ مفاتيح الخدمة هنا.</div></div>
+ <div class="card" style="margin-top:10px"><b>رسائل متابعة الطلب الجاهزة</b><div class="meta">① تم تسجيل طلبك — رابط متابعة الطلب<br>② طلبك في المطبخ — رابط المتابعة<br>③ طلبك خرج مع الطيار — رابط المتابعة</div></div>
+ <label style="display:flex;align-items:center;gap:8px"><input id="br_wa_auto" type="checkbox" style="width:auto" disabled> إرسال تلقائي بعد ربط WhatsApp Business Platform المعتمد</label>
+ <div class="meta">الحالة: الإشعارات تُجهَّز بأمان على السيرفر لكنها لا تُرسل حاليًا. الرقم المحفوظ لا يصبح مرسلًا إلا بعد تفعيله رسميًا وربط رقم الهاتف المعتمد وقوالب الرسائل وموافقة العميل. لا تضع رموز API أو كلمات سر هنا.</div></div>
  <div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
  <div class="card" style="text-align:center"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'logo-original.png')}" style="width:144px;height:144px;max-width:100%;object-fit:contain;object-position:center;border-radius:0;background:transparent;display:block;margin:8px auto"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div class="meta">معاينة الهوية</div></div>
  <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;

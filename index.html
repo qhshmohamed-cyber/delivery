@@ -484,6 +484,19 @@ async function loadMine() {
 }
 
 /* ---------- واجهة متابعة الكول سنتر: إنشاء ومتابعة فقط ---------- */
+async function openCallcenterComplaint(id){
+ const o=ORD[id];if(!o)return flash('الطلب غير موجود',false);
+ const title=prompt('عنوان شكوى الطلب '+o.order_no);if(title===null)return;
+ if(title.trim().length<3)return flash('العنوان قصير',false);
+ const details=prompt('تفاصيل الشكوى')||'';
+ const {data,error}=await safeRpc('dlv_create_customer_complaint',{p_order_id:Number(id),p_title:title.trim(),p_details:details,p_priority:'medium'});
+ if(error)return flash(error.message,false);flash('تم تسجيل الشكوى رقم '+data.id,true);
+}
+function copyCallcenterStatus(id){
+ const o=ORD[id];if(!o)return;
+ const msg='طلبك رقم '+o.order_no+' — '+(STG[o.workflow_stage]||'قيد المتابعة')+(o.driver?.full_name?' — الطيار: '+o.driver.full_name:'')+'. مطاعم واحة اليمن.';
+ if(navigator.clipboard?.writeText)navigator.clipboard.writeText(msg).then(()=>flash('تم نسخ الرسالة',true)).catch(()=>prompt('انسخ الرسالة',msg));else prompt('انسخ الرسالة',msg);
+}
 function callcenterView() {
   const t = cairoDate();
   $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="بحث برقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
@@ -499,7 +512,7 @@ async function loadCallcenterOrders() {
   const {data,error}=await req;
   if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
   const rows=data||[]; rows.forEach(o=>ORD[o.id]=o);
-  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات نشطة حاليًا</div>';
+  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div><div class="row"><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات نشطة حاليًا</div>';
 }
 
 async function loadCallcenterRatings() {
@@ -513,6 +526,24 @@ async function loadCallcenterRatings() {
 /* ---------- واجهة المدير ---------- */
 /* غرفة العمليات: مدير الفرع أو المالك فقط، والبيانات تمر عبر RLS */
 
+function openOwnerPermissions(){
+ if(!isOwner())return flash('للمالك فقط',false);
+ if($('ownerPermPanel'))return;
+ const d=document.createElement('div');d.id='ownerPermPanel';d.style.cssText='position:fixed;inset:0;z-index:38;background:var(--bg);overflow:auto;padding:16px';
+ d.innerHTML='<div class="card"><div class="ord"><h2>إعدادات صلاحيات المالك</h2><button id="opClose">إغلاق</button></div><p class="meta">هذه إعدادات محفوظة للتجهيز؛ لا تغيّر الصلاحيات الفعلية حتى تُربط بسياسات الوصول على السيرفر.</p><div id="opRows"></div></div>';
+ document.body.appendChild(d);$('opClose').onclick=()=>d.remove();
+ const roles=['manager','supervisor','callcenter_followup','kitchen','driver'],perms=['view_reports','view_incidents','view_audit','manage_incidents'];
+ async function reload(){
+  const {data,error}=await sb.from('dlv_role_permissions').select('role_name,permission,enabled');
+  if(error){$('opRows').textContent=error.message;return;}
+  $('opRows').innerHTML=roles.map(role=>'<div class="card"><b>'+role+'</b>'+perms.map(perm=>{const x=(data||[]).find(v=>v.role_name===role&&v.permission===perm);return '<div class="row"><span style="flex:1">'+perm+'</span><button data-role="'+role+'" data-perm="'+perm+'" data-enabled="'+Boolean(x?.enabled)+'">'+(x?.enabled?'نعم':'لا')+'</button></div>'}).join('')+'</div>').join('');
+  $('opRows').querySelectorAll('button[data-role]').forEach(b=>b.onclick=async()=>{
+   b.disabled=true;const {error}=await sb.rpc('dlv_owner_set_permission',{p_role:b.dataset.role,p_permission:b.dataset.perm,p_enabled:b.dataset.enabled!=='true'});
+   if(error){flash(error.message,false);b.disabled=false;}else reload();
+  });
+ }
+ reload();
+}
 function openSecurityCommand(){
  if(!canViewManagerBoard())return flash('غير مصرح',false);
  if($('securityCommand'))return;
@@ -530,6 +561,7 @@ function openSecurityCommand(){
  const branch=()=>Number($('scBranch').value);
  const status=t=>{$('scStatus').textContent=t;};
  $('scClose').onclick=()=>d.remove();
+ if(isOwner()){const btn=document.createElement('button');btn.textContent='⚙️ إعدادات صلاحيات المالك';btn.onclick=openOwnerPermissions;d.querySelector('.card').appendChild(btn);}
  async function reload(){
   if(!d.isConnected)return;const b=branch();if(!allowed.includes(b))return;
   status('جاري تحميل البيانات...');

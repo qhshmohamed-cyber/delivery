@@ -586,7 +586,7 @@ function openOperationsRoom(){
  '<div class="card"><h3>🏍️ حالة GPS للطيارين</h3><div id="orDrivers">جاري التحميل...</div></div>';
  document.body.appendChild(d);
  $('orBranch').value=selectedBranch&&allowed.includes(Number(selectedBranch))?String(selectedBranch):(isOwner()?'all':String(allowed[0]||''));
- let closed=false,busy=false,again=false,refreshTimer=null,lastSuccess=0,requestVersion=0,roomChannel=null,roomRealtimeState='جاري الاتصال';let roomRows=[],roomLocations=[];
+ let closed=false,busy=false,again=false,refreshTimer=null,lastSuccess=0,requestVersion=0,roomChannel=null,roomRealtimeState='جاري الاتصال';let roomRows=[],roomLocations=[],roomSla=[];
  const close=()=>{closed=true;requestVersion++;clearInterval(refreshTimer);if(roomChannel)sb.removeChannel(roomChannel);roomChannel=null;d.remove();};
  $('orClose').onclick=close;
  function paint(){
@@ -596,15 +596,16 @@ function openOperationsRoom(){
   const count=fn=>orders.filter(fn).length;
   const active=orders.filter(o=>['new','received','out'].includes(o.status));
   const stale=locations.filter(x=>!x.updated_at||now-new Date(x.updated_at).getTime()>120000);
-  const delayed=active.filter(o=>now-new Date(o.created_at).getTime()>45*60000);
+  const slaFor=id=>roomSla.find(x=>Number(x.branch_id)===Number(id))||{kitchen_minutes:25,dispatch_minutes:15,delivery_minutes:45};
+  const delayed=active.filter(o=>{const lim=slaFor(o.branch_id);return o.status==='out'&&o.out_at?now-new Date(o.out_at)>lim.delivery_minutes*60000:o.workflow_stage==='kitchen_ready'&&o.kitchen_ready_at?now-new Date(o.kitchen_ready_at)>lim.dispatch_minutes*60000:now-new Date(o.created_at)>lim.kitchen_minutes*60000;});
   const kitchen=orders.filter(o=>o.status==='new'&&o.workflow_stage==='new');
   const ready=orders.filter(o=>o.status==='new'&&o.workflow_stage==='kitchen_ready');
   const unassigned=active.filter(o=>!o.driver_id);
   const finished=orders.filter(o=>o.delivered_at&&o.created_at&&new Date(o.delivered_at)>=new Date(o.created_at));
   const avg=finished.length?Math.round(finished.reduce((sum,o)=>sum+(new Date(o.delivered_at)-new Date(o.created_at))/60000,0)/finished.length):null;
-  $('orKpis').innerHTML=[['طلبات اليوم المختار',orders.length],['في الانتظار',count(o=>o.status==='new')],['مع الطيار',count(o=>o.status==='out')],['تم التوصيل',count(o=>o.status==='delivered')],['طلبات تجاوزت 45 دقيقة',delayed.length],['GPS غير محدث',stale.length]].map(x=>'<div class="stat"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join('');
+  $('orKpis').innerHTML=[['طلبات اليوم المختار',orders.length],['في الانتظار',count(o=>o.status==='new')],['مع الطيار',count(o=>o.status==='out')],['تم التوصيل',count(o=>o.status==='delivered')],['طلبات تجاوزت حدود الفرع',delayed.length],['GPS غير محدث',stale.length]].map(x=>'<div class="stat"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join('');
   $('orKitchen').innerHTML=[['في المطبخ',kitchen.length],['جاهز للمشرف',ready.length],['دون طيار',unassigned.length],['متوسط زمن التسليم',avg===null?'غير متاح':avg+' دقيقة']].map(x=>'<div class="ord" style="padding:8px 0"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>').join('');
-  $('orAlerts').innerHTML=(delayed.length?'<div class="msg e">⚠ '+delayed.length+' طلب تجاوز 45 دقيقة منذ تسجيله</div>':'')+(stale.length?'<div class="msg e">⚠ '+stale.length+' جهاز GPS لم يحدّث موقعه منذ دقيقتين</div>':'')+(unassigned.length?'<div class="msg e">⚠ '+unassigned.length+' طلب جارٍ بدون طيار</div>':'')+(!delayed.length&&!stale.length&&!unassigned.length?'<div class="msg o">لا توجد تنبيهات وفق حدود المراقبة الحالية</div>':'');
+  $('orAlerts').innerHTML=(delayed.length?'<div class="msg e">⚠ '+delayed.length+' طلب تجاوز وقت المرحلة المحدد للفرع</div>':'')+(stale.length?'<div class="msg e">⚠ '+stale.length+' جهاز GPS لم يحدّث موقعه منذ دقيقتين</div>':'')+(unassigned.length?'<div class="msg e">⚠ '+unassigned.length+' طلب جارٍ بدون طيار</div>':'')+(!delayed.length&&!stale.length&&!unassigned.length?'<div class="msg o">لا توجد تنبيهات وفق حدود المراقبة الحالية</div>':'');
   const filtered=active.filter(o=>(filter==='all'||o.status===filter)&&(!needle||String(o.order_no||'').toLowerCase().includes(needle)));
   const display=(filter==='all'?filtered:orders.filter(o=>o.status===filter&&(!needle||String(o.order_no||'').toLowerCase().includes(needle))));
   $('orOrders').innerHTML=display.length?display.slice(0,100).map(o=>{const minutes=Math.max(0,Math.floor((now-new Date(o.created_at))/60000));return '<div class="ord" style="padding:8px 0;border-bottom:1px solid #d5b36c"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc(ST[o.status]?.[0]||o.status)+' · '+esc(branchTitle(o.branch_id))+' · '+minutes+' دقيقة</span></div>';}).join(''):'<div class="meta">لا توجد طلبات مطابقة</div>';
@@ -629,11 +630,13 @@ function openOperationsRoom(){
    let gps=sb.from('dlv_locations').select('driver_id,branch_id,updated_at,accuracy').limit(500);
    if(branch==='all'){q=q.in('branch_id',allowed);gps=gps.in('branch_id',allowed);}
    else{q=q.eq('branch_id',Number(branch));gps=gps.eq('branch_id',Number(branch));}
-   const [ordersResult,gpsResult]=await Promise.all([q,gps]);
+   let sla=sb.from('dlv_branch_sla').select('branch_id,kitchen_minutes,dispatch_minutes,delivery_minutes');sla=branch==='all'?sla.in('branch_id',allowed):sla.eq('branch_id',Number(branch));
+   const [ordersResult,gpsResult,slaResult]=await Promise.all([q,gps,sla]);
    if(closed||!d.isConnected||version!==requestVersion)return;
    if(ordersResult.error)throw ordersResult.error;
    if(gpsResult.error)throw gpsResult.error;
-   roomRows=ordersResult.data||[];roomLocations=gpsResult.data||[];paint();
+   if(slaResult.error)throw slaResult.error;
+   roomRows=ordersResult.data||[];roomLocations=gpsResult.data||[];roomSla=slaResult.data||[];paint();
    lastSuccess=Date.now();paint();$('orStatus').textContent='آخر مزامنة ناجحة: '+new Date(lastSuccess).toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'});
   }catch(e){if(d.isConnected)$('orStatus').textContent='تعذر تحديث غرفة العمليات: '+(e.message||'خطأ اتصال');}
   finally{busy=false;if(again){again=false;setTimeout(refresh,300);}}

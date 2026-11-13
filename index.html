@@ -338,7 +338,24 @@ async function openBrandSettings(){
    $('oc_notice').textContent=notes[key]||'';
    if(key==='identity'||key==='whatsapp') $('oc_notice').textContent=key==='identity'?'إعدادات الهوية قابلة للتعديل والحفظ.':'رقم واتساب قابل للحفظ؛ الإرسال التلقائي يتطلب مزودًا رسميًا مفعلًا.';
  };
- for(const key of ['identity','whatsapp','drivers','orders','branches','roles','reports','security']) $('oc_'+key).onclick=()=>showOwnerSection(key);
+ const openOwnerTool=(key)=>{
+   if(!OWNER_ONLY()) return flash('هذه الأداة للمالك فقط',false);
+   if(key==='identity'||key==='whatsapp'){showOwnerSection(key);return;}
+   if(key==='drivers'){d.remove();openMap();return;}
+   if(key==='roles'){d.remove();managePilots();return;}
+   if(key==='reports'){d.remove();openReport();return;}
+   if(key==='orders'){d.remove();managerView();return;}
+   if(key==='branches'){
+     showOwnerSection(key);
+     $('oc_notice').textContent='الفروع المتاحة لك حاليًا: '+((me.allowed_branch_ids||[]).length?me.allowed_branch_ids.join('، '):'الفرع الحالي')+'. لتغيير الفرع استخدم زر تغيير الفرع في الشاشة الرئيسية. إضافة فرع جديد تحتاج إعدادًا منفصلًا بصلاحيات السيرفر.';
+     return;
+   }
+   if(key==='security'){
+     showOwnerSection(key);
+     $('oc_notice').textContent='الحماية تعتمد على صلاحيات قاعدة البيانات. يمكنك تسجيل الخروج من زر خروج في الشاشة الرئيسية. سجل التدقيق الشامل والتراجع عن التعديلات ووضع الطوارئ غير مفعلين بعد.';
+   }
+ };
+ for(const key of ['identity','whatsapp','drivers','orders','branches','roles','reports','security']) $('oc_'+key).onclick=()=>openOwnerTool(key);
  showOwnerSection('identity');
  const {data:waSettings,error:waLoadError}=await sb.rpc('dlv_owner_whatsapp_settings');if(!waLoadError && waSettings){$('br_wa_sender').value=waSettings.sender_phone||'';}
  $('br_name').oninput=()=>{$('br_preview_name').textContent=$('br_name').value||'اسم البراند';};
@@ -489,7 +506,7 @@ function managerView() {
   const t = cairoDate();
   const owner = isOwner();
   const board = canViewManagerBoard();
-  const ownerTools = owner ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الحسابات</button><button id="rp">📊 التقارير</button><button class="g" id="ownerRatingsPage">⭐ سجل التقييمات</button><button class="p" id="brandSettings">🎨 هوية النظام والتصميم</button>' : '';
+  const ownerTools = owner ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الحسابات</button><button id="rp">📊 التقارير</button><button class="g" id="ownerRatingsPage">⭐ سجل التقييمات</button><button class="p" id="brandSettings">⚙️ مركز تحكم المالك</button>' : '';
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">

@@ -744,12 +744,17 @@ function openMap() {
   document.body.appendChild(d);
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-  markers = {}; const prevPos = {}; let fitted = false;
+  markers = {}; const prevPos = {}; let fitted = false, mapBusy = false;
   async function refresh() {
-    const [l, o] = await Promise.all([
+    if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine || !document.getElementById('lmap')) return;
+    mapBusy = true;
+    let l, o;
+    try { [l, o] = await Promise.all([
       sb.from('dlv_locations').select('driver_id,lat,lng,updated_at'),
-      branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).in('status', ['received', 'out']).limit(500)]);
-    if (l.error) return;
+      branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).in('status', ['received', 'out']).limit(500)]); }
+    catch(e) { mapBusy = false; return; }
+    mapBusy = false;
+    if (l.error || !document.getElementById('lmap')) return;
     const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
     const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
     const seen = new Set();
@@ -769,7 +774,7 @@ function openMap() {
     if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }
   $('msel').onchange = () => { fitted = false; refresh(); };
-  refresh(); mapTimer = setInterval(refresh, 10000);
+  refresh(); mapTimer = setInterval(refresh, 3000);
   $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
 }
 
@@ -1098,12 +1103,15 @@ function trackView(code0) {
   $('app').innerHTML = '<header><img data-brand-logo src="logo-original.png" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>واحة اليمن</small></div></header>' +
     '<div class="card"><label style="font-size:12px">كود المتابعة</label><div class="row"><input id="tc" dir="ltr" style="flex:1;text-transform:uppercase" placeholder="مثال: 7K2M9QXA" value="' + esc((code0 || '').toUpperCase()) + '"><button class="p" id="tg">تتبّع</button></div></div>' +
     '<div id="tinfo"></div><div id="tmap" class="card" style="height:320px;display:none;padding:0;overflow:hidden"></div>';
-  let tmr, mapT, mk, lastTrackPos = null;
+  let tmr, mapT, mk, lastTrackPos = null, trackBusy = false;
   async function go() {
     const code = $('tc') ? $('tc').value.trim().toUpperCase() : ''; if (!code) return;
+    if (trackBusy || document.visibilityState !== 'visible' || !navigator.onLine) return;
+    trackBusy = true;
     let result;
     try { result = await safeRpc('dlv_track', { p_code: code }); }
     catch (e) { result = { error: e }; }
+    finally { trackBusy = false; }
     const { data: j, error } = result || {};
     const box = $('tinfo'); if (!box) return clearInterval(tmr);
     if (error) {
@@ -1182,7 +1190,9 @@ function trackView(code0) {
       clearInterval(tmr);
     }
   }
-  $('tg').onclick = () => { clearInterval(tmr); go(); tmr = setInterval(go, 15000); };
+  $('tg').onclick = () => { clearInterval(tmr); go(); tmr = setInterval(go, 5000); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && $('tc')) go(); });
+  window.addEventListener('online', () => { if ($('tc')) go(); });
   if (code0) $('tg').onclick();
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

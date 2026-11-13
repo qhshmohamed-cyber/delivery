@@ -231,7 +231,7 @@ async function boot() {
   } else {
     drivers = [];
   }
-  me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : managerView();
+  me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : me.role==='complaints_officer' ? complaintsOfficerView() : managerView();
   startKitchenDelayMonitor();
   startOrderRealtime();
 }
@@ -246,7 +246,7 @@ async function employeeBranchPicker(permitted){
 }
 async function enterEmployeeDashboard(){
   if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_active_drivers');if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);}
-  me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():managerView();
+  me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():me.role==='complaints_officer'?complaintsOfficerView():managerView();
   startKitchenDelayMonitor();startOrderRealtime();
 }
 async function ownerBranchPicker(){
@@ -496,6 +496,40 @@ function copyCallcenterStatus(id){
  const o=ORD[id];if(!o)return;
  const msg='طلبك رقم '+o.order_no+' — '+(STG[o.workflow_stage]||'قيد المتابعة')+(o.driver?.full_name?' — الطيار: '+o.driver.full_name:'')+'. مطاعم واحة اليمن.';
  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(msg).then(()=>flash('تم نسخ الرسالة',true)).catch(()=>prompt('انسخ الرسالة',msg));else prompt('انسخ الرسالة',msg);
+}
+function complaintsOfficerView(){
+ if(!me||!(isOwner()||isLocationManager()||me.role==='complaints_officer'))return flash('غير مصرح',false);
+ $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث برقم العميل أو الطلب أو الشكوى" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div id="complaintsRows"></div>');
+ bindOut();$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
+ loadComplaintsInbox();
+}
+let complaintsInboxRows=[];
+async function loadComplaintsInbox(){
+ if(!$('complaintsRows'))return;
+ $('complaintsRows').textContent='جاري تحميل الشكاوى...';
+ const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});
+ if(!$('complaintsRows'))return;
+ if(error){$('complaintsRows').textContent='تعذر تحميل الشكاوى: '+error.message;return;}
+ complaintsInboxRows=data||[];paintComplaintsInbox();
+}
+function paintComplaintsInbox(){
+ const box=$('complaintsRows');if(!box)return;
+ const q=($('complaintsSearch')?.value||'').trim().toLowerCase(),status=$('complaintsFilter')?.value||'';
+ const rows=complaintsInboxRows.filter(x=>(!status||x.status===status)&&(!q||[x.customer_phone,x.order_no,x.title,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
+ $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
+ box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG')+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'—')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG'):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
+ box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=async()=>{
+  const x=complaintsInboxRows.find(v=>String(v.id)===b.dataset.complaint);if(!x)return;
+  const action=prompt('ما الإجراء الذي تم اتخاذه مع العميل؟');if(action===null)return;
+  if(action.trim().length<3)return flash('اكتب الإجراء بالتفصيل',false);
+  const next=prompt('حالة الشكوى: open أو in_progress أو resolved',x.status);
+  if(next===null)return;
+  if(!['open','in_progress','resolved'].includes(next))return flash('حالة غير صحيحة',false);
+  b.disabled=true;
+  const {error}=await safeRpc('dlv_complaint_followup',{p_incident:x.id,p_action:action.trim(),p_status:next});
+  if(error){b.disabled=false;return flash(error.message,false);}
+  flash('تم حفظ الإجراء وإتاحته للإدارة',true);loadComplaintsInbox();
+ });
 }
 function callcenterView() {
   const t = cairoDate();
@@ -1301,7 +1335,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- مسار الطلب: مطبخ ← مشرف ← طيار ---------- */
-function refreshView() { if (!me) return; if (me.role === 'driver') loadMine(); else if (me.workflow_role === 'kitchen') loadKitchen(); else if (me.workflow_role === 'callcenter_followup') { loadCallcenterOrders(); loadCallcenterRatings(); } else { loadAll(); loadPending(); loadCodes(); } }
+function refreshView() { if (!me) return; if (me.role === 'driver') loadMine(); else if (me.workflow_role === 'kitchen') loadKitchen(); else if (me.workflow_role === 'callcenter_followup') { loadCallcenterOrders(); loadCallcenterRatings(); } else if(me.role==='complaints_officer'){loadComplaintsInbox();} else { loadAll(); loadPending(); loadCodes(); } }
 const ordCard = (o, btn) => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><span class="badge" style="background:' + (o.workflow_stage === 'new' ? '#868e96' : '#2f9e44') + '">' + (STG[o.workflow_stage] || '') + '</span></div><div class="meta">' + esc([o.customer_name, o.phone, o.address].filter(Boolean).join(' · ')) + '</div>' + btn + '</div>';
 function kitchenView() {
   $('app').innerHTML = shell('<div class="meta">الطلبات الواردة من متابعة الكول سنتر تظهر هنا للتجهيز.</div><div id="kq"></div>');

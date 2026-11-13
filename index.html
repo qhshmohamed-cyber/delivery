@@ -237,9 +237,10 @@ async function boot() {
   me = data;
   await loadBrandConfig(); subscribeBrandConfig();
   if (isOwner()) { await ownerBranchPicker(); return; }
-  const permitted = Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id];
+  const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
+  if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
   if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
-  selectedBranch = me.branch_id;
+  selectedBranch = permitted[0];
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
     const r = await safeRpc('dlv_list_active_drivers');
     if (r.error) { drivers = []; console.error('تعذر تحميل الطيارين:', r.error.message); }
@@ -257,7 +258,7 @@ async function employeeBranchPicker(permitted){
   const branches=(data||[]).filter(b=>permitted.includes(b.id));
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
-  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=Number(b.dataset.empBranch);await enterEmployeeDashboard();});
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;await enterEmployeeDashboard();});
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){

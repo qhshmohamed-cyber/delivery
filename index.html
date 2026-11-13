@@ -1362,12 +1362,30 @@ function editPilotForm(r, done) {
 }
 
 /* ---------- تقرير الطلبات (المدير العام) ---------- */
+function openPerformanceReport(){
+ if(!isOwner()&&!canViewManagerBoard())return flash('التقرير للإدارة فقط',false);
+ if($('performancePanel'))return;
+ const d=document.createElement('div');d.id='performancePanel';d.style.cssText='position:fixed;inset:0;z-index:45;background:var(--bg);overflow:auto;padding:14px';
+ d.innerHTML='<div class="card"><div class="ord"><h2>📊 أداء الطيارين والأقسام</h2><button id="perfClose">إغلاق</button></div><label>من</label><input type="date" id="perfFrom" value="'+cairoDate()+'"><label>إلى</label><input type="date" id="perfTo" value="'+cairoDate()+'"><label>الفرع</label><select id="perfBranch"></select><button class="p" id="perfRun">عرض الأداء</button><p class="meta">النسب محسوبة من الطلبات المسجلة، والتقييمات من العملاء الذين قيّموا بالفعل. لا توجد درجات تقديرية للموظفين.</p></div><div id="perfResult"></div>';
+ document.body.appendChild(d);$('perfClose').onclick=()=>d.remove();
+ const branches=isOwner()?Object.keys(branchNames).map(Number):permittedBranches().map(Number);
+ $('perfBranch').innerHTML='<option value="">كل الفروع المسموح بها</option>'+branches.map(id=>'<option value="'+id+'">'+esc(branchNames[id]||id)+'</option>').join('');
+ async function run(){
+  const box=$('perfResult');box.textContent='جاري حساب الأداء...';
+  const {data,error}=await safeRpc('dlv_performance_report',{p_from:$('perfFrom').value,p_to:$('perfTo').value,p_branch:$('perfBranch').value?Number($('perfBranch').value):null});
+  if(!d.isConnected)return;if(error){box.textContent='تعذر عرض التقرير: '+error.message;return;}
+  box.innerHTML='<div class="card"><h3>إجمالي الطلبات: '+Number(data.total_orders||0)+'</h3></div><h3>أداء الأقسام</h3>'+
+  (data.departments||[]).map(x=>'<div class="card"><b>'+esc(x.name)+'</b><div>الطلبات: '+x.total+' · المكتملة: '+x.completed+'</div><div>نسبة الإكمال: '+(x.completion_pct??'—')+'%</div><div class="meta">متوسط الزمن: '+(x.avg_minutes??'غير متاح')+' دقيقة</div></div>').join('')+
+  '<h3>أداء كل طيار</h3>'+((data.drivers||[]).map(x=>'<div class="card"><div class="ord"><b>'+esc(x.name)+'</b><span class="meta">'+esc(branchNames[x.branch_id]||x.branch_id)+'</span></div><div>الطلبات: '+x.total+' · تم التوصيل: '+x.delivered+' · لم تكتمل: '+x.unsuccessful+'</div><div>نسبة نجاح التوصيل: '+(x.success_pct??'—')+'%</div><div>متوسط زمن التوصيل: '+(x.avg_minutes??'غير متاح')+' دقيقة</div><div>تقييم العملاء: '+(x.rating==null?'لا توجد تقييمات':x.rating+' / 5 ('+x.rated_orders+' تقييم)')+'</div></div>').join('')||'<div class="card">لا توجد طلبات مسندة لطيارين في الفترة المحددة</div>');
+ }
+ $('perfRun').onclick=run;run();
+}
 function openReport() {
   if(!isOwner() && !canViewManagerBoard()) return flash('التقارير للإدارة فقط',false);
   if(document.getElementById('rpt')) return;
   const d = document.createElement('div'); d.id = 'rpt';
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:env(safe-area-inset-top,0) 12px 24px';
-  d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button id="rcl">إغلاق</button></div>' +
+  d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button onclick="openPerformanceReport()">أداء الطيارين والأقسام</button><button id="rcl">إغلاق</button></div>' +
     '<div class="noprint card" style="margin-bottom:10px"><label for="rbranch">اختر الفرع</label><select id="rbranch"></select><label for="rdt">تاريخ التقرير</label><input type="date" id="rdt" value="' + cairoDate() + '"><div class="meta">يُعرض تقرير اليوم المختار كاملًا، ويمكن نسخه أو طباعته PDF لإرساله للإدارة.</div></div><div id="rbody"><div class="meta">جاري التحميل...</div></div>';
   document.body.appendChild(d);
   const available = isOwner() ? Object.keys(branchNames).map(Number) : permittedBranches().map(Number).filter(Number.isInteger);

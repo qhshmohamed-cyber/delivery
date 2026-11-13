@@ -146,17 +146,38 @@ function loginView(err) {
 let realtimeState = 'CLOSED';
 let realtimeRetryTimer = null;
 let reconnectRefreshTimer = null;
-function refreshOperationalData() {
-  if (!me || document.visibilityState !== 'visible') return;
-  clearTimeout(reconnectRefreshTimer);
-  reconnectRefreshTimer = setTimeout(() => {
-    refreshView();
+let operationalRefreshBusy = false;
+let operationalRefreshPending = false;
+let lastOperationalRefreshAt = 0;
+async function performOperationalRefresh() {
+  if (!me || document.visibilityState !== 'visible' || !navigator.onLine) return;
+  if (operationalRefreshBusy) { operationalRefreshPending = true; return; }
+  operationalRefreshBusy = true;
+  try {
+    await Promise.resolve(refreshView());
     if (canViewManagerBoard()) {
-      loadManagerLiveKpis(); loadManagerOpsPending(); loadManagerDelayed();
-      loadManagerRatings(); refreshKitchenDelayNotices();
+      await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices()]);
     }
-  }, 350);
+    lastOperationalRefreshAt = Date.now();
+  } catch(e) { console.warn('Realtime refresh failed',e); }
+  finally {
+    operationalRefreshBusy = false;
+    if (operationalRefreshPending) {
+      operationalRefreshPending = false;
+      refreshOperationalData();
+    }
+  }
 }
+function refreshOperationalData() {
+  if (!me || document.visibilityState !== 'visible' || !navigator.onLine) return;
+  clearTimeout(reconnectRefreshTimer);
+  reconnectRefreshTimer = setTimeout(performOperationalRefresh, 250);
+}
+// Lightweight fallback when a mobile browser suspends websocket events.
+setInterval(() => {
+  if (me && document.visibilityState === 'visible' && navigator.onLine &&
+      Date.now() - lastOperationalRefreshAt > 30000) refreshOperationalData();
+}, 30000);
 function startOrderRealtime() {
   if (!me) return;
   if (chan) { try { sb.removeChannel(chan); } catch (e) {} chan = null; }
@@ -488,7 +509,7 @@ function startManagerBoardRefresh(){
     if(!canViewManagerBoard() || document.visibilityState!=='visible' || managerBoardBusy) return;
     managerBoardBusy=true;
     try {
-      await Promise.all([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),loadManagerRatings(),refreshKitchenDelayNotices()]);
+      await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices()]);
       const u=$('managerUpdatedAt'); if(u) u.textContent='آخر تحديث للبيانات: '+tm(new Date().toISOString());
     } finally { managerBoardBusy=false; }
   },15000);

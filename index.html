@@ -1056,7 +1056,7 @@ async function acquireWakeLock() {
     wake.addEventListener('release', () => { wake = null; });
   } catch (e) { /* Wake Lock تحسين اختياري وليس ضمانًا للتتبع بالخلفية */ }
 }
-async function startShare() {
+async async function startShare() {
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
   shareWanted = true; lastSend = 0;

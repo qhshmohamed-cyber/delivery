@@ -580,7 +580,7 @@ function openManagementComplaints(){
 function callcenterView() {
   const t = cairoDate();
   $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="بحث برقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
-  bindOut(); $('nw').onclick = newOrderForm; $('cc_rf').onclick = loadCallcenterOrders;
+  bindOut(); bindOwnerQuickPanel(); $('nw').onclick = newOrderForm; $('cc_rf').onclick = loadCallcenterOrders;
   let qtimer; $('cc_q').oninput = () => { clearTimeout(qtimer); qtimer=setTimeout(loadCallcenterOrders,300); };
   loadCallcenterOrders(); loadCallcenterRatings();
 }
@@ -762,11 +762,29 @@ function openOperationsRoom(){
  roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{if(d.isConnected)refresh();}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},()=>{if(d.isConnected)refresh();}).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
  refresh();refreshTimer=setInterval(refresh,15000);
 }
+function ownerQuickPanel(){
+ if(!isOwner())return '';
+ return '<section class="card" style="border:2px solid var(--gold);padding:14px"><div class="ord"><div><h2 style="margin:0">👑 تحكم المالك</h2><div class="meta">كل فروعك من مكان واحد · اختر المطلوب فقط</div></div><span class="badge">مالك النظام</span></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px">'+
+ [['ownBranches','🏢 الفروع'],['ownAccounts','👥 الحسابات'],['ownOrders','📦 الطلبات'],['ownDrivers','🏍️ الطيارون'],['ownComplaints','📋 الشكاوى'],['ownReports','📊 التقارير']].map(x=>'<button class="g big" id="'+x[0]+'" style="min-height:62px">'+x[1]+'</button>').join('')+
+ '</div><details style="margin-top:12px"><summary style="cursor:pointer">⚙️ إعدادات متقدمة (للمالك فقط)</summary><div class="row" style="margin-top:10px"><button id="ownIdentity">الهوية والإعدادات</button><button id="ownSecurity">الأمان والصلاحيات</button><button id="ownRatings">تقييمات العملاء</button></div></details></section>';
+}
+function bindOwnerQuickPanel(){
+ if(!isOwner()||!$('ownBranches'))return;
+ $('ownBranches').onclick=ownerBranchPicker;
+ $('ownAccounts').onclick=managePilots;
+ $('ownOrders').onclick=openOperationsRoom;
+ $('ownDrivers').onclick=openMap;
+ $('ownComplaints').onclick=openManagementComplaints;
+ $('ownReports').onclick=openReport;
+ $('ownIdentity').onclick=openBrandSettings;
+ $('ownSecurity').onclick=openSecurityCommand;
+ $('ownRatings').onclick=ownerRatingsView;
+}
 function managerView() {
   const t = cairoDate();
   const owner = isOwner();
   const board = canViewManagerBoard();
-  const ownerTools = owner ? '<button id="ad">＋ إضافة حساب</button><button id="pm">👥 إدارة الحسابات</button><button id="rp">📊 التقارير</button><button class="g" id="ownerRatingsPage">⭐ سجل التقييمات</button><button class="p" id="brandSettings">⚙️ مركز تحكم المالك</button>' : '';
+  const ownerTools = owner ? '<button id="ad">＋ إنشاء حساب موظف</button>' : '';
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
@@ -781,6 +799,7 @@ function managerView() {
     <section class="card"><h2>🔎 البحث عن طلب</h2><div class="row"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></section>
     <div class="row"><button class="p" id="operationsBtn">🚦 غرفة العمليات</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button class="g" id="nw">＋ طلب جديد</button></div>
   ` : `
+    ${ownerQuickPanel()}
     <div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">
     <select id="f_st"><option value="">كل الحالات</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select>
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>

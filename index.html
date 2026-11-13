@@ -416,7 +416,7 @@ function newOrderForm() {
   const isMgr = true;
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
-    <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
+    <div class="meta">موظف تسجيل الطلب: ${esc(me.full_name||"الحساب الحالي")} — يتم تسجيل الاسم تلقائيًا من حساب الموظف</div><label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
     ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch">${Object.entries(branchNames).map(([id,name])=>`<option value="${id}" ${Number(selectedBranch)===Number(id)?'selected':''}>${esc(name)}</option>`).join('')}</select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="n_wa_consent" style="width:auto"> العميل وافق على استلام رابط المتابعة عبر واتساب</label>
@@ -512,7 +512,7 @@ function copyCallcenterStatus(id){
 }
 function complaintsOfficerView(){
  if(!me||!(isOwner()||isLocationManager()||me.role==='complaints_officer'))return flash('غير مصرح',false);
- $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث برقم العميل أو الطلب أو الشكوى" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button></div><div id="complaintsRows"></div>');
+ $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث برقم العميل أو الطلب أو الشكوى" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');
  bindOut();$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
  loadComplaintsInbox();
 }
@@ -1362,8 +1362,31 @@ function editPilotForm(r, done) {
 }
 
 /* ---------- تقرير الطلبات (المدير العام) ---------- */
+function openCallcenterEmployeeReport(){
+ if(!isOwner()&&!canViewManagerBoard())return flash('التقرير للمالك والمدير فقط',false);
+ if($('ccEmployeeReport'))return;
+ const d=document.createElement('div');d.id='ccEmployeeReport';d.style.cssText='position:fixed;inset:0;z-index:47;background:var(--bg);overflow:auto;padding:14px';
+ d.innerHTML='<div class="card"><div class="ord"><h2>👥 إنتاجية موظفي الكول سنتر</h2><button id="ccerClose">إغلاق</button></div><label>تاريخ الطلبات</label><input type="date" id="ccerDay" value="'+cairoDate()+'"><label>الفرع</label><select id="ccerBranch"></select><button class="p" id="ccerRun">عرض الموظفين</button><p class="meta">الموظف صاحب الطلب هو الحساب الذي سجله فعليًا؛ لا يمكن تغييره يدويًا.</p></div><div id="ccerResults"></div>';
+ document.body.appendChild(d);$('ccerClose').onclick=()=>d.remove();
+ const branches=isOwner()?Object.keys(branchNames).map(Number):permittedBranches().map(Number);
+ $('ccerBranch').innerHTML='<option value="">جميع الفروع المسموح بها</option>'+branches.map(id=>'<option value="'+id+'">'+esc(branchNames[id]||id)+'</option>').join('');
+ async function run(user=null){
+  const box=$('ccerResults');box.textContent='جاري التحميل...';
+  const {data,error}=await safeRpc('dlv_callcenter_employee_report',{p_day:$('ccerDay').value,p_branch:$('ccerBranch').value?Number($('ccerBranch').value):null,p_employee:user});
+  if(!d.isConnected)return;if(error){box.textContent='تعذر تحميل التقرير: '+error.message;return;}
+  if(user){
+   box.innerHTML='<button id="ccerBack">← جميع الموظفين</button><h3>طلبات الموظف في '+esc(data.day)+'</h3>'+
+   (data.orders||[]).map(o=>'<div class="card"><div class="ord"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc((ST[o.status]||[o.status])[0])+'</span></div><div class="meta">'+esc(o.employee)+' · '+new Date(o.created_at).toLocaleString('ar-EG')+'</div></div>').join('')||'<div class="card">لا توجد طلبات</div>';
+   $('ccerBack').onclick=()=>run();return;
+  }
+  box.innerHTML='<h3>الموظفون · '+esc(data.day)+'</h3>'+
+  (data.summary||[]).map((o,i)=>'<div class="card"><div class="ord"><b>'+esc(o.employee)+'</b><span class="badge">'+o.total+' طلب</span></div><div class="meta">'+esc(branchNames[o.branch_id]||o.branch_id)+' · تم التوصيل: '+o.delivered+' · ملغي: '+o.cancelled+' · فشل: '+o.failed+'</div><button class="g" data-employee-index="'+i+'">عرض طلبات الموظف</button></div>').join('')||'<div class="card">لا توجد طلبات مسجلة في اليوم المحدد</div>';
+  box.querySelectorAll('[data-employee-index]').forEach(b=>b.onclick=()=>{const o=data.summary[Number(b.dataset.employeeIndex)];if(o.user_id)run(o.user_id);else flash('الحساب غير متاح',false);});
+ }
+ $('ccerRun').onclick=()=>run();run();
+}
 function openPerformanceReport(){
- if(!isOwner()&&!canViewManagerBoard())return flash('التقرير للإدارة فقط',false);
+ if(!isOwner()&&!canViewManagerBoard()&&me?.role!=='complaints_officer')return flash('غير مصرح',false);
  if($('performancePanel'))return;
  const d=document.createElement('div');d.id='performancePanel';d.style.cssText='position:fixed;inset:0;z-index:45;background:var(--bg);overflow:auto;padding:14px';
  d.innerHTML='<div class="card"><div class="ord"><h2>📊 أداء الطيارين والأقسام</h2><button id="perfClose">إغلاق</button></div><label>من</label><input type="date" id="perfFrom" value="'+cairoDate()+'"><label>إلى</label><input type="date" id="perfTo" value="'+cairoDate()+'"><label>الفرع</label><select id="perfBranch"></select><button class="p" id="perfRun">عرض الأداء</button><p class="meta">النسب محسوبة من الطلبات المسجلة، والتقييمات من العملاء الذين قيّموا بالفعل. لا توجد درجات تقديرية للموظفين.</p></div><div id="perfResult"></div>';
@@ -1385,7 +1408,7 @@ function openReport() {
   if(document.getElementById('rpt')) return;
   const d = document.createElement('div'); d.id = 'rpt';
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:env(safe-area-inset-top,0) 12px 24px';
-  d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button onclick="openPerformanceReport()">أداء الطيارين والأقسام</button><button id="rcl">إغلاق</button></div>' +
+  d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button onclick="openPerformanceReport()">أداء الطيارين والأقسام</button><button onclick="openCallcenterEmployeeReport()">طلبات موظفي الكول سنتر</button><button id="rcl">إغلاق</button></div>' +
     '<div class="noprint card" style="margin-bottom:10px"><label for="rbranch">اختر الفرع</label><select id="rbranch"></select><label for="rdt">تاريخ التقرير</label><input type="date" id="rdt" value="' + cairoDate() + '"><div class="meta">يُعرض تقرير اليوم المختار كاملًا، ويمكن نسخه أو طباعته PDF لإرساله للإدارة.</div></div><div id="rbody"><div class="meta">جاري التحميل...</div></div>';
   document.body.appendChild(d);
   const available = isOwner() ? Object.keys(branchNames).map(Number) : permittedBranches().map(Number).filter(Number.isInteger);

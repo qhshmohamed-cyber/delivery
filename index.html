@@ -295,22 +295,51 @@ async function openBrandSettings(){
  if(!OWNER_ONLY()) return flash('إعدادات الهوية متاحة لمالك النظام فقط',false);
  await loadBrandConfig();
  const d=document.createElement('div');d.className='modal';
- d.innerHTML=`<div><div class="ord"><h2 style="font-size:18px">🎨 هوية النظام والتصميم</h2><button id="brandClose">إغلاق</button></div><p class="meta">أي تعديل تحفظه يظهر لجميع المستخدمين فورًا بعد المزامنة.</p>
+ d.innerHTML=`<div><div class="ord"><h2 style="font-size:18px">⚙️ مركز تحكم المالك</h2><button id="brandClose">إغلاق</button></div>
+ <p class="meta">إعدادات المالك. الأدوات غير المفعلة موضحة بوضوح ولا تغير بيانات النظام.</p>
+ <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0">
+ <button type="button" class="g" id="oc_identity">🎨 الهوية والتصميم</button>
+ <button type="button" class="g" id="oc_whatsapp">📲 واتساب والإشعارات</button>
+ <button type="button" class="g" id="oc_drivers">🏍️ الطيارون والخريطة</button>
+ <button type="button" class="g" id="oc_orders">📦 الطلبات والمراقبة</button>
+ <button type="button" class="g" id="oc_branches">🏢 الفروع</button>
+ <button type="button" class="g" id="oc_roles">🛡️ الصلاحيات</button>
+ <button type="button" class="g" id="oc_reports">📊 التقارير</button>
+ <button type="button" class="g" id="oc_security">🔐 الأمان والسجل</button>
+ </div>
+ <div id="oc_notice" class="meta" role="status" style="margin-bottom:10px"></div>
+ <div id="oc_identity_section"><p class="meta">أي تعديل تحفظه يظهر لجميع المستخدمين بعد المزامنة.</p>
  <label>اسم البراند</label><input id="br_name" maxlength="60" value="${esc(brandConfig.brand_name)}">
  <label>اسم التطبيق</label><input id="br_app" maxlength="60" value="${esc(brandConfig.app_name)}">
  <label>لوجو البراند (من الموبايل)</label><input id="br_logo" type="file" accept="image/png,image/jpeg,image/webp">
  <label>خلفية التطبيق (من الموبايل)</label><input id="br_bg" type="file" accept="image/png,image/jpeg,image/webp">
  <label>رفع أيقونة الطيار من الموبايل (PNG / JPG / WebP)</label><input id="br_rider_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="meta">تظهر الأيقونة الجديدة لكل الحسابات بعد الحفظ، وتُحفظ بأمان في تخزين الهوية.</div><label>رابط الأيقونة الحالية (اختياري)</label><input id="br_rider" dir="ltr" maxlength="500" value="${esc(brandConfig.rider_icon_url||'rider-pin.svg')}" placeholder="rider-pin.svg">
- <div class="card"><h3>📲 إعدادات واتساب المطعم — المالك فقط</h3>
+ </div><div id="oc_whatsapp_section"> <div class="card"><h3>📲 إعدادات واتساب المطعم — المالك فقط</h3>
  <label>رقم واتساب المرسل (بكود الدولة، مثال: 201xxxxxxxxx)</label>
  <input id="br_wa_sender" dir="ltr" inputmode="tel" maxlength="15" value="" placeholder="201xxxxxxxxx">
  <div class="card" style="margin-top:10px"><b>رسائل متابعة الطلب الجاهزة</b><div class="meta">① تم تسجيل طلبك — رابط متابعة الطلب<br>② طلبك في المطبخ — رابط المتابعة<br>③ طلبك خرج مع الطيار — رابط المتابعة</div></div>
  <label style="display:flex;align-items:center;gap:8px"><input id="br_wa_auto" type="checkbox" style="width:auto" disabled> إرسال تلقائي بعد ربط WhatsApp Business Platform المعتمد</label>
  <div class="meta">الحالة: الإشعارات تُجهَّز بأمان على السيرفر لكنها لا تُرسل حاليًا. الرقم المحفوظ لا يصبح مرسلًا إلا بعد تفعيله رسميًا وربط رقم الهاتف المعتمد وقوالب الرسائل وموافقة العميل. لا تضع رموز API أو كلمات سر هنا.</div></div>
- <div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
+ </div><div id="oc_identity_colors"><div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
  <div class="card" style="text-align:center"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'logo-original.png')}" style="width:144px;height:144px;max-width:100%;object-fit:contain;object-position:center;border-radius:0;background:transparent;display:block;margin:8px auto"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div class="meta">معاينة الهوية</div></div>
- <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;
+</div> <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;
  document.body.appendChild(d); $('brandClose').onclick=()=>d.remove();
+ const ownerSections=['oc_identity_section','oc_whatsapp_section','oc_identity_colors'];
+ const showOwnerSection=(key)=>{
+   ownerSections.forEach(id=>$(id).style.display=(key==='identity' ? id!=='oc_whatsapp_section' : key==='whatsapp' ? id==='oc_whatsapp_section' : 'none')?'':'none');
+   const notes={
+    drivers:'الطيارون والخريطة: افتح خريطة الطيارين من لوحة المدير. إدارة المواقع تعمل من هناك، وإعدادات متقدمة قيد التطوير.',
+    orders:'الطلبات والمراقبة: متابعة الحالات والتأخيرات متاحة في لوحة المدير. تخصيص مسارات الطلبات قيد التطوير.',
+    branches:'الفروع: تغيير الفرع متاح للحسابات المصرح لها من الواجهة الرئيسية. إضافة فروع جديدة من هذه الصفحة قيد التطوير.',
+    roles:'الصلاحيات: إدارة حسابات الموظفين متاحة من أدوات الإدارة الحالية. محرر الصلاحيات التفصيلي قيد التطوير.',
+    reports:'التقارير: الإحصائيات متاحة في لوحة المدير. إعداد تقارير مخصصة من هنا قيد التطوير.',
+    security:'الأمان: تطبيق الصلاحيات يتم من قاعدة البيانات. سجل تدقيق شامل واسترجاع الإعدادات قيد التطوير.'
+   };
+   $('oc_notice').textContent=notes[key]||'';
+   if(key==='identity'||key==='whatsapp') $('oc_notice').textContent=key==='identity'?'إعدادات الهوية قابلة للتعديل والحفظ.':'رقم واتساب قابل للحفظ؛ الإرسال التلقائي يتطلب مزودًا رسميًا مفعلًا.';
+ };
+ for(const key of ['identity','whatsapp','drivers','orders','branches','roles','reports','security']) $('oc_'+key).onclick=()=>showOwnerSection(key);
+ showOwnerSection('identity');
  const {data:waSettings,error:waLoadError}=await sb.rpc('dlv_owner_whatsapp_settings');if(!waLoadError && waSettings){$('br_wa_sender').value=waSettings.sender_phone||'';}
  $('br_name').oninput=()=>{$('br_preview_name').textContent=$('br_name').value||'اسم البراند';};
  $('br_logo').onchange=()=>{const f=$('br_logo').files[0];if(!f)return;const u=URL.createObjectURL(f);const im=$('br_preview_logo');im.onload=()=>URL.revokeObjectURL(u);im.onerror=()=>{URL.revokeObjectURL(u);$('br_msg').textContent='تعذر قراءة الصورة. اختار PNG أو JPG أو WEBP واضحة.';};im.src=u;};

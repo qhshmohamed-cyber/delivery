@@ -512,7 +512,7 @@ function copyCallcenterStatus(id){
 }
 function complaintsOfficerView(){
  if(!me||!(isOwner()||isLocationManager()||me.role==='complaints_officer'))return flash('غير مصرح',false);
- $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث برقم العميل أو الطلب أو الشكوى" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive('problems')">🚨 سجل المشاكل</button></div><div id="complaintsRows"></div>');
+ $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث برقم العميل أو الطلب أو الشكوى" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button></div><div id="complaintsRows"></div>');
  bindOut();$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
  loadComplaintsInbox();
 }
@@ -569,7 +569,7 @@ function openManagementComplaints(){
  if(!canViewManagerBoard())return flash('غير مصرح',false);
  if($('managementComplaints'))return;
  const d=document.createElement('div');d.id='managementComplaints';d.style.cssText='position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto;padding:14px';
- d.innerHTML='<div class="card"><div class="ord"><h2>شكاوى العملاء وإجراءات المتابعة</h2><button id="complaintsClose">إغلاق</button></div><button class="g" onclick="openFollowupArchive('problems')">🚨 عرض سجل المشاكل</button><div id="complaintsManagementRows">جاري التحميل...</div></div>';
+ d.innerHTML='<div class="card"><div class="ord"><h2>شكاوى العملاء وإجراءات المتابعة</h2><button id="complaintsClose">إغلاق</button></div><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 عرض سجل المشاكل</button><div id="complaintsManagementRows">جاري التحميل...</div></div>';
  document.body.appendChild(d);$('complaintsClose').onclick=()=>d.remove();
  safeRpc('dlv_complaint_inbox',{p_branch:isOwner()?null:selectedBranch}).then(({data,error})=>{
   const box=$('complaintsManagementRows');if(!box)return;
@@ -646,7 +646,7 @@ function openFollowupArchive(kind){
 }
 function callcenterView() {
   const t = cairoDate();
-  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><button class="g" onclick="openFollowupArchive('cancelled')">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive('problems')">🚨 المشاكل والشكاوى</button></div><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div class="card"><div class="ord"><h3>🚦 متابعة وتنبيهات الطلبات</h3><span class="meta" id="cc_pulse_stamp"></span></div><div id="cc_pulse">جاري التحميل...</div><button class="g" id="cc_pulse_refresh">↻ تحديث التنبيهات</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
+  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 المشاكل والشكاوى</button></div><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div class="card"><div class="ord"><h3>🚦 متابعة وتنبيهات الطلبات</h3><span class="meta" id="cc_pulse_stamp"></span></div><div id="cc_pulse">جاري التحميل...</div><button class="g" id="cc_pulse_refresh">↻ تحديث التنبيهات</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
   bindOut(); bindOwnerQuickPanel(); $('nw').onclick = newOrderForm; $('cc_rf').onclick = loadCallcenterOrders;
   let qtimer; $('cc_q').oninput = () => { clearTimeout(qtimer); qtimer=setTimeout(loadCallcenterOrders,300); };
   loadCallcenterOrders(); loadCallcenterRatings(); startFollowupPulse(); $('cc_pulse_refresh').onclick=refreshFollowupPulse;
@@ -873,7 +873,7 @@ function managerView() {
     <section class="card"><div class="ord"><h2>🚨 تأخير المطبخ</h2><span class="badge" style="background:#e8590c">أكثر من 25 دقيقة</span></div><div id="managerDelayed"></div></section>
     <section class="card"><div class="ord"><h2>⭐ تقييمات العملاء</h2><span class="meta">أحدث 5 تقييمات</span></div><div id="managerRatings"></div></section>
     <section class="card"><h2>🔎 البحث عن طلب</h2><div class="row"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></section>
-    <div class="row"><button class="g" onclick="openFollowupArchive('cancelled')">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive('problems')">🚨 المشاكل والشكاوى</button></div><div class="row"><button class="p" id="operationsBtn">🚦 غرفة العمليات</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button class="g" id="nw">＋ طلب جديد</button></div>
+    <div class="row"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 المشاكل والشكاوى</button></div><div class="row"><button class="p" id="operationsBtn">🚦 غرفة العمليات</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button class="g" id="nw">＋ طلب جديد</button></div>
   ` : `
     ${ownerQuickPanel()}
     <div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">

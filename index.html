@@ -302,13 +302,40 @@ async function enterEmployeeDashboard(){
   me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():me.role==='complaints_officer'?complaintsOfficerView():managerView();
   startKitchenDelayMonitor();startOrderRealtime();
 }
+async function ownerPasswordSettings(){
+ if(!isOwner())return;
+ $('app').innerHTML='<div class="card" style="max-width:440px;margin:30px auto;padding:20px"><h2>تغيير كلمة مرور المالك</h2><p class="meta">استخدم كلمة مرور قوية وفريدة، 12 حرفًا على الأقل. لن يتم عرضها أو تخزينها في صفحة التطبيق.</p><label>كلمة المرور الحالية</label><input id="ownerOldPass" type="password" autocomplete="current-password"><label>كلمة المرور الجديدة</label><input id="ownerNewPass" type="password" autocomplete="new-password"><label>تأكيد كلمة المرور الجديدة</label><input id="ownerConfirmPass" type="password" autocomplete="new-password"><div id="ownerPassMsg" role="status"></div><button class="p big" id="ownerSavePass">حفظ كلمة المرور</button><button id="ownerPassBack">رجوع</button></div>';
+ $('ownerPassBack').onclick=()=>ownerBranchPicker();
+ $('ownerSavePass').onclick=async()=>{
+  const old=$('ownerOldPass').value, pw=$('ownerNewPass').value, confirm=$('ownerConfirmPass').value;
+  const msg=$('ownerPassMsg');
+  const fail=t=>{msg.className='msg e';msg.textContent=t;};
+  if(pw!==confirm)return fail('تأكيد كلمة المرور غير مطابق');
+  if(pw.length<12||!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)||!/[^A-Za-z0-9]/.test(pw))return fail('استخدم 12 حرفًا على الأقل تشمل حرفًا كبيرًا وصغيرًا ورقمًا ورمزًا');
+  if(old===pw)return fail('اختر كلمة مرور مختلفة عن الحالية');
+  $('ownerSavePass').disabled=true;
+  try{
+   const session=await sb.auth.getUser();
+   const email=session.data?.user?.email;
+   if(!email)throw Error('تعذر التحقق من الحساب');
+   const checked=await sb.auth.signInWithPassword({email,password:old});
+   if(checked.error||checked.data?.user?.id!==me.user_id)throw Error('كلمة المرور الحالية غير صحيحة');
+   const changed=await sb.auth.updateUser({password:pw});
+   if(changed.error)throw Error(changed.error.message);
+   $('ownerOldPass').value='';$('ownerNewPass').value='';$('ownerConfirmPass').value='';
+   msg.className='msg o';msg.textContent='تم تغيير كلمة المرور بنجاح';
+  }catch(e){fail(e.message||'تعذر تحديث كلمة المرور');}
+  finally{$('ownerSavePass').disabled=false;}
+ };
+}
 async function ownerBranchPicker(){
   const {data,error}=await safeRpc('dlv_list_branches');
   if(error){ console.warn('تعذر تحميل قائمة الفروع:',error.message); return reconnectView('تعذر تحميل قائمة الفروع الآن. جلسة الدخول محفوظة؛ أعد المحاولة.'); }
   const branches=data||[];branchNames=Object.fromEntries(branches.map(b=>[b.id,b.name]));
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض جميع الفروع معًا</button><button id="addNewBranch" class="g big">➕ إضافة فرع جديد</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض جميع الفروع معًا</button><button id="addNewBranch" class="g big">➕ إضافة فرع جديد</button></div><button id="ownerChangePass" class="g big" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
   $('addNewBranch').onclick=openOwnerBranchManager;
+  $('ownerChangePass').onclick=ownerPasswordSettings;
   $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterOwnerDashboard(){

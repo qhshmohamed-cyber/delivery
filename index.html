@@ -512,6 +512,64 @@ async function loadCallcenterRatings() {
 
 /* ---------- واجهة المدير ---------- */
 /* غرفة العمليات: مدير الفرع أو المالك فقط، والبيانات تمر عبر RLS */
+
+function openSecurityCommand(){
+ if(!canViewManagerBoard())return flash('غير مصرح',false);
+ if($('securityCommand'))return;
+ const d=document.createElement('div');d.id='securityCommand';d.style.cssText='position:fixed;inset:0;z-index:35;background:var(--bg);overflow:auto;padding:16px';
+ d.innerHTML='<div class="card"><div class="ord"><h2>🛡️ مركز الأمن والتشغيل</h2><button id="scClose">إغلاق</button></div><div class="meta">سجل التدقيق وقواعد التأخير والمشكلات · لا يتم عرض بيانات العملاء الشخصية</div><label>الفرع</label><select id="scBranch"></select><div class="row"><button id="scReload">تحديث البيانات</button></div><div id="scStatus" class="meta"></div></div>'+
+ '<div class="card"><h3>⏱️ حدود التأخير للفرع (بالدقائق)</h3><label>المطبخ</label><input id="scKitchen" type="number" min="5" max="240" value="25"><label>انتظار المشرف</label><input id="scDispatch" type="number" min="5" max="240" value="15"><label>التوصيل</label><input id="scDelivery" type="number" min="5" max="360" value="45"><button id="scSaveSla">حفظ القواعد</button></div>'+
+ '<div class="card"><h3>🚨 إدارة المشكلات</h3><label>عنوان المشكلة</label><input id="scTitle" maxlength="160"><label>التفاصيل</label><textarea id="scDetails" maxlength="2000"></textarea><label>الأولوية</label><select id="scPriority"><option value="low">منخفضة</option><option value="medium">متوسطة</option><option value="high">عالية</option><option value="critical">حرجة</option></select><button id="scCreate">تسجيل المشكلة</button><div id="scIncidents"></div></div>'+
+ '<div class="card"><h3>📋 سجل العمليات الأمني</h3><div id="scAudit"></div></div>'+
+ '<div class="card"><h3>🔐 الجلسة الحالية</h3><div class="meta">يمكنك إنهاء جلستك الحالية. لا تتوفر هنا إدارة جلسات الأجهزة الأخرى حتى يتم توفيرها عبر واجهة خادم آمنة.</div><button id="scSignout">تسجيل الخروج من الحساب</button></div>';
+ document.body.appendChild(d);
+ const ids=isOwner()?[1,2]:permittedBranches().map(Number).filter(Number.isInteger);
+ const allowed=[...new Set(ids)];if(!allowed.length){d.remove();return flash('لا توجد فروع مصرح بها',false);}
+ $('scBranch').innerHTML=allowed.map(id=>'<option value="'+id+'">'+esc(branchTitle(id))+'</option>').join('');
+ $('scBranch').value=allowed.includes(Number(selectedBranch))?String(selectedBranch):String(allowed[0]);
+ const branch=()=>Number($('scBranch').value);
+ const status=t=>{$('scStatus').textContent=t;};
+ $('scClose').onclick=()=>d.remove();
+ async function reload(){
+  if(!d.isConnected)return;const b=branch();if(!allowed.includes(b))return;
+  status('جاري تحميل البيانات...');
+  try{
+   const [sla,inc,audit]=await Promise.all([
+    sb.from('dlv_branch_sla').select('kitchen_minutes,dispatch_minutes,delivery_minutes').eq('branch_id',b).maybeSingle(),
+    sb.from('dlv_incidents').select('id,title,details,priority,status,created_at').eq('branch_id',b).order('created_at',{ascending:false}).limit(60),
+    sb.from('dlv_security_audit').select('at,entity,entity_id,action,actor,changes').eq('branch_id',b).order('at',{ascending:false}).limit(80)
+   ]);
+   if(!d.isConnected||b!==branch())return;
+   if(sla.error||inc.error||audit.error)throw(sla.error||inc.error||audit.error);
+   $('scKitchen').value=sla.data?.kitchen_minutes??25;$('scDispatch').value=sla.data?.dispatch_minutes??15;$('scDelivery').value=sla.data?.delivery_minutes??45;
+   $('scIncidents').innerHTML=(inc.data||[]).map(x=>'<div class="card"><b>#'+x.id+' · '+esc(x.title)+'</b><div class="meta">'+esc(x.priority)+' · '+esc(x.status)+' · '+new Date(x.created_at).toLocaleString('ar-EG')+'</div><div>'+esc(x.details)+'</div><div class="row"><button data-incident="'+x.id+'" data-next="in_progress">بدء المعالجة</button><button data-incident="'+x.id+'" data-next="resolved">تم الحل</button><button data-incident="'+x.id+'" data-next="open">إعادة فتح</button></div></div>').join('')||'<div class="meta">لا توجد مشكلات مسجلة</div>';
+   $('scIncidents').querySelectorAll('button[data-incident]').forEach(btn=>btn.onclick=async()=>{
+    const x=(inc.data||[]).find(v=>String(v.id)===btn.dataset.incident);if(!x)return;
+    btn.disabled=true;const {error}=await sb.rpc('dlv_manage_incident',{p_id:x.id,p_branch:b,p_title:x.title,p_details:x.details,p_priority:x.priority,p_status:btn.dataset.next});
+    if(error){status('فشل تعديل المشكلة: '+error.message);btn.disabled=false;}else reload();
+   });
+   $('scAudit').innerHTML=(audit.data||[]).map(x=>'<div class="ord" style="padding:8px 0;border-bottom:1px solid #999"><span>'+esc(x.entity)+' · '+esc(x.action)+' · '+esc(x.entity_id||'')+'</span><small>'+new Date(x.at).toLocaleString('ar-EG')+' · '+esc(String(x.actor||'النظام').slice(0,8))+'</small></div>').join('')||'<div class="meta">لا توجد تغييرات مسجلة بعد تفعيل السجل</div>';
+   status('تم تحميل البيانات بنجاح');
+  }catch(e){status('تعذر التحميل: '+e.message);}
+ }
+ $('scBranch').onchange=reload;$('scReload').onclick=reload;
+ $('scSaveSla').onclick=async()=>{
+  const vals=[$('scKitchen').value,$('scDispatch').value,$('scDelivery').value].map(Number);
+  if(!vals.every(Number.isInteger)||vals[0]<5||vals[0]>240||vals[1]<5||vals[1]>240||vals[2]<5||vals[2]>360)return status('القيم خارج الحدود المسموحة');
+  const btn=$('scSaveSla');btn.disabled=true;
+  const {error}=await sb.rpc('dlv_save_branch_sla',{p_branch:branch(),p_kitchen:vals[0],p_dispatch:vals[1],p_delivery:vals[2]});
+  btn.disabled=false;if(error)status('فشل الحفظ: '+error.message);else reload();
+ };
+ $('scCreate').onclick=async()=>{
+  const title=$('scTitle').value.trim(),details=$('scDetails').value,priority=$('scPriority').value;
+  if(title.length<3)return status('عنوان المشكلة يجب أن يكون 3 أحرف على الأقل');
+  const btn=$('scCreate');btn.disabled=true;
+  const {error}=await sb.rpc('dlv_manage_incident',{p_id:null,p_branch:branch(),p_title:title,p_details:details,p_priority:priority,p_status:'open'});
+  btn.disabled=false;if(error)status('فشل التسجيل: '+error.message);else{$('scTitle').value='';$('scDetails').value='';reload();}
+ };
+ $('scSignout').onclick=async()=>{if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;const {error}=await sb.auth.signOut({scope:'local'});if(error)status(error.message);else location.reload();};
+ reload();
+}
 function openOperationsRoom(){
  if(!canViewManagerBoard()) return flash('غرفة العمليات متاحة للمدير المصرح له فقط',false);
  if(document.getElementById('operationsRoom')) return;
@@ -523,7 +581,7 @@ function openOperationsRoom(){
  (isOwner()||allowed.length>1?'<option value="all">جميع الفروع المصرح بها</option>':'')+
  allowed.map(id=>'<option value="'+id+'">'+esc(branchTitle(id))+'</option>').join('')+
  '</select><div class="meta" id="orStatus">جاري الاتصال...</div></div>'+
- '<div class="card"><div class="row"><label>التاريخ <input type="date" id="orDate" value="'+cairoDate()+'"></label><label>الحالة <select id="orFilter"><option value="all">كل الحالات</option><option value="new">انتظار</option><option value="out">مع الطيار</option><option value="delivered">تم التوصيل</option><option value="cancelled">ملغي</option></select></label></div><div class="row"><input id="orSearch" placeholder="بحث برقم الطلب" maxlength="40"><button id="orMap">🗺️ خريطة الطيارين</button><button id="orReport">📄 تقرير الوردية / PDF</button><button id="orRefresh">↻ تحديث الآن</button></div></div><div class="grid" id="orKpis"></div><div class="card"><h3>👨‍🍳 مراحل المطبخ والتوصيل</h3><div id="orKitchen"></div></div><div class="card"><h3>🚨 تنبيهات التشغيل</h3><div id="orAlerts">جاري التحميل...</div></div>'+
+ '<div class="card"><div class="row"><label>التاريخ <input type="date" id="orDate" value="'+cairoDate()+'"></label><label>الحالة <select id="orFilter"><option value="all">كل الحالات</option><option value="new">انتظار</option><option value="out">مع الطيار</option><option value="delivered">تم التوصيل</option><option value="cancelled">ملغي</option></select></label></div><div class="row"><input id="orSearch" placeholder="بحث برقم الطلب" maxlength="40"><button id="orMap">🗺️ خريطة الطيارين</button><button id="orReport">📄 تقرير الوردية / PDF</button><button id="orRefresh">↻ تحديث الآن</button><button id="orSecurity">🛡️ مركز الأمن والتشغيل</button></div></div><div class="grid" id="orKpis"></div><div class="card"><h3>👨‍🍳 مراحل المطبخ والتوصيل</h3><div id="orKitchen"></div></div><div class="card"><h3>🚨 تنبيهات التشغيل</h3><div id="orAlerts">جاري التحميل...</div></div>'+
  '<div class="card"><h3>📡 رادار آخر تحركات الطلبات</h3><div class="meta">الأحداث المستنتجة من توقيتات الطلبات المسجلة</div><div id="orRadar"></div></div><div class="card"><h3>🏢 مقارنة الفروع</h3><div id="orBranches"></div></div><div class="card"><h3>🛡️ صحة الاتصال</h3><div id="orHealth"></div></div><div class="card"><h3>📦 الطلبات الجارية</h3><div id="orOrders">جاري التحميل...</div></div>'+
  '<div class="card"><h3>🏍️ حالة GPS للطيارين</h3><div id="orDrivers">جاري التحميل...</div></div>';
  document.body.appendChild(d);
@@ -582,6 +640,7 @@ function openOperationsRoom(){
  }
  $('orBranch').onchange=refresh;$('orDate').onchange=refresh;$('orFilter').onchange=paint;$('orSearch').oninput=paint;
  $('orRefresh').onclick=refresh;
+ $('orSecurity').onclick=()=>openSecurityCommand();
  $('orMap').onclick=()=>{close();openMap();};
  $('orReport').onclick=()=>{const branch=$('orBranch').value,date=$('orDate').value;close();openReport();if($('rbranch'))$('rbranch').value=branch;if($('rdt'))$('rdt').value=date;if($('rdt'))$('rdt').dispatchEvent(new Event('change'));};
  roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{if(d.isConnected)refresh();}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},()=>{if(d.isConnected)refresh();}).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});

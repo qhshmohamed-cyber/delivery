@@ -251,7 +251,7 @@ function loginView(err) {
    target.replaceChildren(...partners.map(p=>{
     const item=document.createElement('div');item.style.cssText='display:flex;flex-direction:column;align-items:center;gap:6px;max-width:112px;text-align:center;color:#f7f0df;font-size:12px';
     const logo=document.createElement('img');const u=String(p.logo_url||'');
-    logo.src=/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u)?u:'yourstaff-icon.svg';
+    let partnerLogo='';try{const parsed=new URL(u,location.href);if(parsed.protocol==='https:'||parsed.origin===location.origin)partnerLogo=parsed.href;}catch(_){} logo.src=partnerLogo||'data:,';
     logo.alt='شعار '+p.display_name;logo.loading='lazy';logo.decoding='async';logo.className='ys-partner-logo';logo.onerror=()=>{logo.style.display='none';const fallback=document.createElement('span');fallback.textContent=p.display_name.slice(0,2);fallback.setAttribute('aria-label','شعار غير متاح');fallback.style.cssText='display:grid;place-items:center;width:76px;height:76px;border-radius:14px;background:#f5ead6;color:#6b4a23;font-weight:800;font-size:24px';logo.after(fallback)};
     const name=document.createElement('span');name.textContent=p.display_name;item.append(logo,name);return item;
    }));

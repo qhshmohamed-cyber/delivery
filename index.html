@@ -222,6 +222,35 @@ window.addEventListener('offline', () => {
   const app = $('app');
   if (app && me) flash('الاتصال انقطع — البيانات المعروضة قد لا تكون محدثة. سنعيد المزامنة عند عودة الإنترنت.', false);
 });
+async function ownerMfaGate(){
+ const listed=await sb.auth.mfa.listFactors();
+ if(listed.error){reconnectView('تعذر فحص التحقق الإضافي');return false;}
+ const verified=(listed.data?.totp||[]).filter(x=>x.status==='verified');
+ const level=await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+ if(level.error){reconnectView('تعذر فحص مستوى الجلسة');return false;}
+ if(verified.length&&level.data?.currentLevel==='aal2')return true;
+ $('app').innerHTML='<div class="card" style="max-width:420px;margin:30px auto;text-align:center"><h2>حماية حساب المالك</h2><p class="meta">التحقق باستخدام تطبيق رموز المصادقة (TOTP)، وليس بصمة الوجه.</p><div id="ownerMfaSetup"></div><div id="ownerMfaErr" class="msg e hide"></div><input id="ownerMfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="رمز من 6 أرقام"><button class="p big" id="ownerMfaSubmit">تحقق وادخل</button><button id="ownerMfaExit">خروج</button></div>';
+ $('ownerMfaExit').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+ const fail=m=>{$('ownerMfaErr').textContent=m;$('ownerMfaErr').className='msg e';};
+ let id=verified[0]?.id;
+ if(!id){
+  const en=await sb.auth.mfa.enroll({factorType:'totp',friendlyName:'Your Staff Owner'});
+  if(en.error){fail('تعذر إعداد المصادقة: '+en.error.message);$('ownerMfaSubmit').disabled=true;return false;}
+  id=en.data.id;
+  if(en.data.totp?.qr_code?.startsWith('data:image/')){const im=document.createElement('img');im.src=en.data.totp.qr_code;im.alt='QR لتطبيق المصادقة';im.style.cssText='width:180px;display:block;margin:12px auto';$('ownerMfaSetup').appendChild(im);}
+  if(en.data.totp?.secret){const p=document.createElement('p');p.className='meta';p.textContent='مفتاح إعداد سري: '+en.data.totp.secret;$('ownerMfaSetup').appendChild(p);}
+ }
+ $('ownerMfaSubmit').onclick=async()=>{
+  const v=$('ownerMfaCode').value.trim();
+  if(v.length!==6||!Array.from(v).every(c=>c>='0'&&c<='9'))return fail('أدخل 6 أرقام');
+  $('ownerMfaSubmit').disabled=true;
+  const ch=await sb.auth.mfa.challenge({factorId:id});
+  const result=ch.error?{error:ch.error}:await sb.auth.mfa.verify({factorId:id,challengeId:ch.data.id,code:v});
+  if(result.error){fail('رمز غير صحيح أو منتهي');$('ownerMfaSubmit').disabled=false;return;}
+  await boot();
+ };
+ return false;
+}
 async function boot() {
   let authResult;
   try { authResult = await sb.auth.getSession(); } catch (e) { return reconnectView(); }
@@ -235,6 +264,7 @@ async function boot() {
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
+  if (isOwner() && !(await ownerMfaGate())) return;
   await loadBrandConfig(); subscribeBrandConfig();
   if (isOwner()) { await ownerBranchPicker(); return; }
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];

@@ -608,12 +608,28 @@ function openFollowupOrderMap(orderId){
  }
  refresh();followupMapTimer=setInterval(refresh,15000);
 }
+let followupPulseTimer=null;
+async function refreshFollowupPulse(){
+ const box=$('cc_pulse');if(!box)return;
+ const {data,error}=await safeRpc('dlv_followup_pulse',{p_branch:selectedBranch||null});
+ if(!box.isConnected)return;
+ if(error){box.textContent='تعذر تحديث التنبيهات: '+error.message;return;}
+ const alerts=Array.isArray(data?.alerts)?data.alerts:[];
+ box.innerHTML='<div class="row"><b>📦 نشطة: '+Number(data?.active||0)+'</b><b>✓ مكتملة: '+Number(data?.delivered||0)+'</b><b>⚠️ متأخرة: '+Number(data?.delayed||0)+'</b></div>'+
+ (alerts.length?alerts.map(a=>'<div class="card" style="padding:9px"><div class="ord"><b>طلب #'+esc(a.order_no)+'</b><span class="badge">'+esc(a.reason)+'</span></div><div class="row"><button class="g" onclick="openFollowupOrderMap('+Number(a.id)+')">متابعة الطلب</button></div></div>').join(''):'<div class="meta">لا توجد تأخيرات حسب الحدود المحددة للفروع.</div>');
+ const stamp=$('cc_pulse_stamp');if(stamp)stamp.textContent='آخر تحديث: '+new Date().toLocaleTimeString('ar-EG');
+}
+function startFollowupPulse(){
+ clearInterval(followupPulseTimer);
+ refreshFollowupPulse();
+ followupPulseTimer=setInterval(()=>{if($('cc_pulse')&&document.visibilityState==='visible')refreshFollowupPulse();else if(!$('cc_pulse')){clearInterval(followupPulseTimer);followupPulseTimer=null;}},30000);
+}
 function callcenterView() {
   const t = cairoDate();
-  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
+  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div class="card"><div class="ord"><h3>🚦 متابعة وتنبيهات الطلبات</h3><span class="meta" id="cc_pulse_stamp"></span></div><div id="cc_pulse">جاري التحميل...</div><button class="g" id="cc_pulse_refresh">↻ تحديث التنبيهات</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
   bindOut(); bindOwnerQuickPanel(); $('nw').onclick = newOrderForm; $('cc_rf').onclick = loadCallcenterOrders;
   let qtimer; $('cc_q').oninput = () => { clearTimeout(qtimer); qtimer=setTimeout(loadCallcenterOrders,300); };
-  loadCallcenterOrders(); loadCallcenterRatings();
+  loadCallcenterOrders(); loadCallcenterRatings(); startFollowupPulse(); $('cc_pulse_refresh').onclick=refreshFollowupPulse;
 }
 async function loadCallcenterOrders() {
   const box=$('cc_orders'); if(!box) return;
@@ -623,7 +639,7 @@ async function loadCallcenterOrders() {
   const {data,error}=await req;
   if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
   const rows=data||[]; rows.forEach(o=>ORD[o.id]=o);
-  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div><div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 حالة وموقع الطيار</button><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات نشطة حاليًا</div>';
+  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div><div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 حالة وموقع الطيار</button><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات مطابقة</div>';
 }
 
 async function loadCallcenterRatings() {

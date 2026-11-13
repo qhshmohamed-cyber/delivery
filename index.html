@@ -853,7 +853,7 @@ function openFollowupOrderMap(orderId){
   if(!localMarker){localMarker=L.marker([data.lat,data.lng],{icon:bikeIcon(0,!!fresh,90)}).addTo(localMap);}
   else{localMarker.setLatLng([data.lat,data.lng]);localMarker.setIcon(bikeIcon(0,!!fresh,90));}
  }
- refresh();followupMapTimer=setInterval(refresh,15000);
+ refresh();followupMapTimer=setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine&&document.getElementById('followupOrderMap'))refresh()},30000);
 }
 let followupPulseTimer=null;
 let followupPulseBusy=false;
@@ -1086,8 +1086,17 @@ function openOperationsRoom(){
  $('orSecurity').onclick=()=>openSecurityCommand();
  $('orMap').onclick=()=>{close();openMap();};
  $('orReport').onclick=()=>{const branch=$('orBranch').value,date=$('orDate').value;close();openReport();if($('rbranch'))$('rbranch').value=branch;if($('rdt'))$('rdt').value=date;if($('rdt'))$('rdt').dispatchEvent(new Event('change'));};
- roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{if(d.isConnected)refresh();}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},()=>{if(d.isConnected)refresh();}).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
- refresh();refreshTimer=setInterval(refresh,15000);
+ // Coalesce realtime bursts; only refresh a visible, connected owner dashboard.
+ let pendingRoomRefresh=null,roomRefreshBusy=false;
+ const scheduledRoomRefresh=()=>{
+  if(!d.isConnected||document.visibilityState!=='visible'||!navigator.onLine||pendingRoomRefresh)return;
+  pendingRoomRefresh=setTimeout(async()=>{
+   pendingRoomRefresh=null;if(roomRefreshBusy||!d.isConnected||document.visibilityState!=='visible')return;
+   roomRefreshBusy=true;try{await refresh()}finally{roomRefreshBusy=false}
+  },1200);
+ };
+ roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},scheduledRoomRefresh).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},scheduledRoomRefresh).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
+ scheduledRoomRefresh();refreshTimer=setInterval(scheduledRoomRefresh,30000);
 }
 function ownerQuickPanel(){
  if(!isOwner())return '';

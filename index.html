@@ -108,6 +108,12 @@ body.ys-platform:not(.ys-tenant) #app{position:relative;z-index:1}
 .ys-platform-brand{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto 22px}
 .ys-platform-brand img{width:92px;height:92px;object-fit:contain;filter:drop-shadow(0 6px 16px #0008)}
 .ys-partners-title{margin:22px 0 12px;font-size:15px;color:#eebc62;font-weight:700;text-align:right}
+/* Your Staff branded public entrance: independent of every tenant */
+html.ys-public body.ys-platform{background:radial-gradient(ellipse 75% 36% at 50% 8%,rgba(198,155,83,.18),transparent 80%),linear-gradient(155deg,#0e1727 0%,#111827 45%,#090f1a 100%)!important;background-attachment:fixed!important}
+html.ys-public body.ys-platform::after{background-image:url("yourstaff-icon.svg")!important;background-size:min(64vw,280px) auto!important;background-position:center 46%!important;opacity:.075!important}
+html.ys-public body.ys-platform .card{background:rgba(18,26,40,.92)!important;box-shadow:0 20px 65px rgba(0,0,0,.38),0 0 0 1px rgba(213,170,98,.16);backdrop-filter:blur(8px)}
+html.ys-public body.ys-platform #publicPartners .ys-partner-logo{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff;padding:7px;box-shadow:0 3px 14px #0005}
+@media(max-width:480px){html.ys-public body.ys-platform .card{margin:16px auto!important}}
 /* Your Staff public and platform-owner surfaces: never inherit tenant wallpaper */
 body.ys-platform,html.ys-public body{background:#101114!important;color:#f7f0df!important}
 body.ys-platform::before,html.ys-public body::before{background:none!important;opacity:0!important}
@@ -246,7 +252,7 @@ function loginView(err) {
     const item=document.createElement('div');item.style.cssText='display:flex;flex-direction:column;align-items:center;gap:6px;max-width:112px;text-align:center;color:#f7f0df;font-size:12px';
     const logo=document.createElement('img');const u=String(p.logo_url||'');
     logo.src=/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u)?u:'yourstaff-icon.svg';
-    logo.alt='شعار '+p.display_name;logo.loading='lazy';logo.decoding='async';logo.style.cssText='width:68px;height:68px;object-fit:contain;border-radius:12px;background:#fff8ea;padding:5px';
+    logo.alt='شعار '+p.display_name;logo.loading='lazy';logo.decoding='async';logo.className='ys-partner-logo';logo.onerror=()=>{logo.style.display='none';const fallback=document.createElement('span');fallback.textContent=p.display_name.slice(0,2);fallback.setAttribute('aria-label','شعار غير متاح');fallback.style.cssText='display:grid;place-items:center;width:76px;height:76px;border-radius:14px;background:#f5ead6;color:#6b4a23;font-weight:800;font-size:24px';logo.after(fallback)};
     const name=document.createElement('span');name.textContent=p.display_name;item.append(logo,name);return item;
    }));
   }).catch(()=>{});

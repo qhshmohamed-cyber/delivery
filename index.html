@@ -6,10 +6,10 @@
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <title>Your Staff — تسجيل الدخول</title>
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#4e2c12">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest?v=2">
+<meta name="theme-color" content="#101827">
+
+<link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg?v=2">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -110,12 +110,47 @@ const branchQuery = q => (selectedBranch ? q.eq('branch_id', selectedBranch) : q
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
 const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
-let brandConfig = {brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:'',rider_icon_url:'wahat-yemen-rider-marker.svg',bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e'};
-let brandChannel = null;
-const OWNER_ONLY = () => isOwner();
-function applyBrandConfig(c){ if(!c)return; brandConfig={...brandConfig,...c}; document.title=(brandConfig.app_name||'متابعة الدليفري')+' — '+(brandConfig.brand_name||'واحة اليمن'); const root=document.documentElement; root.style.setProperty('--bg',brandConfig.bg_color||'#dca86f'); root.style.setProperty('--card',brandConfig.card_color||'#fff8ea'); root.style.setProperty('--brand',brandConfig.brand_color||'#5a3317'); root.style.setProperty('--gold',brandConfig.gold_color||'#b9832e'); document.querySelectorAll('[data-brand-logo]').forEach(i=>i.src=brandConfig.logo_url||'logo-original.png'); document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'واحة اليمن'); document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'متابعة الدليفري'); document.querySelectorAll('.ys-rider-photo img').forEach(img=>{const next=String(brandConfig.rider_icon_url||'wahat-yemen-rider-marker.svg').replace('rider-pin.svg','wahat-yemen-rider-marker.svg');if(/^(?:[a-z0-9_./-]+|https:\/\/[^\"'<>\\\s]+)$/i.test(next)&&!next.startsWith('//'))img.src=next;}); const old=document.getElementById('brand-bg-style'); if(old)old.remove(); if(brandConfig.background_url){const st=document.createElement('style');st.id='brand-bg-style';st.textContent=`body::before{background-image:url('${String(brandConfig.background_url).replace(/'/g,'%27')}'),url(logo-original.png);background-size:cover, min(66vw,320px) auto;background-position:center,center 34%;background-repeat:no-repeat;opacity:.24}`;document.head.appendChild(st);} }
-async function loadBrandConfig(){try{const {data,error}=await sb.from('dlv_branding').select('*').eq('id',1).maybeSingle();if(!error&&data)applyBrandConfig(data);}catch(e){console.warn('Brand config unavailable',e);}}
-function subscribeBrandConfig(){if(brandChannel)sb.removeChannel(brandChannel);brandChannel=sb.channel('dlv-branding-live').on('postgres_changes',{event:'*',schema:'public',table:'dlv_branding',filter:'id=eq.1'},p=>{if(p.new)applyBrandConfig(p.new);}).subscribe();}
+const PLATFORM_BRAND={brand_name:'Your Staff',app_name:'إدارة الشركات',logo_url:'yourstaff-icon.svg',background_url:'',rider_icon_url:'',bg_color:'#101114',card_color:'#1b1d20',brand_color:'#a77d3e',gold_color:'#c69b53'};
+let brandConfig={...PLATFORM_BRAND},brandChannel=null,activeBrandCompanyId=null;
+const OWNER_ONLY=()=>isOwner();
+function resetPlatformBrand(){
+ brandConfig={...PLATFORM_BRAND};activeBrandCompanyId=null;
+ document.documentElement.style.removeProperty('--bg');document.documentElement.style.removeProperty('--card');
+ document.documentElement.style.removeProperty('--brand');document.documentElement.style.removeProperty('--gold');
+ document.getElementById('brand-bg-style')?.remove();document.title='Your Staff';
+}
+function applyBrandConfig(c){
+ if(!c||!selectedBranch||isOwner())return;
+ brandConfig={...PLATFORM_BRAND,...c};
+ const root=document.documentElement;
+ for(const [key,value] of [['--bg',brandConfig.bg_color],['--card',brandConfig.card_color],['--brand',brandConfig.brand_color],['--gold',brandConfig.gold_color]])root.style.setProperty(key,value||'');
+ document.title='Your Staff — '+(brandConfig.brand_name||'الشركة');
+ document.querySelectorAll('[data-brand-logo]').forEach(i=>{i.src=brandConfig.logo_url||'yourstaff-icon.svg'});
+ document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'');
+ document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'');
+ const old=document.getElementById('brand-bg-style');if(old)old.remove();
+ const bg=String(brandConfig.background_url||'');
+ if(bg && (/^https:\/\//i.test(bg)||/^[a-z0-9_./-]+$/i.test(bg)) && !bg.startsWith('//')){
+  const st=document.createElement('style');st.id='brand-bg-style';
+  st.textContent='body:not(.ys-platform)::before{background-image:url('+JSON.stringify(bg)+');background-size:cover;background-position:center;background-repeat:no-repeat;opacity:.24}';
+  document.head.appendChild(st);
+ }
+}
+async function loadBrandConfig(){
+ resetPlatformBrand();if(!me||!selectedBranch||isOwner())return;
+ const {data:branches,error:branchError}=await sb.from('dlv_branches').select('id,company_id').eq('id',selectedBranch).limit(1);
+ if(branchError||!branches?.length||!branches[0].company_id)throw Error('تعذر تحديد شركة الفرع');
+ const companyId=branches[0].company_id;
+ const {data,error}=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();
+ if(error||!data)throw Error('تعذر تحميل الهوية المعتمدة للشركة');
+ activeBrandCompanyId=companyId;applyBrandConfig(data);
+}
+function subscribeBrandConfig(){
+ if(brandChannel){sb.removeChannel(brandChannel);brandChannel=null}
+ if(!activeBrandCompanyId)return;
+ const id=activeBrandCompanyId;
+ brandChannel=sb.channel('company-brand-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},p=>{if(p.new&&activeBrandCompanyId===id)applyBrandConfig(p.new)}).subscribe();
+}
 
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
 let branchNames={1:'فرع المهندسين',2:'فرع الشيخ زايد'};
@@ -145,15 +180,15 @@ const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().le
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
-  $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="logo-original.png" alt="شعار مطاعم واحة اليمن" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="yourstaff-icon.svg" alt="Your Staff" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
   $('retryBoot').onclick=()=>boot();
   $('retryLogout').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
-  document.getElementById('brand-bg-style')?.remove();
+  resetPlatformBrand();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
-  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">من شركائنا</div><img src="logo-original.png" alt="واحة اليمن" style="width:48px;height:48px;object-fit:contain;border-radius:10px;background:#fff4e3;padding:4px"></div><div style="text-align:center;margin-bottom:18px"><div style="font-size:11px;color:#d7c39d;margin-bottom:9px">شركاؤنا</div><div style="display:flex;justify-content:center;align-items:center;gap:12px"><div style="background:#fff6e9;border-radius:12px;padding:6px 12px"><img src="logo-original.png" alt="واحة اليمن — شركة متعاقدة" style="width:62px;height:62px;object-fit:contain"></div></div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
+  $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
@@ -280,13 +315,13 @@ async function boot() {
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
-  if (isOwner()) { document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
+  if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
-  await loadBrandConfig(); subscribeBrandConfig();
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
-  if (permitted.length > 1) { await employeeBranchPicker(permitted); return; }
+  if (permitted.length > 1) { resetPlatformBrand(); await employeeBranchPicker(permitted); return; }
   selectedBranch = permitted[0];
+  try{await loadBrandConfig();subscribeBrandConfig();}catch(e){return reconnectView(e.message);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
     const r = await safeRpc('dlv_list_active_drivers');
     if (r.error) { drivers = []; console.error('تعذر تحميل الطيارين:', r.error.message); }
@@ -304,7 +339,7 @@ async function employeeBranchPicker(permitted){
   const branches=(data||[]).filter(b=>permitted.includes(b.id));
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
-  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;await enterEmployeeDashboard();});
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;try{await loadBrandConfig();subscribeBrandConfig();await enterEmployeeDashboard();}catch(e){reconnectView(e.message)}});
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){

@@ -1004,7 +1004,7 @@ async function loadAll() {
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
 }
 /* ---------- مشاركة الموقع (الطيار) ---------- */
-let watchId = null, lastSend = 0, wake = null, shareWanted = false, locationBusy = false;
+let watchId = null, lastSend = 0, wake = null, shareWanted = false, locationBusy = false, gpsPollTimer = null;
 function renderShare() {
   const b = $('shr'); if (!b) return;
   const on = shareWanted;
@@ -1015,7 +1015,7 @@ function renderShare() {
 async function sendDriverPosition(p, force = false) {
   if (!shareWanted || locationBusy) return;
   // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
-  if (!force && Date.now() - lastSend < 15000) return;
+  if (!force && Date.now() - lastSend < 5000) return;\n  if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
   locationBusy = true;
   try {
     const { error } = await safeRpc('dlv_update_location', {
@@ -1060,13 +1060,15 @@ async function startShare() {
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
   shareWanted = true; lastSend = 0;
   attachLocationWatch();
+  clearInterval(gpsPollTimer);
+  gpsPollTimer=setInterval(()=>{if(shareWanted&&document.visibilityState==='visible'&&navigator.onLine&&!locationBusy)navigator.geolocation.getCurrentPosition(p=>sendDriverPosition(p,true),()=>{}, {enableHighAccuracy:true,maximumAge:0,timeout:12000});},10000);
   await acquireWakeLock();
   renderShare();
   const s = $('locst');
   if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… اترك الصفحة مفتوحة أثناء التوصيل';
 }
 async function stopShare(callServer = true) {
-  shareWanted = false;
+  shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   try { if (wake) await wake.release(); } catch (e) {}
   wake = null; lastSend = 0; locationBusy = false;
@@ -1158,7 +1160,7 @@ function animateRiderMarker(marker, lat, lng, duration=2500) {
 }
 function bikeIcon(bearing=0, live=true, size=90) {
   // Standalone transparent motorcycle, no circular pin or legacy brand image.
-  const width=Math.max(100,Math.round(size*1.2));
+  const width=Math.max(62,Math.round(size*1.2));
   const height=Math.round(width*79/90);
   const opacity=live?'1':'.65';
   const html='<div class="ys-motorcycle-icon" style="width:'+width+'px;height:'+height+'px;opacity:'+opacity+'">'+
@@ -1185,14 +1187,14 @@ function openMap() {
       branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).in('status', ['received', 'out']).limit(500)]); }
     catch(e) { mapBusy = false; return; }
     mapBusy = false;
-    if (l.error || !document.getElementById('lmap')) return;
+    if (l.error || !document.getElementById('lmap')) {const n=$('mcount');if(n&&l.error)n.textContent='⚠ تعذر تحديث المواقع';return;}
     const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
     const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
     const seen = new Set();
     const only = $('msel').value;
     (l.data || []).filter(r => !only || r.driver_id === only).forEach(r => {
       seen.add(r.driver_id);
-      const live = (Date.now() - new Date(r.updated_at)) < 90000, nm = name[r.driver_id] || 'طيار';
+      const live = (Date.now() - new Date(r.updated_at)) < 30000, nm = name[r.driver_id] || 'طيار';
       const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '● آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
       const oldPos = prevPos[r.driver_id], bearing = oldPos ? bikeBearing(oldPos, {lat:r.lat,lng:r.lng}) : 0; prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 66);
@@ -1201,11 +1203,11 @@ function openMap() {
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
-    $('mcount').textContent = only && !seen.size ? 'الطيار ده مش بيشارك موقعه' : seen.size + ' طيار';
+    $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+(l.data||[]).filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';
     if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }
   $('msel').onchange = () => { fitted = false; refresh(); };
-  refresh(); mapTimer = setInterval(refresh, 3000);
+  refresh(); mapTimer = setInterval(refresh, 5000);
   $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
 }
 

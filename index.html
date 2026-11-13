@@ -1004,7 +1004,7 @@ async function loadAll() {
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;
 }
 /* ---------- مشاركة الموقع (الطيار) ---------- */
-let watchId = null, lastSend = 0, wake = null, shareWanted = false, locationBusy = false, gpsPollTimer = null;
+let watchId = null, lastSend = 0, wake = null, shareWanted = false, locationBusy = false, gpsPollTimer = null, gpsPollBusy = false;
 function renderShare() {
   const b = $('shr'); if (!b) return;
   const on = shareWanted;
@@ -1065,14 +1065,22 @@ async function startShare() {
   attachLocationWatch();
   navigator.geolocation.getCurrentPosition(p=>sendDriverPosition(p,true),()=>{}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
   clearInterval(gpsPollTimer);
-  gpsPollTimer=setInterval(()=>{if(shareWanted&&document.visibilityState==='visible'&&navigator.onLine&&!locationBusy)navigator.geolocation.getCurrentPosition(p=>sendDriverPosition(p,true),()=>{}, {enableHighAccuracy:true,maximumAge:0,timeout:12000});},10000);
+  gpsPollTimer=setInterval(()=>{
+    if(!shareWanted || document.visibilityState!=='visible' || !navigator.onLine || locationBusy || gpsPollBusy)return;
+    gpsPollBusy=true;
+    navigator.geolocation.getCurrentPosition(
+      p=>{gpsPollBusy=false;sendDriverPosition(p,true);},
+      e=>{gpsPollBusy=false;const el=$('locst');if(el&&e.code!==1)el.textContent='⚠ تعذر تحديث GPS — تأكد من تفعيل الموقع';},
+      {enableHighAccuracy:true,maximumAge:0,timeout:8000}
+    );
+  },10000);
   await acquireWakeLock();
   renderShare();
   const s = $('locst');
   if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… اترك الصفحة مفتوحة أثناء التوصيل';
 }
 async function stopShare(callServer = true) {
-  shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;
+  shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;gpsPollBusy=false;
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   try { if (wake) await wake.release(); } catch (e) {}
   wake = null; lastSend = 0; locationBusy = false;

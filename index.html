@@ -524,12 +524,12 @@ function openOperationsRoom(){
  allowed.map(id=>'<option value="'+id+'">'+esc(branchTitle(id))+'</option>').join('')+
  '</select><div class="meta" id="orStatus">جاري الاتصال...</div></div>'+
  '<div class="card"><div class="row"><label>التاريخ <input type="date" id="orDate" value="'+cairoDate()+'"></label><label>الحالة <select id="orFilter"><option value="all">كل الحالات</option><option value="new">انتظار</option><option value="out">مع الطيار</option><option value="delivered">تم التوصيل</option><option value="cancelled">ملغي</option></select></label></div><div class="row"><input id="orSearch" placeholder="بحث برقم الطلب" maxlength="40"><button id="orMap">🗺️ خريطة الطيارين</button><button id="orReport">📄 تقرير الوردية / PDF</button><button id="orRefresh">↻ تحديث الآن</button></div></div><div class="grid" id="orKpis"></div><div class="card"><h3>👨‍🍳 مراحل المطبخ والتوصيل</h3><div id="orKitchen"></div></div><div class="card"><h3>🚨 تنبيهات التشغيل</h3><div id="orAlerts">جاري التحميل...</div></div>'+
- '<div class="card"><h3>📦 الطلبات الجارية</h3><div id="orOrders">جاري التحميل...</div></div>'+
+ '<div class="card"><h3>📡 رادار آخر تحركات الطلبات</h3><div class="meta">الأحداث المستنتجة من توقيتات الطلبات المسجلة</div><div id="orRadar"></div></div><div class="card"><h3>🏢 مقارنة الفروع</h3><div id="orBranches"></div></div><div class="card"><h3>🛡️ صحة الاتصال</h3><div id="orHealth"></div></div><div class="card"><h3>📦 الطلبات الجارية</h3><div id="orOrders">جاري التحميل...</div></div>'+
  '<div class="card"><h3>🏍️ حالة GPS للطيارين</h3><div id="orDrivers">جاري التحميل...</div></div>';
  document.body.appendChild(d);
  $('orBranch').value=selectedBranch&&allowed.includes(Number(selectedBranch))?String(selectedBranch):(isOwner()?'all':String(allowed[0]||''));
- let closed=false,busy=false,again=false,refreshTimer=null,lastSuccess=0,requestVersion=0;let roomRows=[],roomLocations=[];
- const close=()=>{closed=true;requestVersion++;clearInterval(refreshTimer);d.remove();};
+ let closed=false,busy=false,again=false,refreshTimer=null,lastSuccess=0,requestVersion=0,roomChannel=null,roomRealtimeState='جاري الاتصال';let roomRows=[],roomLocations=[];
+ const close=()=>{closed=true;requestVersion++;clearInterval(refreshTimer);if(roomChannel)sb.removeChannel(roomChannel);roomChannel=null;d.remove();};
  $('orClose').onclick=close;
  function paint(){
   if(closed||!d.isConnected)return;
@@ -550,6 +550,14 @@ function openOperationsRoom(){
   const filtered=active.filter(o=>(filter==='all'||o.status===filter)&&(!needle||String(o.order_no||'').toLowerCase().includes(needle)));
   const display=(filter==='all'?filtered:orders.filter(o=>o.status===filter&&(!needle||String(o.order_no||'').toLowerCase().includes(needle))));
   $('orOrders').innerHTML=display.length?display.slice(0,100).map(o=>{const minutes=Math.max(0,Math.floor((now-new Date(o.created_at))/60000));return '<div class="ord" style="padding:8px 0;border-bottom:1px solid #d5b36c"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc(ST[o.status]?.[0]||o.status)+' · '+esc(branchTitle(o.branch_id))+' · '+minutes+' دقيقة</span></div>';}).join(''):'<div class="meta">لا توجد طلبات مطابقة</div>';
+  const events=[];
+  for(const o of orders){for(const [key,label] of [['created_at','تسجيل طلب'],['kitchen_received_at','استلام المطبخ'],['kitchen_ready_at','جاهز من المطبخ'],['out_at','خروج للتوصيل'],['delivered_at','تم التسليم']]){if(o[key])events.push({at:o[key],label,order:o.order_no,branch:o.branch_id});}}
+  events.sort((a,b)=>new Date(b.at)-new Date(a.at));
+  $('orRadar').innerHTML=events.length?events.slice(0,35).map(e=>'<div class="ord" style="padding:7px 0;border-bottom:1px solid #ddd"><span>'+esc(e.label)+' · #'+esc(e.order)+'</span><small>'+esc(branchTitle(e.branch))+' · '+tm(e.at)+'</small></div>').join(''):'<div class="meta">لا توجد أحداث مسجلة في التاريخ المختار</div>';
+  const branchIds=[...new Set(orders.map(o=>Number(o.branch_id)))].sort();
+  $('orBranches').innerHTML=branchIds.length?branchIds.map(id=>{const x=orders.filter(o=>Number(o.branch_id)===id);return '<div class="ord" style="padding:8px 0"><b>'+esc(branchTitle(id))+'</b><span>'+x.length+' طلب · '+x.filter(o=>o.status==='delivered').length+' تم توصيله · '+x.filter(o=>o.status==='out').length+' مع الطيار</span></div>';}).join(''):'<div class="meta">لا توجد طلبات للمقارنة</div>';
+  const age=lastSuccess?Math.round((now-lastSuccess)/1000):null;
+  $('orHealth').innerHTML='<div class="meta">الإنترنت: '+(navigator.onLine?'متصل':'غير متصل')+' · التحديث اللحظي: '+esc(roomRealtimeState)+' · آخر مزامنة: '+(age===null?'لم تكتمل بعد':age+' ثانية')+'</div>';
   $('orDrivers').innerHTML='<div class="meta">أجهزة مشاركة الموقع: '+locations.length+' · تحديث حديث: '+(locations.length-stale.length)+' · قديم أو منقطع: '+stale.length+'</div>'+locations.slice(0,100).map(x=>'<div class="ord" style="padding:7px 0"><span>الطيار '+esc(String(x.driver_id).slice(0,8))+'…</span><span>'+(x.updated_at&&now-new Date(x.updated_at)<=120000?'🟢 موقع حديث':'🟠 تحديث متأخر')+'</span></div>').join('');
  }
  async function refresh(){
@@ -568,7 +576,7 @@ function openOperationsRoom(){
    if(ordersResult.error)throw ordersResult.error;
    if(gpsResult.error)throw gpsResult.error;
    roomRows=ordersResult.data||[];roomLocations=gpsResult.data||[];paint();
-   lastSuccess=Date.now();$('orStatus').textContent='آخر مزامنة ناجحة: '+new Date(lastSuccess).toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'});
+   lastSuccess=Date.now();paint();$('orStatus').textContent='آخر مزامنة ناجحة: '+new Date(lastSuccess).toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'});
   }catch(e){if(d.isConnected)$('orStatus').textContent='تعذر تحديث غرفة العمليات: '+(e.message||'خطأ اتصال');}
   finally{busy=false;if(again){again=false;setTimeout(refresh,300);}}
  }
@@ -576,7 +584,8 @@ function openOperationsRoom(){
  $('orRefresh').onclick=refresh;
  $('orMap').onclick=()=>{close();openMap();};
  $('orReport').onclick=()=>{const branch=$('orBranch').value,date=$('orDate').value;close();openReport();if($('rbranch'))$('rbranch').value=branch;if($('rdt'))$('rdt').value=date;if($('rdt'))$('rdt').dispatchEvent(new Event('change'));};
- refresh();refreshTimer=setInterval(refresh,5000);
+ roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{if(d.isConnected)refresh();}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},()=>{if(d.isConnected)refresh();}).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
+ refresh();refreshTimer=setInterval(refresh,15000);
 }
 function managerView() {
   const t = cairoDate();

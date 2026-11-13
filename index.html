@@ -109,7 +109,19 @@ async function loadBrandConfig(){try{const {data,error}=await sb.from('dlv_brand
 function subscribeBrandConfig(){if(brandChannel)sb.removeChannel(brandChannel);brandChannel=sb.channel('dlv-branding-live').on('postgres_changes',{event:'*',schema:'public',table:'dlv_branding',filter:'id=eq.1'},p=>{if(p.new)applyBrandConfig(p.new);}).subscribe();}
 
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
-const branchTitle = id => ({1:'فرع المهندسين',2:'فرع الشيخ زايد'}[Number(id)] || 'فرع غير محدد');
+let branchNames={1:'فرع المهندسين',2:'فرع الشيخ زايد'};
+async function refreshBranchNames(){const {data,error}=await safeRpc('dlv_list_branches');if(!error&&data)branchNames=Object.fromEntries(data.map(b=>[b.id,b.name]));return data||[];}
+async function openOwnerBranchManager(){
+ if(!isOwner())return flash('للمالك فقط',false);
+ const name=prompt('اسم الفرع الجديد (سيضاف إلى النظام الحالي بنفس الصلاحيات الأساسية)');
+ if(name===null)return;
+ if(name.trim().length<3)return flash('اسم الفرع قصير',false);
+ if(!confirm('تأكيد إضافة الفرع: '+name.trim()+'؟'))return;
+ const {error}=await safeRpc('dlv_owner_add_branch',{p_name:name.trim()});
+ if(error)return flash('تعذر إضافة الفرع: '+error.message,false);
+ await refreshBranchNames();flash('تم إضافة الفرع. يمكنك إنشاء حسابات موظفيه الآن',true);ownerBranchPicker();
+}
+const branchTitle = id => (branchNames[Number(id)] || 'فرع غير محدد');
 const permittedBranches = () => (Array.isArray(me?.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me?.branch_id]).filter(Boolean);
 const activeBranchTitle = () => selectedBranch ? branchTitle(selectedBranch) : 'عرض الفرعين معًا';
 const canViewManagerBoard = () => isOwner() || isLocationManager();
@@ -252,9 +264,10 @@ async function enterEmployeeDashboard(){
 async function ownerBranchPicker(){
   const {data,error}=await safeRpc('dlv_list_branches');
   if(error){ console.warn('تعذر تحميل قائمة الفروع:',error.message); return reconnectView('تعذر تحميل قائمة الفروع الآن. جلسة الدخول محفوظة؛ أعد المحاولة.'); }
-  const branches=data||[];
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض الفرعين معًا</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+  const branches=data||[];branchNames=Object.fromEntries(branches.map(b=>[b.id,b.name]));
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><img data-brand-logo src="logo-original.png" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:20px">اختيار الفرع</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر نطاق لوحة المتابعة</p><div class="grid" style="grid-template-columns:1fr;gap:10px">${branches.map(b=>`<button class="p big" data-branch="${b.id}">${esc(b.name)}</button>`).join('')}<button class="g big" data-branch="all">عرض جميع الفروع معًا</button><button id="addNewBranch" class="g big">➕ إضافة فرع جديد</button></div><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch); await enterOwnerDashboard();});
+  $('addNewBranch').onclick=openOwnerBranchManager;
   $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterOwnerDashboard(){
@@ -1102,7 +1115,7 @@ function addDriverForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
     '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option><option value="complaints_officer">مسؤول الشكاوى</option></select>' +
-    '<label>الفرع *</label><select id="a_branch"><option value="1">فرع المهندسين</option><option value="2">فرع الشيخ زايد</option></select>' +
+    '<label>الفرع *</label><select id="a_branch"></select>' +
     '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (12 حرفًا على الأقل: كبير وصغير ورقم ورمز)</label><input id="a_p" value="' + pw + '">' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';

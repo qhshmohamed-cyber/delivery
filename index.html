@@ -579,7 +579,7 @@ function openManagementComplaints(){
 }
 let followupMapTimer=null;
 function openFollowupOrderMap(orderId){
- if(!['callcenter_followup','manager','supervisor','admin'].includes(me?.workflow_role||me?.role))return flash('غير مصرح',false);
+ if(!me || ![me.role,me.workflow_role].some(r=>['callcenter_followup','manager','supervisor','admin'].includes(r)))return flash('غير مصرح',false);
  if($('followupOrderOverlay'))return;
  const d=document.createElement('div');d.id='followupOrderOverlay';
  d.style.cssText='position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;overflow:auto';
@@ -599,7 +599,7 @@ function openFollowupOrderMap(orderId){
   const stageText=STG[data.stage]||data.stage||'';
   const when=data.updated_at?new Date(data.updated_at).toLocaleString('ar-EG'):'لم يرسل موقعًا';
   const fresh=data.updated_at&&(Date.now()-new Date(data.updated_at).getTime()<90000);
-  $('followupOrderStatus').innerHTML='<b>الحالة: '+esc(statusText)+'</b><div>المرحلة: '+esc(stageText)+'</div><div>الطيار: '+esc(data.driver_name||(data.assigned?'غير متاح':'لم يتم التعيين'))+'</div><div>الموقع: '+(fresh?'متصل الآن':'آخر موقع معروف')+' · '+esc(when)+'</div>';
+  $('followupOrderStatus').innerHTML='<b>الحالة: '+esc(statusText)+'</b><div>المرحلة: '+esc(stageText)+'</div><div>الطيار: '+esc(data.driver_name||(data.assigned?'غير متاح':'لم يتم التعيين'))+'</div><div>الموقع: '+(data.tracking_ended?'انتهت متابعة الموقع بانتهاء الطلب':data.lat==null?'لا توجد إحداثيات متاحة':(fresh?'متصل الآن':'آخر موقع معروف')+' · '+esc(when))+'</div>';
   if(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng))||data.lat===null||data.lng===null){$('followupOrderMap').style.display='none';return;}
   $('followupOrderMap').style.display='block';
   if(!localMap){localMap=L.map('followupOrderMap').setView([data.lat,data.lng],16);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(localMap);setTimeout(()=>{if(d.isConnected)localMap.invalidateSize()},100);}
@@ -1106,7 +1106,7 @@ function bikeIcon(bearing=0, live=true, size=90) {
   const height=Math.round(width*79/90);
   const opacity=live?'1':'.65';
   const html='<div class="ys-motorcycle-icon" style="width:'+width+'px;height:'+height+'px;opacity:'+opacity+'">'+
-    '<img src="wahat-yemen-rider-marker.svg" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 2px 2px rgba(0,0,0,.22));image-rendering:-webkit-optimize-contrast">'+
+    '<img src="wahat-yemen-rider-marker.svg?v=hd-20261113" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 2px 2px rgba(0,0,0,.22));image-rendering:-webkit-optimize-contrast">'+
     '</div>';
   return L.divIcon({className:'ys-bike-marker ys-motorcycle-marker',html,iconSize:[width,height],iconAnchor:[Math.round(width/2),Math.round(height*.82)],popupAnchor:[0,-height]});
 }

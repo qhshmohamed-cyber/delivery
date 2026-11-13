@@ -75,6 +75,13 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .pilot-disabled{background:#eee5d7;color:#8d806f;border-color:#d8cbb6;opacity:.8}
  .ys-rider-photo{overflow:hidden;background:#f9d49b;border:3px solid #6b3514;display:grid;place-items:center}.ys-rider-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}.ys-bike-pin{isolation:isolate}
 \n.ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}\n
+/* Your Staff neutral wallpaper: public, owner and branch selection only */
+html.ys-public body,body.ys-platform{background:#101827!important;background-image:radial-gradient(ellipse at 15% 10%,rgba(216,174,100,.13),transparent 48%),radial-gradient(ellipse at 85% 90%,rgba(75,113,151,.16),transparent 50%)!important}
+html.ys-public body::after,body.ys-platform::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.09;background-image:url("yourstaff-icon.svg");background-repeat:no-repeat;background-size:min(72vw,360px) auto;background-position:center 45%}
+html.ys-public .wrap,body.ys-platform .wrap{position:relative;z-index:1}
+html.ys-public header,body.ys-platform header{background:#172235;border-bottom-color:#d8ae64}
+html.ys-public .card,body.ys-platform .card{background:rgba(27,35,49,.95);border-color:#6c604e}
+html.ys-public button.p,body.ys-platform button.p{background:#a77d3e;border-color:#a77d3e;color:#fff}
 /* Your Staff public and platform-owner surfaces: never inherit tenant wallpaper */
 body.ys-platform,html.ys-public body{background:#101114!important;color:#f7f0df!important}
 body.ys-platform::before,html.ys-public body::before{background:none!important;opacity:0!important}

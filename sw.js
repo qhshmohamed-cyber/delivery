@@ -1,7 +1,7 @@
 
 const CACHE_PREFIX = 'yourstaff-static-';
 const LEGACY_CACHE_PREFIX = 'wahat-delivery-static-';
-const CACHE_NAME = CACHE_PREFIX + 'v2';
+const CACHE_NAME = CACHE_PREFIX + 'v3';
 const STATIC_FILES = [
   './',
   './index.html',

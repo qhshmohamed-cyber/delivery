@@ -768,18 +768,28 @@ function ownerQuickPanel(){
  [['ownBranches','🏢 الفروع'],['ownAccounts','👥 الحسابات'],['ownOrders','📦 الطلبات'],['ownDrivers','🏍️ الطيارون'],['ownComplaints','📋 الشكاوى'],['ownReports','📊 التقارير']].map(x=>'<button class="g big" id="'+x[0]+'" style="min-height:62px">'+x[1]+'</button>').join('')+
  '</div><details style="margin-top:12px"><summary style="cursor:pointer">⚙️ إعدادات متقدمة (للمالك فقط)</summary><div class="row" style="margin-top:10px"><button id="ownIdentity">الهوية والإعدادات</button><button id="ownSecurity">الأمان والصلاحيات</button><button id="ownRatings">تقييمات العملاء</button></div></details></section>';
 }
-function bindOwnerQuickPanel(){
- if(!isOwner()||!$('ownBranches'))return;
- $('ownBranches').onclick=ownerBranchPicker;
- $('ownAccounts').onclick=managePilots;
- $('ownOrders').onclick=openOperationsRoom;
- $('ownDrivers').onclick=openMap;
- $('ownComplaints').onclick=openManagementComplaints;
- $('ownReports').onclick=openReport;
- $('ownIdentity').onclick=openBrandSettings;
- $('ownSecurity').onclick=openSecurityCommand;
- $('ownRatings').onclick=ownerRatingsView;
-}
+// One delegated owner menu handler survives dashboard refreshes and mobile rerenders.
+document.addEventListener('click',function(event){
+ const button=event.target.closest('button[id^="own"]');
+ if(!button||!isOwner())return;
+ const actions={
+  ownBranches:ownerBranchPicker,
+  ownAccounts:managePilots,
+  ownOrders:openOperationsRoom,
+  ownDrivers:openMap,
+  ownComplaints:openManagementComplaints,
+  ownReports:openReport,
+  ownIdentity:openBrandSettings,
+  ownSecurity:openSecurityCommand,
+  ownRatings:ownerRatingsView
+ };
+ const action=actions[button.id];
+ if(!action)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ try{const result=action();if(result&&typeof result.catch==='function')result.catch(e=>{console.error('Owner action failed',e);flash('تعذر فتح القسم، حاول مرة أخرى',false);});}
+ catch(e){console.error('Owner action failed',e);flash('تعذر فتح القسم، حاول مرة أخرى',false);}
+},true);
+function bindOwnerQuickPanel(){/* Actions are handled through a single persistent listener. */}
 function managerView() {
   const t = cairoDate();
   const owner = isOwner();

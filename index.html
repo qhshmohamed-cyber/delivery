@@ -632,14 +632,26 @@ function callcenterView() {
   loadCallcenterOrders(); loadCallcenterRatings(); startFollowupPulse(); $('cc_pulse_refresh').onclick=refreshFollowupPulse;
 }
 async function loadCallcenterOrders() {
-  const box=$('cc_orders'); if(!box) return;
-  const q=($('cc_q')?.value || '').trim().replace(/[,()%*]/g,' ');
-  let req=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?300:100);
-  if(q) req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
-  const {data,error}=await req;
-  if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
-  const rows=data||[]; rows.forEach(o=>ORD[o.id]=o);
-  box.innerHTML=rows.map(o=>`<div class="card"><div class="ord"><b>#${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div><div class="meta">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}<br>المرحلة: ${esc(STG[o.workflow_stage]||'')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div><div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 حالة وموقع الطيار</button><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}</div>`).join('')||'<div class="meta">لا توجد طلبات مطابقة</div>';
+ const box=$('cc_orders');if(!box)return;
+ const q=($('cc_q')?.value||'').trim().replace(/[,()%*]/g,' ');
+ const requestId=String(Date.now())+'-'+Math.random();box.dataset.requestId=requestId;
+ let req=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,address,status,workflow_stage,track_code,created_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
+ if(q)req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
+ else req=req.in('status',['new','received','out']);
+ const {data,error}=await req;
+ if(!box.isConnected||box.dataset.requestId!==requestId)return;
+ if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
+ const rows=data||[];rows.forEach(o=>ORD[o.id]=o);
+ box.innerHTML='<div class="meta" style="margin:8px 0">'+(q?'نتائج البحث: '+rows.length+' طلب':'الطلبات الجارية: '+rows.length+' · المكتملة والملغية تظهر بالبحث فقط')+'</div>'+
+ rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
+ <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>
+ <div class="meta" style="margin:7px 0">المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
+ <div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button></div>
+ <details style="margin-top:9px"><summary style="cursor:pointer;padding:7px 0;font-weight:600">تفاصيل وإجراءات إضافية</summary>
+ <div class="meta" style="margin:9px 0">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</div>
+ <div class="row"><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>
+ ${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}
+ </details></div>`).join('')||'<div class="meta">'+(q?'لا توجد طلبات مطابقة للبحث':'لا توجد طلبات جارية حاليًا')+'</div>';
 }
 
 async function loadCallcenterRatings() {

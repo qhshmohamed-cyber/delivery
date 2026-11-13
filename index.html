@@ -1008,22 +1008,44 @@ function editPilotForm(r, done) {
 
 /* ---------- تقرير الطلبات (المدير العام) ---------- */
 function openReport() {
+  if(!isOwner() && !canViewManagerBoard()) return flash('التقارير للإدارة فقط',false);
+  if(document.getElementById('rpt')) return;
   const d = document.createElement('div'); d.id = 'rpt';
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:env(safe-area-inset-top,0) 12px 24px';
   d.innerHTML = '<div class="noprint row" style="padding:10px 0"><b style="flex:1">📊 تقرير الطلبات</b><button id="rcp">نسخ كنص</button><button id="rpr">طباعة / PDF</button><button id="rcl">إغلاق</button></div>' +
-    '<div class="noprint" style="margin-bottom:10px"><input type="date" id="rdt" value="' + cairoDate() + '"></div><div id="rbody"><div class="meta">جاري التحميل...</div></div>';
+    '<div class="noprint card" style="margin-bottom:10px"><label for="rbranch">اختر الفرع</label><select id="rbranch"></select><label for="rdt">تاريخ التقرير</label><input type="date" id="rdt" value="' + cairoDate() + '"><div class="meta">يُعرض تقرير اليوم المختار كاملًا، ويمكن نسخه أو طباعته PDF لإرساله للإدارة.</div></div><div id="rbody"><div class="meta">جاري التحميل...</div></div>';
   document.body.appendChild(d);
+  const available = isOwner() ? [1,2] : permittedBranches().map(Number).filter(id=>[1,2].includes(id));
+  const allowed = [...new Set(available)];
+  $('rbranch').innerHTML = (isOwner() || allowed.length>1 ? '<option value="all">جميع الفروع</option>' : '') +
+    allowed.map(id=>'<option value="'+id+'">'+esc(branchTitle(id))+'</option>').join('');
+  const initialBranch = selectedBranch && allowed.includes(Number(selectedBranch)) ? String(selectedBranch) : (isOwner()?'all':String(allowed[0]||''));
+  $('rbranch').value=initialBranch;
   let text = '';
+  let reportRequest = 0;
   $('rcl').onclick = () => d.remove();
   $('rpr').onclick = () => window.print();
   $('rcp').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(text); const b = $('rcp'); b.textContent = 'اتنسخ ✓'; setTimeout(() => { b.textContent = 'نسخ كنص'; }, 2000); };
   async function load() {
-    const day = $('rdt').value; let rows = [], from = 0;
-    for (;;) {
-      const { data, error } = await branchQuery(sb.from('dlv_orders').select('*, driver:driver_id(full_name)')).eq('order_date', day).order('created_at').range(from, from + 999);
-      if (error) { $('rbody').innerHTML = '<div class="msg e">' + esc(error.message) + '</div>'; return; }
-      rows = rows.concat(data || []); if (!data || data.length < 1000) break; from += 1000;
+    const requestId=++reportRequest;
+    const day = $('rdt').value, branch=$('rbranch').value;
+    if(!day || !branch || (branch!=='all' && !allowed.includes(Number(branch))) || (branch==='all' && !isOwner() && allowed.length<2)){
+      $('rbody').textContent='اختار فرعًا وتاريخًا مسموحًا بهما';return;
     }
+    $('rbody').innerHTML='<div class="meta">جاري تجهيز تقرير '+esc(day)+'...</div>';
+    let rows = [], from = 0;
+    for (;;) {
+      let query=sb.from('dlv_orders').select('*, driver:driver_id(full_name)').eq('order_date',day).order('created_at').range(from,from+999);
+      if(branch!=='all') query=query.eq('branch_id',Number(branch));
+      else if(!isOwner()) query=query.in('branch_id',allowed);
+      const {data,error}=await query;
+      if(requestId!==reportRequest || !document.getElementById('rpt')) return;
+      if(error){$('rbody').textContent='تعذر تحميل التقرير: '+error.message;return;}
+      rows=rows.concat(data||[]);
+      if(!data || data.length<1000) break;
+      from+=1000;
+    }
+    const branchName=branch==='all'?'جميع الفروع':branchTitle(Number(branch));
     const c = st => rows.filter(o => o.status === st).length;
     const durOf = o => mins(o.out_at, o.delivered_at);
     const avgOf = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null;
@@ -1039,14 +1061,14 @@ function openReport() {
     const names = Object.keys(by).sort((a, b) => by[b].t - by[a].t);
     const fails = rows.filter(o => o.status === 'failed'), notes = rows.filter(o => o.driver_note);
     const nm = o => o.driver ? o.driver.full_name : '؟';
-    text = '📊 تقرير الدليفري — واحة اليمن\nالتاريخ: ' + day + '\nإجمالي الطلبات: ' + rows.length + '\n✅ تم التوصيل: ' + c('delivered') + '\n🛵 خرج للتوصيل: ' + c('out') +
+    text = '📊 تقرير الدليفري — واحة اليمن\nالفرع: ' + branchName + '\nالتاريخ: ' + day + '\nإجمالي الطلبات: ' + rows.length + '\n✅ تم التوصيل: ' + c('delivered') + '\n🛵 خرج للتوصيل: ' + c('out') +
       '\n📥 لم يخرج بعد: ' + (c('new') + c('received')) + '\n⛔ تعذر: ' + c('failed') + '\n❌ ملغي: ' + c('cancelled') + '\n⚠ متأخر: ' + late +
       '\n⏱ متوسط مدة التوصيل: ' + (avg == null ? '—' : avg + ' د') + '\n\nحسب الطيار:\n' +
       names.map(n => '- ' + n + ': ' + by[n].t + ' طلب · تم ' + by[n].d + ' · تعذر ' + by[n].f + ' · متأخر ' + by[n].l + ' · متوسط ' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du) + ' د')).join('\n') +
       (fails.length ? '\n\nتعذر التوصيل:\n' + fails.map(o => '- #' + o.order_no + ' (' + nm(o) + '): ' + (o.failed_reason || '') + (o.driver_note ? ' | ' + o.driver_note : '')).join('\n') : '') +
       (notes.length ? '\n\nملاحظات الطيارين:\n' + notes.map(o => '- #' + o.order_no + ' (' + nm(o) + '): ' + o.driver_note).join('\n') : '');
     const kp = [['إجمالي الطلبات', rows.length], ['تم التوصيل', c('delivered')], ['خرجت للتوصيل', c('out')], ['لم تخرج بعد', c('new') + c('received')], ['تعذر', c('failed')], ['ملغي', c('cancelled')], ['متأخرة', late], ['متوسط التوصيل (د)', avg == null ? '—' : avg]];
-    $('rbody').innerHTML = '<h2 style="font-size:16px">واحة اليمن — تقرير يوم ' + esc(day) + '</h2>' +
+    $('rbody').innerHTML = '<h2 style="font-size:16px">واحة اليمن — '+esc(branchName)+' — تقرير يوم ' + esc(day) + '</h2>' +
       '<div class="grid">' + kp.map(k => '<div class="stat"><b>' + k[1] + '</b><span>' + k[0] + '</span></div>').join('') + '</div>' +
       '<h2>حسب الطيار</h2><div class="card tw"><table><tr><th>الطيار</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>تعذر</th><th>متأخر</th><th>متوسط (د)</th></tr>' +
       (names.map(n => '<tr><td>' + esc(n) + '</td><td>' + by[n].t + '</td><td>' + by[n].d + '</td><td>' + by[n].o + '</td><td>' + by[n].f + '</td><td>' + by[n].l + '</td><td>' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du)) + '</td></tr>').join('') || '<tr><td colspan="7">لا طلبات</td></tr>') + '</table></div>' +
@@ -1055,7 +1077,7 @@ function openReport() {
         '<td style="white-space:normal;min-width:150px"><span class="badge" style="background:' + ST[o.status][1] + '">' + ST[o.status][0] + '</span>' + (isLate(o) ? ' <span class="late">⚠</span>' : '') +
         (o.failed_reason ? '<div class="meta">⛔ ' + esc(o.failed_reason) + '</div>' : '') + (o.driver_note ? '<div class="meta">📝 ' + esc(o.driver_note) + '</div>' : '') + '</td></tr>').join('') || '<tr><td colspan="11">لا طلبات في اليوم ده</td></tr>') + '</table></div>';
   }
-  $('rdt').onchange = load; load();
+  $('rdt').onchange=load; $('rbranch').onchange=load; load();
 }
 
 /* ---------- تحديث بيانات حسابي (الاسم/الوظيفة) ---------- */

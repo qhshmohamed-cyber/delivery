@@ -234,6 +234,13 @@ async function ownerMfaGate(){
  const fail=m=>{$('ownerMfaErr').textContent=m;$('ownerMfaErr').className='msg e';};
  let id=verified[0]?.id;
  if(!id){
+  // Discard only incomplete TOTP enrollments so an interrupted setup can restart.
+  // Verified factors are never removed.
+  const pending=(listed.data?.totp||[]).filter(x=>x.status!=='verified');
+  for(const factor of pending){
+   const removed=await sb.auth.mfa.unenroll({factorId:factor.id});
+   if(removed.error){fail('تعذر إعادة إعداد التحقق غير المكتمل. حاول تسجيل الخروج ثم الدخول.');$('ownerMfaSubmit').disabled=true;return false;}
+  }
   const en=await sb.auth.mfa.enroll({factorType:'totp',friendlyName:'Your Staff Owner'});
   if(en.error){fail('تعذر إعداد المصادقة: '+en.error.message);$('ownerMfaSubmit').disabled=true;return false;}
   id=en.data.id;

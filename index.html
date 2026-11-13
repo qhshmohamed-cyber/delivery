@@ -120,6 +120,8 @@ body.ys-platform::before,html.ys-public body::before{background:none!important;o
 body.ys-platform .card{background:#1b1d20;color:#f7f0df;border:1px solid #a77d3e}
 body.ys-platform input{background:#fff;color:#161616}
 body.ys-platform .meta{color:#d8cbb5}
+
+@media(max-width:600px){#nw,.acts button,.modal button.p{min-height:48px}#cc_q{min-height:48px}details.card>summary{min-height:32px;display:flex;align-items:center}}
 </style>
 </head>
 <body class="ys-platform">
@@ -912,7 +914,7 @@ function openFollowupArchive(kind){
 }
 function callcenterView() {
   const t = cairoDate();
-  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">تسجيل الطلبات ومتابعة حالتها وأكواد العملاء فقط.</div><button class="p big" id="nw">＋ تسجيل طلب جديد</button></div><div class="row"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 المشاكل والشكاوى</button></div><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div class="card"><div class="ord"><h3>🚦 متابعة وتنبيهات الطلبات</h3><span class="meta" id="cc_pulse_stamp"></span></div><div id="cc_pulse">جاري التحميل...</div><button class="g" id="cc_pulse_refresh">↻ تحديث التنبيهات</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
+  $('app').innerHTML = shell(`<div class="card"><h2>متابعة الكول سنتر</h2><div class="meta">سجل طلبًا جديدًا بضغطة واحدة، أو ابحث عن طلب قائم.</div><button class="p big" id="nw" style="min-height:54px;font-size:17px">＋ تسجيل طلب جديد</button></div><details class="card" style="padding:12px"><summary style="cursor:pointer;font-weight:700">أدوات إضافية: الإلغاءات والمشاكل</summary><div class="row" style="margin-top:12px"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">🗂️ الإلغاءات</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 المشاكل والشكاوى</button></div></details><div class="row"><input id="cc_q" placeholder="ابحث عن أي طلب: رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="cc_rf">تحديث</button></div><div class="card"><div class="ord"><h3>🚦 متابعة وتنبيهات الطلبات</h3><span class="meta" id="cc_pulse_stamp"></span></div><div id="cc_pulse">جاري التحميل...</div><button class="g" id="cc_pulse_refresh">↻ تحديث التنبيهات</button></div><div id="cc_orders"></div><h2>⭐ تقييمات العملاء</h2><div id="cc_ratings"></div>`);
   bindOut(); bindOwnerQuickPanel(); $('nw').onclick = newOrderForm; $('cc_rf').onclick = loadCallcenterOrders;
   let qtimer; $('cc_q').oninput = () => { clearTimeout(qtimer); qtimer=setTimeout(loadCallcenterOrders,300); };
   loadCallcenterOrders(); loadCallcenterRatings(); startFollowupPulse(); $('cc_pulse_refresh').onclick=refreshFollowupPulse;
@@ -1139,7 +1141,7 @@ function managerView() {
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
-      <div class="ord"><div><b style="font-size:18px">مركز قيادة واحة اليمن</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">مركز التحكم التشغيلي · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
+      <div class="ord"><div><b style="font-size:18px">مركز قيادة ${esc(activeBrand?.brand_name||activeBrand?.app_name||"الشركة")}</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">مركز التحكم التشغيلي · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
       <div class="meta" id="managerUpdatedAt" style="color:#f1dfc3">جاري تحديث البيانات...</div>
     </section>
     <div id="delayNotices"></div>

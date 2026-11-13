@@ -1284,13 +1284,16 @@ async function loadKitchen() {
 }
 async function loadPending() {
   const box = $('pend'); if (!box) return;
-  const { data, error } = await branchQuery(sb.from('dlv_orders').select('*')).eq('status', 'new').is('driver_id', null).order('created_at').limit(200);
+  let pendingQuery=branchQuery(sb.from('dlv_orders').select('*')).eq('status','new').order('created_at').limit(200);
+  if(!isOwner())pendingQuery=pendingQuery.is('driver_id',null);
+  const { data, error } = await pendingQuery;
   if (error) return;
   const wf = me.workflow_role || 'manager';
   const rows = (data || []).filter(o => wf !== 'supervisor' || o.workflow_stage === 'kitchen_ready' || o.workflow_stage === 'supervisor_received');
   const recv = o => wf === 'supervisor' && o.workflow_stage === 'kitchen_ready';
   const opts = '<option value="">اختر الطيار...</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('');
   box.innerHTML = rows.length ? '<h2>📥 طلبات منتظرة التحويل لطيار (' + rows.length + ')</h2>' + rows.map(o => {
+    if (o.driver_id && isOwner()) return ordCard(o, '<div class="row" style="margin-top:8px"><b>🔁 تغيير الطيار المعين</b><select id="as_' + o.id + '" style="flex:1">' + opts + '</select><button class="p" data-act="assign" data-id="' + o.id + '">اعتماد تغيير الطيار</button></div>');
     if (recv(o)) return ordCard(o, '<div class="acts"><button class="p" data-act="srecv" data-id="' + o.id + '">✅ استلمت من المطبخ</button></div>');
     if (o.workflow_stage !== 'supervisor_received') return ordCard(o, '<div class="meta" style="margin-top:8px">بانتظار استلام المشرف من المطبخ</div>');
     return ordCard(o, '<div class="row" style="margin-top:8px"><select id="as_' + o.id + '" style="flex:1">' + opts + '</select><button class="p" data-act="assign" data-id="' + o.id + '">تحويل للطيار</button></div>');
@@ -1299,6 +1302,7 @@ async function loadPending() {
 async function assignOrder(id) {
   if (!requireOnline('تحويل الطلب للطيار')) return;
   const sel = $('as_' + id), pid = sel && sel.value; if (!pid) return flash('اختار الطيار الأول', false);
+  if(isOwner() && !confirm('تأكيد تعيين أو تغيير الطيار لهذا الطلب؟'))return;
   const { error } = await safeRpc('dlv_assign_driver', { p_order_id: id, p_driver: pid, p_note: null });
   if (error) return flash(error.message, false);
   flash('اتحوّل للطيار ✅', true); refreshView();
@@ -1376,6 +1380,7 @@ function trackView(code0) {
     if (j.status === 'failed') h += '<div class="msg e" style="margin-top:10px">تعذر توصيل الطلب، هيتواصل معاك فريق الخدمة.</div>';
     else if (j.status === 'cancelled') h += '<div class="msg e" style="margin-top:10px">تم إلغاء الطلب.</div>';
     else h += S.map((t, i) => '<div class="od" style="margin-top:8px;opacity:' + (i <= idx ? 1 : .45) + '"><span>' + (i < idx ? '✓ ' : i === idx ? '● ' : '○ ') + t + '</span>' + (i === 4 && j.out_at ? '<span class="meta">' + tm(j.out_at) + '</span>' : i === 5 && j.delivered_at ? '<span class="meta">' + tm(j.delivered_at) + '</span>' : '') + '</div>').join('');
+    if(j.pilot_reassigned) h += '<div class="msg o" style="margin-top:10px">🔁 تم تغيير الطيار المسؤول عن طلبك. بيانات الطيار المعروضة هي البيانات الحالية.</div>';
     h += '</div>';
     if (j.pilot_name && j.status !== 'failed' && j.status !== 'cancelled') {
       const rawPilotPhone = String(j.pilot_phone || '').trim();

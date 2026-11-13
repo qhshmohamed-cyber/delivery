@@ -271,7 +271,6 @@ async function boot() {
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
-  if (isOwner() && !(await ownerMfaGate())) return;
   await loadBrandConfig(); subscribeBrandConfig();
   if (isOwner()) { await ownerBranchPicker(); return; }
   const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];

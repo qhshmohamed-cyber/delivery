@@ -1015,7 +1015,8 @@ function renderShare() {
 async function sendDriverPosition(p, force = false) {
   if (!shareWanted || locationBusy) return;
   // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
-  if (!force && Date.now() - lastSend < 5000) return;\n  if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
+  if (!force && Date.now() - lastSend < 5000) return;
+  if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
   locationBusy = true;
   try {
     const { error } = await safeRpc('dlv_update_location', {

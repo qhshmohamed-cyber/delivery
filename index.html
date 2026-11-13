@@ -323,6 +323,7 @@ function newOrderForm() {
     <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
     ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch"><option value="1" ${selectedBranch===1?'selected':''}>فرع المهندسين</option><option value="2" ${selectedBranch===2?'selected':''}>فرع الشيخ زايد</option></select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="n_wa_consent" style="width:auto"> العميل وافق على استلام رابط المتابعة عبر واتساب</label>
     <label>العنوان</label><input id="n_a">` : ''}
     ${isMgr ? '<label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>' : ''}
     <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
@@ -339,7 +340,20 @@ function newOrderForm() {
       const {data: createdOrder} = await sb.from('dlv_orders').select('track_code').eq('id', createdId).maybeSingle();
       if (createdOrder && createdOrder.track_code) codeText = ' — كود متابعة العميل: ' + createdOrder.track_code;
     }
-    d.remove(); flash('تم تسجيل الطلب' + codeText, true); refreshView();
+    const consent = $('n_wa_consent')?.checked === true;
+    const customerPhone = String($('n_p')?.value||'').replace(/\D/g,'');
+    const normalizedPhone = customerPhone.startsWith('0') ? '20'+customerPhone.slice(1) : customerPhone;
+    // Until a verified WhatsApp Business sender is configured, never claim automatic delivery.
+    const trackingCode = codeText.match(/[A-HJ-NP-Z2-9]{8}/)?.[0] || '';
+    if (consent && /^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone) && trackingCode) {
+      const link = location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
+      const msg = 'واحة اليمن — تم تسجيل طلبك رقم '+$('n_no').value+'. تابع طلبك من هنا: '+link;
+      const waLink = 'https://wa.me/'+normalizedPhone+'?text='+encodeURIComponent(msg);
+      const go = document.createElement('a');go.href=waLink;go.target='_blank';go.rel='noopener noreferrer';go.textContent='فتح واتساب لإرسال رابط المتابعة';
+      go.style.cssText='display:block;padding:12px;background:#fff8ea;color:#5a3317;border:1px solid #b9832e;border-radius:10px;margin:12px 0;text-align:center';
+      d.remove();const panel=document.createElement('div');panel.className='card';panel.append('تم حفظ الطلب. لم يتم إرسال واتساب تلقائيًا. اضغط لإرسال الرسالة من واتساب: ',go);$('app')?.prepend(panel);
+    } else { d.remove(); }
+    flash('تم تسجيل الطلب' + codeText, true); refreshView();
   };
 }
 function failDialog(id) {

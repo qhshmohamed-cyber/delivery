@@ -168,20 +168,30 @@ function applyBrandConfig(c,ownerPreview=false){
  document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'');
  document.getElementById('brand-bg-style')?.remove();
 }
+// Cache only presentation data for this authenticated session; never cache authorization decisions.
+const tenantBrandCache=new Map(),tenantBranchCompanyCache=new Map();
 async function loadBrandConfig(){
  resetPlatformBrand();if(!me||!selectedBranch||isOwner())return;
- const {data:branches,error:branchError}=await sb.from('dlv_branches').select('id,company_id').eq('id',selectedBranch).limit(1);
- if(branchError||!branches?.length||!branches[0].company_id)throw Error('تعذر تحديد شركة الفرع');
- const companyId=branches[0].company_id;
- const {data,error}=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();
- if(error||!data)throw Error('تعذر تحميل الهوية المعتمدة للشركة');
+ const branchId=Number(selectedBranch);
+ let companyId=tenantBranchCompanyCache.get(branchId);
+ if(!companyId){
+  const {data:branches,error:branchError}=await sb.from('dlv_branches').select('id,company_id').eq('id',branchId).limit(1);
+  if(branchError||!branches?.length||!branches[0].company_id)throw Error('تعذر تحديد شركة الفرع');
+  companyId=branches[0].company_id;tenantBranchCompanyCache.set(branchId,companyId);
+ }
+ let data=tenantBrandCache.get(companyId);
+ if(!data){
+  const result=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();
+  if(result.error||!result.data)throw Error('تعذر تحميل الهوية المعتمدة للشركة');
+  data=result.data;tenantBrandCache.set(companyId,data);
+ }
  activeBrandCompanyId=companyId;applyBrandConfig(data);
 }
 function subscribeBrandConfig(){
  if(brandChannel){sb.removeChannel(brandChannel);brandChannel=null}
  if(!activeBrandCompanyId)return;
  const id=activeBrandCompanyId;
- brandChannel=sb.channel('company-brand-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},p=>{if(p.new&&activeBrandCompanyId===id)applyBrandConfig(p.new)}).subscribe();
+ brandChannel=sb.channel('company-brand-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},p=>{if(p.new&&activeBrandCompanyId===id){tenantBrandCache.set(id,p.new);applyBrandConfig(p.new)}}).subscribe();
 }
 
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';

@@ -203,7 +203,8 @@ async function openOwnerBranchManager(){
  if(name===null)return;
  if(name.trim().length<3)return flash('اسم الفرع قصير',false);
  if(!confirm('تأكيد إضافة الفرع: '+name.trim()+'؟'))return;
- const {error}=await safeRpc('dlv_owner_add_branch',{p_name:name.trim()});
+ if(!ownerActiveCompanyId)return flash('اختر الشركة أولاً قبل إضافة الفرع',false);
+ const {error}=await safeRpc('dlv_owner_add_company_branch',{p_company_id:ownerActiveCompanyId,p_name:name.trim()});
  if(error)return flash('تعذر إضافة الفرع: '+error.message,false);
  await refreshBranchNames();flash('تم إضافة الفرع. يمكنك إنشاء حسابات موظفيه الآن',true);ownerBranchPicker();
 }

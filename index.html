@@ -71,6 +71,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .pilot-call{background:#5a3317;color:#fff8ea}
 .pilot-wa{background:#b9832e;color:#fff}
 .pilot-disabled{background:#eee5d7;color:#8d806f;border-color:#d8cbb6;opacity:.8}
+ .ys-rider-photo{overflow:hidden;background:#f9d49b;border:3px solid #6b3514;display:grid;place-items:center}.ys-rider-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}.ys-bike-pin{isolation:isolate}
 </style>
 </head>
 <body>
@@ -100,7 +101,7 @@ const branchQuery = q => (selectedBranch ? q.eq('branch_id', selectedBranch) : q
 const ORD = {};
 // اعتبر الحساب مالك النظام إذا كان أي من حقلي الدور يحدد admin.
 const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin';
-let brandConfig = {brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:'',bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e'};
+let brandConfig = {brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:'',rider_icon_url:'rider-pin.svg',bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e'};
 let brandChannel = null;
 const OWNER_ONLY = () => isOwner();
 function applyBrandConfig(c){ if(!c)return; brandConfig={...brandConfig,...c}; document.title=(brandConfig.app_name||'متابعة الدليفري')+' — '+(brandConfig.brand_name||'واحة اليمن'); const root=document.documentElement; root.style.setProperty('--bg',brandConfig.bg_color||'#dca86f'); root.style.setProperty('--card',brandConfig.card_color||'#fff8ea'); root.style.setProperty('--brand',brandConfig.brand_color||'#5a3317'); root.style.setProperty('--gold',brandConfig.gold_color||'#b9832e'); document.querySelectorAll('[data-brand-logo]').forEach(i=>i.src=brandConfig.logo_url||'logo-original.png'); document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'واحة اليمن'); document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'متابعة الدليفري'); const old=document.getElementById('brand-bg-style'); if(old)old.remove(); if(brandConfig.background_url){const st=document.createElement('style');st.id='brand-bg-style';st.textContent=`body::before{background-image:url('${String(brandConfig.background_url).replace(/'/g,'%27')}'),url(logo-original.png);background-size:cover, min(66vw,320px) auto;background-position:center,center 34%;background-repeat:no-repeat;opacity:.24}`;document.head.appendChild(st);} }
@@ -278,16 +279,23 @@ async function openBrandSettings(){
  <label>اسم التطبيق</label><input id="br_app" maxlength="60" value="${esc(brandConfig.app_name)}">
  <label>لوجو البراند (من الموبايل)</label><input id="br_logo" type="file" accept="image/png,image/jpeg,image/webp">
  <label>خلفية التطبيق (من الموبايل)</label><input id="br_bg" type="file" accept="image/png,image/jpeg,image/webp">
+ <label>أيقونة الطيار على الخريطة (رابط صورة HTTPS أو ملف داخل المشروع)</label><input id="br_rider" dir="ltr" maxlength="500" value="${esc(brandConfig.rider_icon_url||'rider-pin.svg')}" placeholder="rider-pin.svg">
+ <div class="card"><h3>📲 إعدادات واتساب المطعم — المالك فقط</h3>
+ <label>رقم واتساب المرسل (بكود الدولة، مثال: 201xxxxxxxxx)</label>
+ <input id="br_wa_sender" dir="ltr" inputmode="tel" maxlength="15" value="" placeholder="201xxxxxxxxx">
+ <label style="display:flex;align-items:center;gap:8px"><input id="br_wa_auto" type="checkbox" style="width:auto" disabled> الإرسال التلقائي (غير متاح حتى ربط WhatsApp Business API الرسمي)</label>
+ <div class="meta">حفظ الرقم لا يرسل رسائل وحده. يلزم توثيق الرقم وربط مزود رسمي من السيرفر، ولا تُحفظ مفاتيح الخدمة هنا.</div></div>
  <div class="f"><div><label>لون الخلفية</label><input id="br_bgcolor" type="color" value="${esc(brandConfig.bg_color)}"></div><div><label>لون البطاقات</label><input id="br_cardcolor" type="color" value="${esc(brandConfig.card_color)}"></div><div><label>اللون الأساسي</label><input id="br_brandcolor" type="color" value="${esc(brandConfig.brand_color)}"></div><div><label>اللون الذهبي</label><input id="br_goldcolor" type="color" value="${esc(brandConfig.gold_color)}"></div></div>
  <div class="card" style="text-align:center"><img id="br_preview_logo" src="${esc(brandConfig.logo_url||'logo-original.png')}" style="width:144px;height:144px;max-width:100%;object-fit:contain;object-position:center;border-radius:0;background:transparent;display:block;margin:8px auto"><h3 id="br_preview_name">${esc(brandConfig.brand_name)}</h3><div class="meta">معاينة الهوية</div></div>
  <div class="row"><button class="p big" id="br_save" style="flex:1">حفظ ونشر للجميع</button><button class="g big" id="br_reset">استعادة هوية واحة اليمن</button></div><div id="br_msg" class="meta"></div></div>`;
  document.body.appendChild(d); $('brandClose').onclick=()=>d.remove();
+ const {data:waSettings,error:waLoadError}=await sb.rpc('dlv_owner_whatsapp_settings');if(!waLoadError && waSettings){$('br_wa_sender').value=waSettings.sender_phone||'';}
  $('br_name').oninput=()=>{$('br_preview_name').textContent=$('br_name').value||'اسم البراند';};
  $('br_logo').onchange=()=>{const f=$('br_logo').files[0];if(!f)return;const u=URL.createObjectURL(f);const im=$('br_preview_logo');im.onload=()=>URL.revokeObjectURL(u);im.onerror=()=>{URL.revokeObjectURL(u);$('br_msg').textContent='تعذر قراءة الصورة. اختار PNG أو JPG أو WEBP واضحة.';};im.src=u;};
  for(const [id,key] of [['br_bgcolor','bg_color'],['br_cardcolor','card_color'],['br_brandcolor','brand_color'],['br_goldcolor','gold_color']]) $(id).oninput=()=>{const map={bg_color:'--bg',card_color:'--card',brand_color:'--brand',gold_color:'--gold'};document.documentElement.style.setProperty(map[key],$(id).value);};
  async function uploadBrandFile(file,path){if(!file)return null;if(path==='brand-logo'){const probe=new Image();const tmp=URL.createObjectURL(file);try{await new Promise((resolve,reject)=>{probe.onload=resolve;probe.onerror=reject;probe.src=tmp;});if(probe.naturalWidth<300||probe.naturalHeight<300)throw new Error('اللوجو دقته منخفضة؛ اختار صورة أبعادها 300×300 بكسل على الأقل.');}finally{URL.revokeObjectURL(tmp);}}if(file.size>5*1024*1024)throw new Error('حجم الصورة يجب ألا يتجاوز 5 ميجابايت');if(!/^image\/(png|jpeg|webp)$/.test(file.type))throw new Error('صيغة الصورة غير مدعومة');const ext=file.type==='image/jpeg'?'jpg':file.type.split('/')[1];const key=path+'.'+ext;const {error}=await sb.storage.from('brand-assets').upload(key,file,{upsert:true,contentType:file.type,cacheControl:'0'});if(error)throw error;const {data}=sb.storage.from('brand-assets').getPublicUrl(key);return data.publicUrl+'?v='+Date.now();}
- $('br_save').onclick=async()=>{if(!OWNER_ONLY())return;const b=$('br_save');b.disabled=true;$('br_msg').textContent='جاري رفع الصور وحفظ الهوية...';try{const logo=await uploadBrandFile($('br_logo').files[0],'brand-logo');const bg=await uploadBrandFile($('br_bg').files[0],'brand-background');const payload={id:1,brand_name:$('br_name').value.trim()||'واحة اليمن',app_name:$('br_app').value.trim()||'متابعة الدليفري',logo_url:logo||brandConfig.logo_url,background_url:bg||brandConfig.background_url,bg_color:$('br_bgcolor').value,card_color:$('br_cardcolor').value,brand_color:$('br_brandcolor').value,gold_color:$('br_goldcolor').value,updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error)throw error;applyBrandConfig(data);$('br_msg').textContent='تم الحفظ والنشر لجميع المستخدمين.';flash('تم تحديث هوية النظام للجميع',true);}catch(e){$('br_msg').textContent='تعذر الحفظ: '+(e.message||'خطأ غير معروف')+' — تأكد من تنفيذ إعدادات قاعدة البيانات المرفقة.';}finally{b.disabled=false;}};
- $('br_reset').onclick=async()=>{if(!OWNER_ONLY())return; if(!confirm('استعادة هوية واحة اليمن الأصلية ونشرها للجميع؟'))return; const payload={id:1,brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:null,bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e',updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error){$('br_msg').textContent='تعذر الاستعادة: '+error.message;return;}applyBrandConfig(data);$('br_msg').textContent='تمت استعادة الهوية الأصلية للجميع.';};
+ $('br_save').onclick=async()=>{if(!OWNER_ONLY())return;const b=$('br_save');b.disabled=true;$('br_msg').textContent='جاري رفع الصور وحفظ الهوية...';try{const logo=await uploadBrandFile($('br_logo').files[0],'brand-logo');const bg=await uploadBrandFile($('br_bg').files[0],'brand-background');const payload={id:1,brand_name:$('br_name').value.trim()||'واحة اليمن',app_name:$('br_app').value.trim()||'متابعة الدليفري',logo_url:logo||brandConfig.logo_url,background_url:bg||brandConfig.background_url,rider_icon_url:$('br_rider').value.trim()||'rider-pin.svg',bg_color:$('br_bgcolor').value,card_color:$('br_cardcolor').value,brand_color:$('br_brandcolor').value,gold_color:$('br_goldcolor').value,updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error)throw error;const {error:waSaveError}=await sb.rpc('dlv_owner_set_whatsapp_sender',{p_phone:$('br_wa_sender').value.trim()});if(waSaveError)throw waSaveError;applyBrandConfig(data);$('br_msg').textContent='تم حفظ الهوية ورقم واتساب التجربة. الإرسال التلقائي غير مفعل.';flash('تم تحديث هوية النظام للجميع',true);}catch(e){$('br_msg').textContent='تعذر الحفظ: '+(e.message||'خطأ غير معروف')+' — تأكد من تنفيذ إعدادات قاعدة البيانات المرفقة.';}finally{b.disabled=false;}};
+ $('br_reset').onclick=async()=>{if(!OWNER_ONLY())return; if(!confirm('استعادة هوية واحة اليمن الأصلية ونشرها للجميع؟'))return; const payload={id:1,brand_name:'واحة اليمن',app_name:'متابعة الدليفري',logo_url:'logo-original.png',background_url:null,rider_icon_url:'rider-pin.svg',whatsapp_sender_phone:null,whatsapp_auto_enabled:false,bg_color:'#dca86f',card_color:'#fff8ea',brand_color:'#5a3317',gold_color:'#b9832e',updated_at:new Date().toISOString()};const {data,error}=await sb.from('dlv_branding').upsert(payload,{onConflict:'id'}).select().single();if(error){$('br_msg').textContent='تعذر الاستعادة: '+error.message;return;}applyBrandConfig(data);$('br_msg').textContent='تمت استعادة الهوية الأصلية للجميع.';};
 }
 
 /* ---------- العمليات ---------- */
@@ -321,6 +329,7 @@ function newOrderForm() {
     <label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
     ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch"><option value="1" ${selectedBranch===1?'selected':''}>فرع المهندسين</option><option value="2" ${selectedBranch===2?'selected':''}>فرع الشيخ زايد</option></select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel">
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="n_wa_consent" style="width:auto"> العميل وافق على استلام رابط المتابعة عبر واتساب</label>
     <label>العنوان</label><input id="n_a">` : ''}
     ${isMgr ? '<label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>' : ''}
     <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
@@ -337,7 +346,21 @@ function newOrderForm() {
       const {data: createdOrder} = await sb.from('dlv_orders').select('track_code').eq('id', createdId).maybeSingle();
       if (createdOrder && createdOrder.track_code) codeText = ' — كود متابعة العميل: ' + createdOrder.track_code;
     }
-    d.remove(); flash('تم تسجيل الطلب' + codeText, true); refreshView();
+    const consent = $('n_wa_consent')?.checked === true;
+    const customerPhone = String($('n_p')?.value||'').replace(/\D/g,'');
+    const normalizedPhone = customerPhone.startsWith('0') ? '20'+customerPhone.slice(1) : customerPhone;
+    // Until a verified WhatsApp Business sender is configured, never claim automatic delivery.
+    const trackingCode = codeText.match(/[A-HJ-NP-Z2-9]{8}/)?.[0] || '';
+    refreshView();
+    if (consent && /^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone) && trackingCode) {
+      const link = location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
+      const msg = 'واحة اليمن — تم تسجيل طلبك رقم '+$('n_no').value+'. تابع طلبك من هنا: '+link;
+      const waLink = 'https://wa.me/'+normalizedPhone+'?text='+encodeURIComponent(msg);
+      const go = document.createElement('a');go.href=waLink;go.target='_blank';go.rel='noopener noreferrer';go.textContent='فتح واتساب لإرسال رابط المتابعة';
+      go.style.cssText='display:block;padding:12px;background:#fff8ea;color:#5a3317;border:1px solid #b9832e;border-radius:10px;margin:12px 0;text-align:center';
+      d.remove();const panel=document.createElement('div');panel.className='card';panel.append('تم حفظ الطلب. لم يتم إرسال واتساب تلقائيًا. اضغط لإرسال الرسالة من واتساب: ',go);$('app')?.prepend(panel);
+    } else { d.remove(); }
+    flash('تم تسجيل الطلب' + codeText, true);
   };
 }
 function failDialog(id) {
@@ -679,26 +702,17 @@ function bikeBearing(a, b) {
   return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 function bikeIcon(bearing=0, live=true, size=66) {
+  // Rider branding shared by the fleet map and customer tracking map.
+  // Never interpolate arbitrary HTML into a Leaflet marker.
   const status = live ? '#27ae60' : '#9aa0a6';
-  const pulse = live ? `<span class="ys-bike-pulse"></span>` : '';
-  const svg = `<svg viewBox="0 0 64 44" width="46" height="34" xmlns="http://www.w3.org/2000/svg" aria-label="موتوسيكل واحة اليمن">
-    <g transform="rotate(${bearing} 32 22)">
-      <circle cx="13" cy="32" r="8" fill="#231b16" stroke="#f0cf82" stroke-width="2.7"/>
-      <circle cx="51" cy="32" r="8" fill="#231b16" stroke="#f0cf82" stroke-width="2.7"/>
-      <path d="M13 31 L23 17 L39 17 L51 31 L34 31 L27 22 L22 31Z" fill="#f0cf82" stroke="#fff5df" stroke-width="1.4" stroke-linejoin="round"/>
-      <path d="M23 17 Q28 7 39 15 L45 23 L31 23 L27 20" fill="#fff5df" stroke="#f0cf82" stroke-width="1.5"/>
-      <path d="M35 15 L41 8 L49 9 L52 19 L44 20" fill="#f0cf82" stroke="#fff5df" stroke-width="1.3"/>
-      <path d="M21 14 L14 11 M45 9 L53 7" stroke="#f0cf82" stroke-width="2" stroke-linecap="round"/>
-      <path d="M28 13 L38 13" stroke="#7b1717" stroke-width="2.5" stroke-linecap="round"/>
-    </g></svg>`;
-  return L.divIcon({
-    className:'ys-bike-marker',
-    html:`<div class="ys-bike-pin" style="--bike-status:${status};width:${size}px;height:${size}px">
-      ${pulse}<div class="ys-bike-core"><span class="ys-bike-crown">واحة اليمن</span>${svg}</div>
-      <span class="ys-bike-status"></span>
-    </div>`,
-    iconSize:[size,size], iconAnchor:[size/2,size/2], popupAnchor:[0,-size/2]
-  });
+  const url = String(brandConfig.rider_icon_url || 'rider-pin.svg');
+  const safeUrl = /^(?:[a-z0-9_./-]+|https:\/\/[^"'<>\\\s]+)$/i.test(url) && !url.startsWith('//') ? url : 'rider-pin.svg';
+  const pulse = live ? '<span class="ys-bike-pulse"></span>' : '';
+  const html = '<div class="ys-bike-pin" style="--bike-status:'+status+';width:'+size+'px;height:'+size+'px">'+
+    pulse+'<div class="ys-bike-core ys-rider-photo" style="width:'+Math.round(size*.86)+'px;height:'+Math.round(size*.86)+'px">'+
+    '<img src="'+safeUrl.replace(/&/g,'&amp;')+'" alt="طيار واحة اليمن" onerror="this.style.display=\'none\';this.parentNode.textContent=\'🏍️\'" />'+
+    '</div><span class="ys-bike-status"></span></div>';
+  return L.divIcon({className:'ys-bike-marker',html,iconSize:[size,size],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2]});
 }
 /* ---------- خريطة الطيارين (المدير) ---------- */
 let map, markers = {}, mapTimer;
@@ -1098,7 +1112,7 @@ function trackView(code0) {
       const rawPilotPhone = String(j.pilot_phone || '').trim();
       let pilotDigits = rawPilotPhone.replace(/\D/g, '');
       if (pilotDigits.startsWith('0')) pilotDigits = '20' + pilotDigits.slice(1);
-      const hasPilotPhone = pilotDigits.length >= 10;
+      const hasPilotPhone = /^20(?:10|11|12|15)\d{8}$/.test(pilotDigits) || /^\d{10,15}$/.test(pilotDigits) && !pilotDigits.startsWith('0');
       const callAction = hasPilotPhone
         ? '<a href="tel:+' + pilotDigits + '" class="pilot-contact-btn pilot-call" dir="rtl"><span aria-hidden="true">☎</span> اتصال</a>'
         : '<button type="button" class="pilot-contact-btn pilot-disabled" disabled title="أضف رقم الطيار من إدارة الحسابات">☎ اتصال</button>';

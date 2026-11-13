@@ -16,6 +16,11 @@
 <style>
 :root{--bg:#101114;--card:#1b1d20;--text:#f7f0df;--muted:#d8cbb5;--line:#a77d3e;--brand:#a77d3e;--gold:#c69b53}
 
+/* Fast, accessible interactions: transform/opacity only; no layout animations */
+button,a,input,select{transition:background-color .14s ease,border-color .14s ease,opacity .14s ease,transform .14s ease}
+button:not(:disabled):active{transform:scale(.985)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #eac27b;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){button,a,input,select{transition:none!important}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:env(safe-area-inset-top,0) 12px env(safe-area-inset-bottom,0)}
 .wrap{max-width:900px;margin:0 auto;padding:12px 0;position:relative;z-index:1}

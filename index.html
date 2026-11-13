@@ -478,8 +478,8 @@ document.addEventListener('click', e => {
 function driverView() {
   $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
     <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
-    <div class="card"><div class="meta" id="locst">📍 جاري تشغيل مشاركة الموقع... بيفضل شغّال لحد ما تعمل خروج، سيب الصفحة مفتوحة.</div></div><h2>الطلبات المسندة ليّ</h2><div id="ol"></div>`);
-  bindOut(); if (watchId == null) startShare(); loadMine();
+    <div class="card"><div class="meta" id="locst">📍 جاري تشغيل مشاركة الموقع... بيفضل شغّال لحد ما تعمل خروج، سيب الصفحة مفتوحة.</div><div class="meta" id="locdetail">التتبع يتطلب إبقاء التطبيق ظاهرًا أثناء التوصيل.</div><button id="gpsRetry" class="g">↻ تحديث GPS الآن</button></div><h2>الطلبات المسندة ليّ</h2><div id="ol"></div>`);
+  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>resumeDriverLocationNow(); if (!shareWanted || watchId == null) startShare(); loadMine();
 }
 async function loadMine() {
   const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
@@ -1013,7 +1013,8 @@ function renderShare() {
   b.style.borderColor = on ? '#e03131' : '';
 }
 async function sendDriverPosition(p, force = false) {
-  if (!shareWanted || locationBusy) return;
+  if (!shareWanted || locationBusy || !navigator.onLine) return;
+  if (p?.timestamp && Date.now()-p.timestamp>30000) {const el=$('locst');if(el)el.textContent='⚠ قراءة GPS قديمة — ننتظر موقعًا أحدث';return;}
   // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
   if (!force && Date.now() - lastSend < 5000) return;
   if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
@@ -1026,7 +1027,7 @@ async function sendDriverPosition(p, force = false) {
     if (s) s.textContent = error
       ? '⚠ تعذر إرسال الموقع: ' + error.message
       : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
-    if (!error) lastSend = Date.now();
+    if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG')+' · يجب إبقاء التطبيق مفتوحًا';}
   } finally { locationBusy = false; }
 }
 function attachLocationWatch() {
@@ -1039,7 +1040,7 @@ function attachLocationWatch() {
       : '⚠ الموقع غير متاح مؤقتًا — سنعيد المحاولة عند عودة الصفحة';
     if (e.code === 1) { shareWanted = false; stopShare(true); }
     else {
-      watchId = null;
+      if (watchId != null) {try{navigator.geolocation.clearWatch(watchId);}catch(e){}}watchId = null;
       // إعادة المحاولة المؤقتة فقط إذا كانت الصفحة ظاهرة؛ لا ننشئ حلقات إرسال بالخلفية.
       if (document.visibilityState === 'visible' && shareWanted) {
         setTimeout(() => {
@@ -1061,6 +1062,7 @@ async function startShare() {
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
   shareWanted = true; lastSend = 0;
   attachLocationWatch();
+  navigator.geolocation.getCurrentPosition(p=>sendDriverPosition(p,true),()=>{}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
   clearInterval(gpsPollTimer);
   gpsPollTimer=setInterval(()=>{if(shareWanted&&document.visibilityState==='visible'&&navigator.onLine&&!locationBusy)navigator.geolocation.getCurrentPosition(p=>sendDriverPosition(p,true),()=>{}, {enableHighAccuracy:true,maximumAge:0,timeout:12000});},10000);
   await acquireWakeLock();

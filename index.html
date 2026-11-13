@@ -75,6 +75,21 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .pilot-disabled{background:#eee5d7;color:#8d806f;border-color:#d8cbb6;opacity:.8}
  .ys-rider-photo{overflow:hidden;background:#f9d49b;border:3px solid #6b3514;display:grid;place-items:center}.ys-rider-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}.ys-bike-pin{isolation:isolate}
 \n.ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}\n
+/* Authenticated company theme: consistent contrast on mobile and desktop */
+body.ys-tenant{--bg:#24180f;--card:#211c1b;--text:#fff5e3;--muted:#e6d4b8;--line:#b78b50;background:linear-gradient(160deg,#2c1c12,#4a2e1b 52%,#21170f)!important;color:var(--text)!important}
+body.ys-tenant::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:var(--tenant-wallpaper,none),var(--tenant-logo,none)!important;background-size:cover,min(64vw,300px) auto!important;background-position:center,center 44%!important;background-repeat:no-repeat!important;opacity:.12!important}
+body.ys-tenant::after{display:none!important}
+body.ys-tenant .wrap{position:relative;z-index:1}
+body.ys-tenant .card,body.ys-tenant .stat,body.ys-tenant .modal>div{background:#211c1b!important;color:#fff5e3!important;border-color:#b78b50!important}
+body.ys-tenant .meta,body.ys-tenant .stat span,body.ys-tenant th{color:#e6d4b8!important}
+body.ys-tenant h1,body.ys-tenant h2,body.ys-tenant h3,body.ys-tenant .ord,body.ys-tenant .stat b{color:#fff5e3!important}
+body.ys-tenant header{background:#4e2c12!important;border-color:#d5a65a!important;color:#fff5e3!important}
+body.ys-tenant button,body.ys-tenant input,body.ys-tenant select,body.ys-tenant textarea{color:#fff5e3;background:#30251d;border-color:#b78b50}
+body.ys-tenant button.p{background:#8b4c1e;color:#fff;border-color:#d5a65a}
+body.ys-tenant button.g{background:#94651d;color:#fff}
+body.ys-tenant .msg.e{background:#552520;color:#ffe6e2}
+body.ys-tenant .msg.o{background:#1b4b33;color:#e0ffe8}
+@media print{body.ys-tenant::before{display:none!important}}
 /* Your Staff neutral wallpaper: public, owner and branch selection only */
 html.ys-public body,body.ys-platform{background:#101827!important;background-image:radial-gradient(ellipse at 15% 10%,rgba(216,174,100,.13),transparent 48%),radial-gradient(ellipse at 85% 90%,rgba(75,113,151,.16),transparent 50%)!important}
 html.ys-public body::after,body.ys-platform::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.09;background-image:url("yourstaff-icon.svg");background-repeat:no-repeat;background-size:min(72vw,360px) auto;background-position:center 45%}
@@ -122,6 +137,7 @@ let brandConfig={...PLATFORM_BRAND},brandChannel=null,activeBrandCompanyId=null;
 const OWNER_ONLY=()=>isOwner();
 function resetPlatformBrand(){
  brandConfig={...PLATFORM_BRAND};activeBrandCompanyId=null;
+ document.body.classList.remove('ys-tenant');document.body.style.removeProperty('--tenant-logo');document.body.style.removeProperty('--tenant-wallpaper');
  document.documentElement.style.removeProperty('--bg');document.documentElement.style.removeProperty('--card');
  document.documentElement.style.removeProperty('--brand');document.documentElement.style.removeProperty('--gold');
  document.getElementById('brand-bg-style')?.remove();document.title='Your Staff';
@@ -129,19 +145,17 @@ function resetPlatformBrand(){
 function applyBrandConfig(c){
  if(!c||!selectedBranch||isOwner())return;
  brandConfig={...PLATFORM_BRAND,...c};
+ document.body.classList.add('ys-tenant');
+ const safeAsset=v=>{const url=String(v||'');return (/^https:\/\/[^\\\"'<>\s]+$/i.test(url)||/^[a-z0-9_./-]+$/i.test(url))&&!url.startsWith('//')?'url('+JSON.stringify(url)+')':'none'};
+ document.body.style.setProperty('--tenant-logo',safeAsset(brandConfig.logo_url));
+ document.body.style.setProperty('--tenant-wallpaper',safeAsset(brandConfig.background_url));
  const root=document.documentElement;
  for(const [key,value] of [['--bg',brandConfig.bg_color],['--card',brandConfig.card_color],['--brand',brandConfig.brand_color],['--gold',brandConfig.gold_color]])root.style.setProperty(key,value||'');
  document.title='Your Staff — '+(brandConfig.brand_name||'الشركة');
  document.querySelectorAll('[data-brand-logo]').forEach(i=>{i.src=brandConfig.logo_url||'yourstaff-icon.svg'});
  document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'');
  document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'');
- const old=document.getElementById('brand-bg-style');if(old)old.remove();
- const bg=String(brandConfig.background_url||'');
- if(bg && (/^https:\/\//i.test(bg)||/^[a-z0-9_./-]+$/i.test(bg)) && !bg.startsWith('//')){
-  const st=document.createElement('style');st.id='brand-bg-style';
-  st.textContent='body:not(.ys-platform)::before{background-image:url('+JSON.stringify(bg)+');background-size:cover;background-position:center;background-repeat:no-repeat;opacity:.24}';
-  document.head.appendChild(st);
- }
+ document.getElementById('brand-bg-style')?.remove();
 }
 async function loadBrandConfig(){
  resetPlatformBrand();if(!me||!selectedBranch||isOwner())return;

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 194" role="img" aria-label="طيار واحة اليمن">
+<defs><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0cf"/><stop offset=".55" stop-color="#e8ad60"/><stop offset="1" stop-color="#b86f31"/></linearGradient><linearGradient id="helmet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b76c2d"/><stop offset=".55" stop-color="#542b19"/><stop offset="1" stop-color="#261710"/></linearGradient><filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#321b0e" flood-opacity=".4"/></filter></defs>
+<path d="M80 189C60 166 12 110 12 77a68 68 0 0 1 136 0c0 33-48 89-68 112Z" fill="#5a2b12" stroke="#fff1d6" stroke-width="5" filter="url(#shadow)"/>
+<circle cx="80" cy="76" r="62" fill="url(#gold)" stroke="#8d4c20" stroke-width="5"/>
+<g transform="translate(7 18)">
+<rect x="25" y="49" width="40" height="46" rx="6" fill="#7b3c19" stroke="#2e190f" stroke-width="3"/>
+<rect x="29" y="53" width="32" height="34" rx="3" fill="#f3bd73"/>
+<path d="M31 65 44 58 57 65M35 72h20M35 77h20" fill="none" stroke="#5b2b16" stroke-width="2"/>
+<text x="45" y="84" font-size="8" font-weight="bold" fill="#5b2b16" text-anchor="middle">واحة اليمن</text>
+<g stroke="#2b211c" stroke-width="4" fill="none"><circle cx="51" cy="106" r="15"/><circle cx="116" cy="106" r="15"/><path d="m51 106 27-31 19 31H51l27-31 38 31-15-34H90"/></g>
+<path d="M67 65 87 51 107 62 101 82 81 83 66 95 58 89Z" fill="#6d371d" stroke="#2e1a13" stroke-width="2"/>
+<path d="m86 82 14 18" stroke="#4d2818" stroke-width="9" stroke-linecap="round"/>
+<path d="M83 42q-4-24 18-30 25-5 30 24l-8 18-28-1Z" fill="url(#helmet)" stroke="#2b170e" stroke-width="3"/>
+<path d="M98 29q15-6 29 6l-5 12-26-4Z" fill="#14191c" stroke="#e0b783" stroke-width="2"/>
+<path d="m89 53 18 10 14-3" fill="none" stroke="#9c5526" stroke-width="9" stroke-linecap="round"/>
+<path d="m116 61 12-5 7 5" stroke="#2c211c" stroke-width="5" fill="none"/>
+</g>
+<text x="80" y="150" text-anchor="middle" font-size="15" font-family="sans-serif" font-weight="bold" fill="#53280e">واحة اليمن</text>
+</svg>

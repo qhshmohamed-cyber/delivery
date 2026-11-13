@@ -1017,7 +1017,7 @@ async function sendDriverPosition(p, force = false) {
   if (p?.timestamp && Date.now()-p.timestamp>30000) {const el=$('locst');if(el)el.textContent='⚠ قراءة GPS قديمة — ننتظر موقعًا أحدث';return;}
   // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
   if (!force && Date.now() - lastSend < 5000) return;
-  if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
+  if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || !Number.isFinite(p?.coords?.accuracy) || p.coords.accuracy > 150 || Date.now()-p.timestamp>20000) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
   locationBusy = true;
   try {
     const { error } = await safeRpc('dlv_update_location', {
@@ -1028,7 +1028,7 @@ async function sendDriverPosition(p, force = false) {
       ? '⚠ تعذر إرسال الموقع: ' + error.message
       : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
     if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG')+' · يجب إبقاء التطبيق مفتوحًا';}
-  } finally { locationBusy = false; }
+  } catch(e) {const st=$('locst');if(st)st.textContent='⚠ فشل إرسال GPS: '+String(e?.message||'خطأ اتصال');} finally { locationBusy = false; }
 }
 function attachLocationWatch() {
   if (!shareWanted || watchId != null || !navigator.geolocation) return;
@@ -1038,7 +1038,7 @@ function attachLocationWatch() {
     if (s) s.textContent = e.code === 1
       ? '⚠ صلاحية الموقع مرفوضة — راجع إعدادات المتصفح'
       : '⚠ الموقع غير متاح مؤقتًا — سنعيد المحاولة عند عودة الصفحة';
-    if (e.code === 1) { shareWanted = false; stopShare(true); }
+    if (e.code === 1) { stopShare(true); }
     else {
       if (watchId != null) {try{navigator.geolocation.clearWatch(watchId);}catch(e){}}watchId = null;
       // إعادة المحاولة المؤقتة فقط إذا كانت الصفحة ظاهرة؛ لا ننشئ حلقات إرسال بالخلفية.
@@ -1059,6 +1059,7 @@ async function acquireWakeLock() {
 }
 async function startShare() {
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
+  if (!navigator.onLine) return flash('شغّل الإنترنت قبل بدء مشاركة الموقع',false);
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
   shareWanted = true; lastSend = 0;
   attachLocationWatch();
@@ -1202,7 +1203,7 @@ function openMap() {
       const oldPos = prevPos[r.driver_id], bearing = oldPos ? bikeBearing(oldPos, {lat:r.lat,lng:r.lng}) : 0; prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 66);
       const m = markers[r.driver_id];
-      if (m) { animateRiderMarker(m,r.lat,r.lng,2600); m.setIcon(ic); m.getPopup().setContent(html); }
+      if (m) { if(!oldPos || oldPos.lat!==r.lat || oldPos.lng!==r.lng)animateRiderMarker(m,r.lat,r.lng,2600); m.setIcon(ic); m.getPopup().setContent(html); }
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });

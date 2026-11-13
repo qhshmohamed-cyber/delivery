@@ -1171,17 +1171,18 @@ function animateRiderMarker(marker, lat, lng, duration=2500) {
   }
   riderAnimations.set(marker,requestAnimationFrame(step));
 }
-function bikeIcon(bearing=0, live=true, size=90) {
-  // Standalone transparent motorcycle, no circular pin or legacy brand image.
-  const width=Math.max(62,Math.round(size*1.2));
-  const height=Math.round(width*79/90);
+function bikeIcon(bearing=90, live=true, size=90) {
+  // Vector artwork and the existing official brand asset stay sharp on zoom.
+  const width=Math.max(72,Math.round(size*1.65));
+  const height=Math.round(width*140/220);
+  const heading=Number.isFinite(bearing)?bearing:90;
+  const angle=((heading-90+540)%360)-180;
   const opacity=live?'1':'.65';
-  // The rider illustration faces right (east); heading is only changed for measured movement.
-  const angle=Number.isFinite(bearing)?Math.max(-80,Math.min(80,((bearing-90+540)%360)-180)):0;
-  const html='<div class="ys-motorcycle-icon" style="width:'+width+'px;height:'+height+'px;opacity:'+opacity+'">'+
-    '<img src="wahat-yemen-rider-marker.svg?v=hd-20261113" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 2px 2px rgba(0,0,0,.22));image-rendering:-webkit-optimize-contrast">'+
+  const html='<div class="ys-motorcycle-icon" style="position:relative;width:'+width+'px;height:'+height+'px;opacity:'+opacity+';transform:rotate('+angle+'deg);transform-origin:50% 78%;transition:transform .6s ease-out">'+
+    '<img src="rider-motorcycle-v3.svg?v=vector-20261113" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 2px rgba(0,0,0,.35))">'+
+    '<img src="logo-original-cropped.png" alt="" draggable="false" style="position:absolute;left:8%;top:35%;width:23%;height:29%;object-fit:contain;border-radius:2px;background:#f4d39c;box-shadow:0 0 0 1px #4c2515">'+
     '</div>';
-  return L.divIcon({className:'ys-bike-marker ys-motorcycle-marker',html,iconSize:[width,height],iconAnchor:[Math.round(width/2),Math.round(height*.82)],popupAnchor:[0,-height]});
+  return L.divIcon({className:'ys-bike-marker ys-motorcycle-marker',html,iconSize:[width,height],iconAnchor:[Math.round(width/2),Math.round(height*.78)],popupAnchor:[0,-height]});
 }
 /* ---------- خريطة الطيارين (المدير) ---------- */
 let map, markers = {}, mapTimer;
@@ -1192,7 +1193,7 @@ function openMap() {
   document.body.appendChild(d);
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-  markers = {}; const prevPos = {}; let fitted = false, mapBusy = false;
+  markers = {}; const prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
   async function refresh() {
     if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine || !document.getElementById('lmap')) return;
     mapBusy = true;
@@ -1211,10 +1212,14 @@ function openMap() {
       seen.add(r.driver_id);
       const live = (Date.now() - new Date(r.updated_at)) < 30000, nm = name[r.driver_id] || 'طيار';
       const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '● آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
-      const oldPos = prevPos[r.driver_id], bearing = oldPos ? bikeBearing(oldPos, {lat:r.lat,lng:r.lng}) : 0; prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
+      const oldPos = prevPos[r.driver_id];
+      const moved = oldPos && L.latLng(oldPos).distanceTo(L.latLng(r.lat,r.lng)) > 5;
+      if (moved) lastHeading[r.driver_id] = bikeBearing(oldPos, {lat:r.lat,lng:r.lng});
+      const bearing = lastHeading[r.driver_id] ?? 90;
+      prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 66);
       const m = markers[r.driver_id];
-      if (m) { if(!oldPos || oldPos.lat!==r.lat || oldPos.lng!==r.lng)animateRiderMarker(m,r.lat,r.lng,4200); m.setIcon(ic); m.getPopup().setContent(html); }
+      if (m) { if(moved)animateRiderMarker(m,r.lat,r.lng,4200); else if(!oldPos)m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });

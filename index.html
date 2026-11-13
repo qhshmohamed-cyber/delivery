@@ -1158,7 +1158,8 @@ function animateRiderMarker(marker, lat, lng, duration=2500) {
     marker.setLatLng(target); riderAnimations.delete(marker); return;
   }
   const startAt = performance.now();
-  const ease = t => t*t*(3-2*t);
+  // Interpolate real samples linearly; no stop-and-go easing at every GPS tick.
+  const ease = t => t;
   function step(now) {
     if (!marker._map || document.visibilityState !== 'visible') {
       marker.setLatLng(target); riderAnimations.delete(marker); return;
@@ -1175,6 +1176,8 @@ function bikeIcon(bearing=0, live=true, size=90) {
   const width=Math.max(62,Math.round(size*1.2));
   const height=Math.round(width*79/90);
   const opacity=live?'1':'.65';
+  // The rider illustration faces right (east); heading is only changed for measured movement.
+  const angle=Number.isFinite(bearing)?Math.max(-80,Math.min(80,((bearing-90+540)%360)-180)):0;
   const html='<div class="ys-motorcycle-icon" style="width:'+width+'px;height:'+height+'px;opacity:'+opacity+'">'+
     '<img src="wahat-yemen-rider-marker.svg?v=hd-20261113" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 2px 2px rgba(0,0,0,.22));image-rendering:-webkit-optimize-contrast">'+
     '</div>';
@@ -1211,7 +1214,7 @@ function openMap() {
       const oldPos = prevPos[r.driver_id], bearing = oldPos ? bikeBearing(oldPos, {lat:r.lat,lng:r.lng}) : 0; prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 66);
       const m = markers[r.driver_id];
-      if (m) { if(!oldPos || oldPos.lat!==r.lat || oldPos.lng!==r.lng)animateRiderMarker(m,r.lat,r.lng,2600); m.setIcon(ic); m.getPopup().setContent(html); }
+      if (m) { if(!oldPos || oldPos.lat!==r.lat || oldPos.lng!==r.lng)animateRiderMarker(m,r.lat,r.lng,4200); m.setIcon(ic); m.getPopup().setContent(html); }
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });

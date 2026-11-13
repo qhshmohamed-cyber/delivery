@@ -345,14 +345,23 @@ async function openBrandSettings(){
    if(key==='roles'){d.remove();managePilots();return;}
    if(key==='reports'){d.remove();openReport();return;}
    if(key==='orders'){d.remove();managerView();return;}
-   if(key==='branches'){
-     showOwnerSection(key);
-     $('oc_notice').textContent='الفروع المتاحة لك حاليًا: '+((me.allowed_branch_ids||[]).length?me.allowed_branch_ids.join('، '):'الفرع الحالي')+'. لتغيير الفرع استخدم زر تغيير الفرع في الشاشة الرئيسية. إضافة فرع جديد تحتاج إعدادًا منفصلًا بصلاحيات السيرفر.';
-     return;
-   }
+   if(key==='branches'){d.remove();ownerBranchPicker();return;}
    if(key==='security'){
-     showOwnerSection(key);
-     $('oc_notice').textContent='الحماية تعتمد على صلاحيات قاعدة البيانات. يمكنك تسجيل الخروج من زر خروج في الشاشة الرئيسية. سجل التدقيق الشامل والتراجع عن التعديلات ووضع الطوارئ غير مفعلين بعد.';
+     d.remove();
+     const sec=document.createElement('div');sec.className='modal';sec.id='ownerSecurityPanel';
+     sec.innerHTML='<div><div class="ord"><h2 style="font-size:18px">🔐 الأمان وإدارة الجلسة</h2><button id="oscClose">إغلاق</button></div>'+
+       '<div class="card"><b>الحساب الحالي</b><div class="meta" id="oscUser"></div></div>'+
+       '<div class="card"><b>الفرع الحالي</b><div class="meta" id="oscBranch"></div></div>'+
+       '<div class="card"><b>حالة الاتصال</b><div class="meta" id="oscNetwork"></div></div>'+
+       '<div class="card"><b>إدارة الجلسة</b><p class="meta">تسجيل الخروج من الجهاز الحالي فقط. لا يلغي جلسات الأجهزة الأخرى.</p><button id="oscLogout" class="g">تسجيل الخروج من هذا الجهاز</button></div>'+
+       '<p class="meta">سجل تدقيق العمليات، وإلغاء جلسات الأجهزة الأخرى، ووضع الطوارئ غير مفعلة بعد؛ لا يمكن الاعتماد عليها لحماية البيانات حاليًا.</p></div>';
+     document.body.appendChild(sec);
+     $('oscUser').textContent=(me.full_name||'')+' — '+(me.employee_code||'');
+     $('oscBranch').textContent=activeBranchTitle();
+     $('oscNetwork').textContent=navigator.onLine?'متصل بالإنترنت':'غير متصل بالإنترنت';
+     $('oscClose').onclick=()=>sec.remove();
+     $('oscLogout').onclick=async()=>{if(!confirm('تأكيد تسجيل الخروج من هذا الجهاز؟'))return;sec.remove();const out=$('out');if(out)out.click();else await sb.auth.signOut();};
+     return;
    }
  };
  for(const key of ['identity','whatsapp','drivers','orders','branches','roles','reports','security']) $('oc_'+key).onclick=()=>openOwnerTool(key);

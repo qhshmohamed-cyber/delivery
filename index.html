@@ -108,6 +108,12 @@ body.ys-platform:not(.ys-tenant) #app{position:relative;z-index:1}
 .ys-platform-brand{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto 22px}
 .ys-platform-brand img{width:92px;height:92px;object-fit:contain;filter:drop-shadow(0 6px 16px #0008)}
 .ys-partners-title{margin:22px 0 12px;font-size:15px;color:#eebc62;font-weight:700;text-align:right}
+/* Your Staff branded public entrance: independent of every tenant */
+html.ys-public body.ys-platform{background:radial-gradient(ellipse 75% 36% at 50% 8%,rgba(198,155,83,.18),transparent 80%),linear-gradient(155deg,#0e1727 0%,#111827 45%,#090f1a 100%)!important;background-attachment:fixed!important}
+html.ys-public body.ys-platform::after{background-image:url("yourstaff-icon.svg")!important;background-size:min(64vw,280px) auto!important;background-position:center 46%!important;opacity:.075!important}
+html.ys-public body.ys-platform .card{background:rgba(18,26,40,.92)!important;box-shadow:0 20px 65px rgba(0,0,0,.38),0 0 0 1px rgba(213,170,98,.16);backdrop-filter:blur(8px)}
+html.ys-public body.ys-platform #publicPartners .ys-partner-logo{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff;padding:7px;box-shadow:0 3px 14px #0005}
+@media(max-width:480px){html.ys-public body.ys-platform .card{margin:16px auto!important}}
 /* Your Staff public and platform-owner surfaces: never inherit tenant wallpaper */
 body.ys-platform,html.ys-public body{background:#101114!important;color:#f7f0df!important}
 body.ys-platform::before,html.ys-public body::before{background:none!important;opacity:0!important}
@@ -168,20 +174,30 @@ function applyBrandConfig(c,ownerPreview=false){
  document.querySelectorAll('[data-brand-app]').forEach(e=>e.textContent=brandConfig.app_name||'');
  document.getElementById('brand-bg-style')?.remove();
 }
+// Cache only presentation data for this authenticated session; never cache authorization decisions.
+const tenantBrandCache=new Map(),tenantBranchCompanyCache=new Map();
 async function loadBrandConfig(){
  resetPlatformBrand();if(!me||!selectedBranch||isOwner())return;
- const {data:branches,error:branchError}=await sb.from('dlv_branches').select('id,company_id').eq('id',selectedBranch).limit(1);
- if(branchError||!branches?.length||!branches[0].company_id)throw Error('تعذر تحديد شركة الفرع');
- const companyId=branches[0].company_id;
- const {data,error}=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();
- if(error||!data)throw Error('تعذر تحميل الهوية المعتمدة للشركة');
+ const branchId=Number(selectedBranch);
+ let companyId=tenantBranchCompanyCache.get(branchId);
+ if(!companyId){
+  const {data:branches,error:branchError}=await sb.from('dlv_branches').select('id,company_id').eq('id',branchId).limit(1);
+  if(branchError||!branches?.length||!branches[0].company_id)throw Error('تعذر تحديد شركة الفرع');
+  companyId=branches[0].company_id;tenantBranchCompanyCache.set(branchId,companyId);
+ }
+ let data=tenantBrandCache.get(companyId);
+ if(!data){
+  const result=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();
+  if(result.error||!result.data)throw Error('تعذر تحميل الهوية المعتمدة للشركة');
+  data=result.data;tenantBrandCache.set(companyId,data);
+ }
  activeBrandCompanyId=companyId;applyBrandConfig(data);
 }
 function subscribeBrandConfig(){
  if(brandChannel){sb.removeChannel(brandChannel);brandChannel=null}
  if(!activeBrandCompanyId)return;
  const id=activeBrandCompanyId;
- brandChannel=sb.channel('company-brand-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},p=>{if(p.new&&activeBrandCompanyId===id)applyBrandConfig(p.new)}).subscribe();
+ brandChannel=sb.channel('company-brand-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},p=>{if(p.new&&activeBrandCompanyId===id){tenantBrandCache.set(id,p.new);applyBrandConfig(p.new)}}).subscribe();
 }
 
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
@@ -193,7 +209,8 @@ async function openOwnerBranchManager(){
  if(name===null)return;
  if(name.trim().length<3)return flash('اسم الفرع قصير',false);
  if(!confirm('تأكيد إضافة الفرع: '+name.trim()+'؟'))return;
- const {error}=await safeRpc('dlv_owner_add_branch',{p_name:name.trim()});
+ if(!ownerActiveCompanyId)return flash('اختر الشركة أولاً قبل إضافة الفرع',false);
+ const {error}=await safeRpc('dlv_owner_add_company_branch',{p_company_id:ownerActiveCompanyId,p_name:name.trim()});
  if(error)return flash('تعذر إضافة الفرع: '+error.message,false);
  await refreshBranchNames();flash('تم إضافة الفرع. يمكنك إنشاء حسابات موظفيه الآن',true);ownerBranchPicker();
 }
@@ -218,6 +235,7 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
 }
 let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
+  tenantBrandCache.clear();tenantBranchCompanyCache.clear();
   resetPlatformBrand();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
   $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><img src="yourstaff-icon.svg" width="104" height="104" alt="شعار Your Staff" decoding="async" style="display:block;width:104px;height:104px;object-fit:contain;margin:0 auto 12px;filter:drop-shadow(0 5px 15px #0007)"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
@@ -234,7 +252,7 @@ function loginView(err) {
     const item=document.createElement('div');item.style.cssText='display:flex;flex-direction:column;align-items:center;gap:6px;max-width:112px;text-align:center;color:#f7f0df;font-size:12px';
     const logo=document.createElement('img');const u=String(p.logo_url||'');
     logo.src=/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u)?u:'yourstaff-icon.svg';
-    logo.alt='شعار '+p.display_name;logo.loading='lazy';logo.decoding='async';logo.style.cssText='width:68px;height:68px;object-fit:contain;border-radius:12px;background:#fff8ea;padding:5px';
+    logo.alt='شعار '+p.display_name;logo.loading='lazy';logo.decoding='async';logo.className='ys-partner-logo';logo.onerror=()=>{logo.style.display='none';const fallback=document.createElement('span');fallback.textContent=p.display_name.slice(0,2);fallback.setAttribute('aria-label','شعار غير متاح');fallback.style.cssText='display:grid;place-items:center;width:76px;height:76px;border-radius:14px;background:#f5ead6;color:#6b4a23;font-weight:800;font-size:24px';logo.after(fallback)};
     const name=document.createElement('span');name.textContent=p.display_name;item.append(logo,name);return item;
    }));
   }).catch(()=>{});
@@ -853,7 +871,7 @@ function openFollowupOrderMap(orderId){
   if(!localMarker){localMarker=L.marker([data.lat,data.lng],{icon:bikeIcon(0,!!fresh,90)}).addTo(localMap);}
   else{localMarker.setLatLng([data.lat,data.lng]);localMarker.setIcon(bikeIcon(0,!!fresh,90));}
  }
- refresh();followupMapTimer=setInterval(refresh,15000);
+ refresh();followupMapTimer=setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine&&document.getElementById('followupOrderMap'))refresh()},30000);
 }
 let followupPulseTimer=null;
 let followupPulseBusy=false;
@@ -1086,8 +1104,17 @@ function openOperationsRoom(){
  $('orSecurity').onclick=()=>openSecurityCommand();
  $('orMap').onclick=()=>{close();openMap();};
  $('orReport').onclick=()=>{const branch=$('orBranch').value,date=$('orDate').value;close();openReport();if($('rbranch'))$('rbranch').value=branch;if($('rdt'))$('rdt').value=date;if($('rdt'))$('rdt').dispatchEvent(new Event('change'));};
- roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},()=>{if(d.isConnected)refresh();}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},()=>{if(d.isConnected)refresh();}).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
- refresh();refreshTimer=setInterval(refresh,15000);
+ // Coalesce realtime bursts; only refresh a visible, connected owner dashboard.
+ let pendingRoomRefresh=null,roomRefreshBusy=false;
+ const scheduledRoomRefresh=()=>{
+  if(!d.isConnected||document.visibilityState!=='visible'||!navigator.onLine||pendingRoomRefresh)return;
+  pendingRoomRefresh=setTimeout(async()=>{
+   pendingRoomRefresh=null;if(roomRefreshBusy||!d.isConnected||document.visibilityState!=='visible')return;
+   roomRefreshBusy=true;try{await refresh()}finally{roomRefreshBusy=false}
+  },1200);
+ };
+ roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},scheduledRoomRefresh).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},scheduledRoomRefresh).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
+ scheduledRoomRefresh();refreshTimer=setInterval(scheduledRoomRefresh,30000);
 }
 function ownerQuickPanel(){
  if(!isOwner())return '';

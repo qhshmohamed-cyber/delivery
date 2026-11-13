@@ -1075,10 +1075,11 @@ function bikeIcon(bearing=0, live=true, size=66) {
   const status = live ? '#27ae60' : '#9aa0a6';
   const url = String(brandConfig.rider_icon_url || 'rider-pin.svg');
   const safeUrl = /^(?:[a-z0-9_./-]+|https:\/\/[^"'<>\\\s]+)$/i.test(url) && !url.startsWith('//') ? url : 'rider-pin.svg';
+  const riderAsset = safeUrl === 'rider-pin.svg' ? 'rider-pin.svg?v=20261113b' : safeUrl;
   const pulse = live ? '<span class="ys-bike-pulse"></span>' : '';
   const html = '<div class="ys-bike-pin" style="--bike-status:'+status+';width:'+size+'px;height:'+size+'px">'+
     pulse+'<div class="ys-bike-core ys-rider-photo" style="width:'+Math.round(size*.86)+'px;height:'+Math.round(size*.86)+'px">'+
-    '<img src="'+safeUrl.replace(/&/g,'&amp;')+'" alt="طيار واحة اليمن" onerror="this.style.display=\'none\';this.parentNode.textContent=\'🏍️\'" />'+
+    '<img src="'+riderAsset.replace(/&/g,'&amp;')+'" alt="طيار واحة اليمن" onerror="this.style.display=\'none\';this.parentNode.textContent=\'🏍️\'" />'+
     '</div><span class="ys-bike-status"></span></div>';
   return L.divIcon({className:'ys-bike-marker',html,iconSize:[size,size],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2]});
 }

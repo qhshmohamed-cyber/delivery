@@ -140,15 +140,19 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
   $('retryBoot').onclick=()=>boot();
   $('retryLogout').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
-let loginFailures=0,loginBlockedUntil=0;\nfunction loginView(err) {
+let loginFailures=0,loginBlockedUntil=0;
+function loginView(err) {
   $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><img data-brand-logo src="logo-original.png" alt="شعار مطاعم واحة اليمن" style="width:132px;height:132px;object-fit:contain;object-position:center;border-radius:0;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
     <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#4e2c12;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div></div>`;
   $('go').onclick = async () => {
-    if(Date.now()<loginBlockedUntil){flash('انتظر قليلًا قبل إعادة محاولة تسجيل الدخول',false);return;}\n    $('go').disabled = true;\n    try {\n      const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
-      if (error) {loginFailures++;if(loginFailures>=5)loginBlockedUntil=Date.now()+60000;loginView(error.message?.toLowerCase().includes('fetch') ? 'تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى' : 'بيانات الدخول غير صحيحة'); return; }\n      loginFailures=0;loginBlockedUntil=0;await boot();
+    if(Date.now()<loginBlockedUntil){flash('انتظر قليلًا قبل إعادة محاولة تسجيل الدخول',false);return;}
+    $('go').disabled = true;\n    try {
+      const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
+      if (error) {loginFailures++;if(loginFailures>=5)loginBlockedUntil=Date.now()+60000;loginView(error.message?.toLowerCase().includes('fetch') ? 'تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى' : 'بيانات الدخول غير صحيحة'); return; }
+      loginFailures=0;loginBlockedUntil=0;await boot();
     } catch (e) { reconnectView('تعذر إكمال تسجيل الدخول بسبب الاتصال. أعد المحاولة دون إعادة إدخال بياناتك إذا كانت الجلسة قد حُفظت.'); }
   };
 }
@@ -606,8 +610,11 @@ function openFollowupOrderMap(orderId){
  refresh();followupMapTimer=setInterval(refresh,15000);
 }
 let followupPulseTimer=null;
-let followupPulseBusy=false;\nasync function refreshFollowupPulse(){\n const box=$('cc_pulse');if(!box||followupPulseBusy||!navigator.onLine)return;followupPulseBusy=true;
- let data,error;try{({data,error}=await safeRpc('dlv_followup_pulse',{p_branch:selectedBranch||null}));}finally{followupPulseBusy=false;}\n if(!box.isConnected)return;
+let followupPulseBusy=false;
+async function refreshFollowupPulse(){
+ const box=$('cc_pulse');if(!box||followupPulseBusy||!navigator.onLine)return;followupPulseBusy=true;
+ let data,error;try{({data,error}=await safeRpc('dlv_followup_pulse',{p_branch:selectedBranch||null}));}finally{followupPulseBusy=false;}
+ if(!box.isConnected)return;
  if(error){box.textContent='تعذر تحديث التنبيهات: '+error.message;return;}
  const alerts=Array.isArray(data?.alerts)?data.alerts:[];
  box.innerHTML='<div class="row"><b>📦 نشطة: '+Number(data?.active||0)+'</b><b>✓ مكتملة: '+Number(data?.delivered||0)+'</b><b>⚠️ متأخرة: '+Number(data?.delayed||0)+'</b></div>'+

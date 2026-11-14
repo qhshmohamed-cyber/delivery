@@ -675,12 +675,24 @@ async function ownerBranchPicker(companyId=1){
  <button id="ownerEditCompanyBrand" class="big" style="min-height:84px">🎨<div>الهوية</div></button>
  <button id="ownerBranchAddons" class="big" style="min-height:84px">🧩<div>الإضافات</div></button>
  <button id="ownerPreviewAddons" class="big" style="min-height:84px">👁️<div>معاينة</div></button>
+ <button id="ownerStaffSetup" class="big" style="min-height:84px">👥<div>تجهيز الفريق</div></button>
  <button id="backCompanies" class="big" style="min-height:84px">↩️<div>الشركات</div></button>
  </div>
  ${setupPending?'<p class="msg e">الشركة قيد التجهيز؛ لا تُفتح فروعها للتشغيل قبل التحقق الأمني.</p>':''}
  <div id="ownerBranchPanel" hidden><h3>فروع الشركة</h3><div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:12px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div></div>
  </div>`;
  $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
+ $('ownerStaffSetup').onclick=()=>{
+   const roles='متابعة كول سنتر • كنترول المطبخ • مشرف الطيارين • طيار • مدير فرع • مسؤول الشكاوى';
+   const enabled=branches.filter(b=>b.active);
+   if(!enabled.length)return alert('كل الفروع قيد التجهيز الأمني حاليًا. الوظائف جاهزة كقوالب، لكن إنشاء الحسابات والتشغيل لن يُسمح بهما قبل تفعيل الفرع بعد فحص العزل.\n\nالأدوار: '+roles);
+   const choice=prompt('الأدوار المتاحة لكل فرع:\n'+roles+'\n\nاختر رقم الفرع لإضافة حساب:\n'+enabled.map(b=>b.id+': '+b.name).join('\n'));
+   if(choice===null)return;
+   const branch=enabled.find(b=>Number(b.id)===Number(choice));
+   if(!branch)return alert('اختر رقم فرع مفعل من القائمة.');
+   addDriverForm(Number(branch.id));
+ };
+
 
  $('ownerPreviewAddons').onclick=async()=>{
    if(!branches.length)return alert('أضف فرعًا أولًا.');
@@ -1977,19 +1989,21 @@ function openMap() {
 }
 
 /* ---------- إضافة طيار (المدير) ---------- */
-function addDriverForm() {
+function addDriverForm(fixedBranchId=null) {
   const pw = generateStrongPassword();
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
-    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option><option value="complaints_officer">مسؤول الشكاوى</option></select>' +
+    '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير فرع</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option><option value="complaints_officer">مسؤول الشكاوى</option></select>' +
     '<label>الفرع *</label><select id="a_branch"></select>' +
     '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (12 حرفًا على الأقل: كبير وصغير ورقم ورمز)</label><input id="a_p" value="' + pw + '">' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
   document.body.appendChild(d);
   $('a_branch').innerHTML=Object.entries(branchNames).map(([id,name])=>'<option value="'+id+'">'+esc(name)+'</option>').join('');
-  if(selectedBranch)$('a_branch').value=String(selectedBranch);
-  refreshBranchNames().then(()=>{if(!d.isConnected)return;const current=$('a_branch').value;$('a_branch').innerHTML=Object.entries(branchNames).map(([id,name])=>'<option value="'+id+'">'+esc(name)+'</option>').join('');if(current)$('a_branch').value=current;});
+  if(fixedBranchId)$('a_branch').value=String(fixedBranchId);
+  else if(selectedBranch)$('a_branch').value=String(selectedBranch);
+  if(fixedBranchId)$('a_branch').disabled=true;
+  refreshBranchNames().then(()=>{if(!d.isConnected)return;const current=$('a_branch').value;$('a_branch').innerHTML=Object.entries(branchNames).map(([id,name])=>'<option value="'+id+'">'+esc(name)+'</option>').join('');if(fixedBranchId){$('a_branch').value=String(fixedBranchId);$('a_branch').disabled=true;}else if(current)$('a_branch').value=current;});
   const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
   $('a_x').onclick = () => d.remove();
@@ -1998,6 +2012,7 @@ function addDriverForm() {
     const name = $('a_n').value.trim(), code = $('a_c').value.trim(), pass = $('a_p').value, email = mail();
     const er = $('aerr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('a_ok').disabled = false; };
     if (!name || !code) return fail('اكتب الاسم والكود');
+    if(fixedBranchId && Number($('a_branch').value)!==Number(fixedBranchId))return fail('الفرع غير مطابق');
     if (pass.length < 12 || !/[A-Z]/.test(pass) || !/[a-z]/.test(pass) || !/[0-9]/.test(pass) || !/[^A-Za-z0-9]/.test(pass)) return fail('كلمة السر يجب أن تكون 12 حرفًا على الأقل وبها حرف كبير وصغير ورقم ورمز');
     if (!$('a_m').value.includes('@') && !/[a-z0-9]/i.test(code)) return fail('اكتب كود بأرقام أو حروف إنجليزي، أو اكتب الإيميل بنفسك');
     $('a_ok').disabled = true;

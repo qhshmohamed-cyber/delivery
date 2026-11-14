@@ -1260,6 +1260,7 @@ function newOrderForm() {
       if(validPhone&&consent){
         const wa=document.createElement('a');wa.href=customerWhatsAppUrl(normalizedPhone,msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 إرسال المتابعة على واتساب';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
       }
+      if(validPhone&&!consent){const note=document.createElement('div');note.className='meta';note.textContent='فتح واتساب لإرسال رابط المتابعة متاح بعد موافقة العميل فقط.';actions.appendChild(note);}
       panel.appendChild(actions);const preview=document.createElement('pre');preview.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f7f1e6;color:#302014;padding:12px;border-radius:10px;margin-top:12px';preview.textContent=msg;panel.appendChild(preview);
       if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='زر واتساب غير متاح حتى يتم تأكيد موافقة العميل على استلام رسالة المتابعة.';panel.appendChild(note);}
       if(!validPhone){const note=document.createElement('div');note.className='meta';note.textContent='لإظهار زر واتساب، أضف رقم موبايل مصري صحيح للعميل.';panel.appendChild(note);}
@@ -2227,11 +2228,13 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     const er = $('aerr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('a_ok').disabled = false; };
     if (!name || !code) return fail('اكتب الاسم والكود');
     if(!validChoices.some(b=>Number(b.id)===Number($('a_branch').value)))return fail('اختر فرعًا مصرحًا به من القائمة');
-    if(fixedBranchId && Number($('a_branch').value)!==Number(fixedBranchId))return fail('الفرع غير مطابق');
+    // Owner selects any active branch in the current company; a fixed branch applies only to non-owner contexts.
+    if(!isOwner() && fixedBranchId && Number($('a_branch').value)!==Number(fixedBranchId))return fail('الفرع غير مطابق');
     if (pass.length < 12 || !/[A-Z]/.test(pass) || !/[a-z]/.test(pass) || !/[0-9]/.test(pass) || !/[^A-Za-z0-9]/.test(pass)) return fail('كلمة السر يجب أن تكون 12 حرفًا على الأقل وبها حرف كبير وصغير ورقم ورمز');
     if (!$('a_m').value.includes('@') && !/[a-z0-9]/i.test(code)) return fail('اكتب كود بأرقام أو حروف إنجليزي، أو اكتب الإيميل بنفسك');
     $('a_ok').disabled = true;
-    const { data, error } = await safeRpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value, p_branch_id: Number($('a_branch').value) });
+    const selectedAccountBranch=Number($('a_branch').value);
+    const { data, error } = await safeRpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value, p_branch_id: selectedAccountBranch });
     if (error) return fail(error.message);
     const jobSel = $('a_j'), jobVal = jobSel.value, jobName = jobSel.options[jobSel.selectedIndex].text; if (jobVal === 'driver') drivers.push({ user_id: data, full_name: name, employee_code: code });
     const f = $('f_dr'); if (f && jobVal === 'driver') f.insertAdjacentHTML('beforeend', '<option value="' + data + '">' + esc(name) + '</option>');

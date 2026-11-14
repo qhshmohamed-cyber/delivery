@@ -2723,6 +2723,20 @@ function trackView(code0) {
       box.innerHTML = '<div class="msg e">' + (j && j.expired ? 'انتهت صلاحية الكود' : 'الكود غير صحيح، راجع الكود مع خدمة العملاء') + '</div>';
       $('tmap').style.display = 'none'; clearInterval(tmr); return;
     }
+    // Customer branding comes only from the validated tracking code's tenant.
+    if(j.brand&&typeof j.brand==='object'){
+      const bn=String(j.brand.name||'المطعم').slice(0,120);
+      const logo=String(j.brand.logo_url||'');
+      const logoSafe=/^https:\/\/[^"'<>\\s]+$/i.test(logo)||/^[a-z0-9_./-]+$/i.test(logo)&&!logo.startsWith('//');
+      const color=String(j.brand.brand_color||'');
+      const gold=String(j.brand.gold_color||'');
+      if(/^#[0-9a-f]{6}$/i.test(color))document.documentElement.style.setProperty('--brand',color);
+      if(/^#[0-9a-f]{6}$/i.test(gold))document.documentElement.style.setProperty('--gold',gold);
+      document.querySelectorAll('[data-brand-logo]').forEach(el=>{el.src=logoSafe?logo:'yourstaff-icon.svg';el.alt='شعار '+bn;});
+      document.querySelectorAll('[data-brand-title]').forEach(el=>el.textContent=bn);
+      brandConfig={...brandConfig,brand_name:bn,logo_url:logoSafe?logo:''};
+      document.title='متابعة الطلب — '+bn;
+    }
     const oldNotice = $('trackConnectionNotice'); if (oldNotice) oldNotice.remove();
     const S = ['تم تسجيل طلبك', 'جاري التجهيز في المطبخ', 'جاهز ومع المشرف', 'اتعيّن لك طيار', 'الطيار خرج لك', 'تم التسليم'];
     const idx = j.status === 'delivered' ? 5 : j.status === 'out' ? 4 : j.pilot_name ? 3 : (j.stage === 'kitchen_ready' || j.stage === 'supervisor_received') ? 2 : 1;
@@ -2759,7 +2773,7 @@ function trackView(code0) {
       if (already) {
         box.innerHTML += '<div class="card"><h2>شكرًا لتقييمك ❤️</h2><div class="meta">تم استلام تقييمك بنجاح.</div></div>';
       } else {
-        box.innerHTML += `<div class="card" id="ratingCard"><h2>⭐ قيّم تجربتك مع '+esc(brandConfig.brand_name||'المطعم')+'</h2><div class="meta">يسعدنا نعرف رأيك بعد استلام طلبك.</div>
+        box.innerHTML += `<div class="card" id="ratingCard"><h2>⭐ قيّم تجربتك مع ${esc(brandConfig.brand_name||"المطعم")}</h2><div class="meta">يسعدنا نعرف رأيك بعد استلام طلبك.</div>
           <label>تقييم الطيار</label><div class="rateRow" data-rate="delivery">${[1,2,3,4,5].map(n=>`<button type="button" class="rateStar" data-v="${n}">☆</button>`).join('')}</div>
           <label>تقييم المطعم</label><div class="rateRow" data-rate="restaurant">${[1,2,3,4,5].map(n=>`<button type="button" class="rateStar" data-v="${n}">☆</button>`).join('')}</div>
           <label>تقييم موظف متابعة الكول سنتر</label><div class="rateRow" data-rate="callcenter">${[1,2,3,4,5].map(n=>`<button type="button" class="rateStar" data-v="${n}">☆</button>`).join('')}</div>

@@ -1415,7 +1415,18 @@ async function openRatingsActions(){
  d.innerHTML='<div class="card"><div class="ord"><h2>⭐ تقييمات العملاء وإجراءات الشكاوى</h2><button id="ratingsActionsClose">إغلاق</button></div><p class="meta">تظهر التقييمات الخاصة بالفرع المصرح به، وآخر إجراء محفوظ باسم مسؤول الشكاوى.</p><div id="ratingsActionsRows">جاري تحميل التقييمات...</div></div>';
  document.body.appendChild(d);d.querySelector('#ratingsActionsClose').onclick=()=>d.remove();
  const box=d.querySelector('#ratingsActionsRows');
- const ids=isOwner()?(selectedBranch?[Number(selectedBranch)]:((await safeRpc('dlv_owner_company_branches',{p_company_id:ownerActiveCompanyId})).data||[]).map(b=>Number(b.id))):[Number(selectedBranch||me.branch_id)];
+ let ids=[];
+ if(isOwner()){
+  const companyId=Number(ownerActiveCompanyId);
+  if(!Number.isInteger(companyId)||companyId<1){box.textContent='اختر شركة أولًا';return;}
+  const {data:branches,error:branchesError}=await safeRpc('dlv_owner_company_branches',{p_company_id:companyId});
+  if(branchesError){box.textContent='تعذر تحميل الفروع: '+branchesError.message;return;}
+  const companyIds=(branches||[]).filter(b=>b.active).map(b=>Number(b.id));
+  ids=companyIds.includes(Number(selectedBranch))?[Number(selectedBranch)]:companyIds;
+ }else{
+  const branchId=Number(selectedBranch||me.branch_id);
+  ids=Number.isInteger(branchId)&&branchId>0?[branchId]:[];
+ }
  if(!ids.length){box.textContent='اختر شركة وفرعًا أولًا';return;}
  const results=await Promise.all(ids.map(id=>safeRpc('dlv_rating_review_list',{p_branch:id})));
  if(!d.isConnected)return;

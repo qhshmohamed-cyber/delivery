@@ -1598,11 +1598,11 @@ async function loadCallcenterOrders() {
  rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
  <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>
  <div class="meta" style="margin:7px 0">المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
- ${stageClockHtml(o)}<div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button><button data-act="dossier" data-id="${o.id}">ملف الطلب</button>${o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
+ ${stageClockHtml(o)}<div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button><button data-act="dossier" data-id="${o.id}">ملف الطلب</button>${canAccessCustomerTracking()&&o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
  <details style="margin-top:9px"><summary style="cursor:pointer;padding:7px 0;font-weight:600">تفاصيل وإجراءات إضافية</summary>
  <div class="meta" style="margin:9px 0">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</div>
  <div class="row"><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>
- ${o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}
+ ${canAccessCustomerTracking()&&o.track_code?`<div class="row" style="margin-top:8px"><b dir="ltr">كود العميل: ${esc(o.track_code)}</b><button data-act="cpmsg" data-id="${o.id}">نسخ رسالة التتبع</button>${o.phone?`<button class="g" data-act="wa" data-id="${o.id}">واتساب</button>`:''}</div>`:''}
  </details></div>`).join('')||'<div class="meta">'+(q?'لا توجد طلبات مطابقة للبحث':'لا توجد طلبات جارية حاليًا')+'</div>';
 }
 
@@ -1995,7 +1995,7 @@ async function loadAll() {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
       const cancel = (isOwner()||me.can_cancel_orders===true) && ['new','received','out'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
       return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
-        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${esc(x.track_code || '')}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${canAccessCustomerTracking()?esc(x.track_code || ''):'—'}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
     }).join('') || '<tr><td colspan="14">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
@@ -2691,11 +2691,12 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+function canAccessCustomerTracking(){return !!(isOwner() || me?.role==='admin' || me?.role==='complaints_officer' || ['callcenter_followup','complaints_officer','manager','admin'].includes(me?.workflow_role));}
 /* ---------- أكواد متابعة العملاء (للموظفين) ---------- */
 const trackMsg = o => customerWelcomeMessage(o);
-async function copyMsg(id) { const o=ORD[id];if(!o)return;try{const msg=await customerWelcomeMessageForOrder(o);await navigator.clipboard.writeText(msg);flash('تم نسخ رسالة شركة الطلب',true);}catch(e){flash('تعذر تجهيز الرسالة: '+e.message,false);} }
+async function copyMsg(id) { if(!canAccessCustomerTracking())return flash('غير مصرح بعرض كود متابعة العميل',false); const o=ORD[id];if(!o)return;try{const msg=await customerWelcomeMessageForOrder(o);await navigator.clipboard.writeText(msg);flash('تم نسخ رسالة شركة الطلب',true);}catch(e){flash('تعذر تجهيز الرسالة: '+e.message,false);} }
 async function waMsg(id) {
-  if(!(isOwner() || isLocationManager() || me?.workflow_role==='callcenter_followup' || me?.role==='admin')) return flash('واتساب العميل متاح للمدير ومتابعة الكول سنتر فقط',false);
+  if(!canAccessCustomerTracking()) return flash('واتساب العميل متاح للشكاوى والمتابعة والمدير ومالك المنصة فقط',false);
   const o=ORD[id];if(!o)return;
   const phone=String(o.phone||'');
   const digits=phone.replace(/\D/g,'');

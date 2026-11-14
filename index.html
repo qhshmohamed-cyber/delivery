@@ -862,7 +862,6 @@ async function enterOwnerDashboard(){
   applyBrandConfig(brandLookup.data,true);
  }
 
-  if(!Number.isInteger(Number(ownerActiveCompanyId))||Number(ownerActiveCompanyId)<1)return ownerCompanyPicker();
   const branchQuery=await safeRpc('dlv_owner_company_branches',{p_company_id:Number(ownerActiveCompanyId)});
   if(branchQuery.error)return reconnectView('تعذر التحقق من فروع الشركة الحالية.');
   const scopedIds=[...new Set((branchQuery.data||[]).map(b=>Number(b.id)).filter(x=>Number.isInteger(x)&&x>0))];
@@ -1677,7 +1676,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(id),p_day:day});
  if(error)return alert('تعذر إنشاء التقرير: '+error.message);
  const h=x=>esc(String(x??''));
- if(!data||typeof data!=='object')return alert('الخادم لم يرجع بيانات تقرير صحيحة. لم يتم تنزيل تقرير فارغ.');
+ if(!data||typeof data!=='object'||Array.isArray(data)||!data.orders||typeof data.orders!=='object'||!Array.isArray(data.order_details))return alert('الخادم لم يرجع تقريرًا مكتملًا. لن يتم تنزيل ملف ناقص.');
  const orders=data.orders||{}, incidents=data.incidents||{};
  const staff=(Array.isArray(data.staff)?data.staff:[]).map(x=>'<tr><td>'+h(x.employee)+'</td><td>'+h(x.orders)+'</td></tr>').join('');
  const issues=(Array.isArray(incidents.items)?incidents.items:[]).map(x=>'<tr><td>'+h(x.category)+'</td><td>'+h(x.title)+'</td><td>'+h(x.status)+'</td></tr>').join('');
@@ -1686,7 +1685,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  const url=URL.createObjectURL(file),a=document.createElement('a');
  a.href=url;a.download=[data.company,data.branch,day].map(x=>String(x).replace(/[\\/:*?"<>|]/g,'-')).join(' - ')+'.html';
  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
- flash('تم إنشاء ملف التقرير. إذا منع المتصفح التنزيل، افتح الموقع في Chrome واسمح بتنزيل الملفات.',true);
+ flash('تم تجهيز ملف التقرير وإرسال طلب تنزيل للمتصفح. تحقق من التنزيلات؛ لا يمكن التأكد من حفظ الملف تلقائيًا.',true);
 }
 function managerView() {
   if(isOwner()||isLocationManager())setTimeout(()=>{const app=$('app');if(!app||$('dailyReportBtn'))return;const btn=document.createElement('button');btn.id='dailyReportBtn';btn.className='g big';btn.textContent='📄 تنزيل تقرير الوردية الحالية';btn.onclick=()=>downloadBranchDailyReport();app.prepend(btn);},0);

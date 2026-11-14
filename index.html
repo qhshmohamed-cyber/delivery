@@ -1015,12 +1015,12 @@ document.addEventListener('click', e => {
 
 /* ---------- واجهة الدليفري ---------- */
 function driverView() {
-  $('app').innerHTML = shell(`<section class="card" id="driverDuty">جاري تحميل حالة الشفت...</section><div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
+  $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
     <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
     <div class="card"><div class="meta" id="locst">📍 جاري تشغيل مشاركة الموقع... بيفضل شغّال لحد ما تعمل خروج، سيب الصفحة مفتوحة.</div><div class="meta" id="locdetail">التتبع يتطلب إبقاء التطبيق ظاهرًا أثناء التوصيل.</div><button id="gpsRetry" class="g">↻ تحديث GPS الآن</button></div><h2>📦 طلباتي الحالية</h2><p class="meta">اختار الإجراء المناسب من كل طلب لتحديث حالته مباشرة.</p><div id="ol"></div>`);
-  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>resumeDriverLocationNow(); void loadDriverDuty(); loadMine();
+  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>resumeDriverLocationNow(); loadMine();
 }
-async function loadMine() { void loadDriverDuty();
+async function loadMine() {
   const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
   if (error) return flash(error.message, false);
   const o = data || []; o.forEach(x => ORD[x.id] = x);
@@ -2181,6 +2181,7 @@ document.addEventListener('visibilitychange', () => {
 const trackMsg = o => customerWelcomeMessage(o);
 function copyMsg(id) { const o = ORD[id]; if (!o) return; navigator.clipboard && navigator.clipboard.writeText(trackMsg(o)); flash('اتنسخت رسالة العميل، ابعتها له', true); }
 function waMsg(id) {
+  if(!(isOwner() || isLocationManager() || me?.workflow_role==='callcenter_followup' || me?.role==='admin')) return flash('واتساب العميل متاح للمدير ومتابعة الكول سنتر فقط',false);
   const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);
   if(!/^20(?:10|11|12|15)\d{8}$/.test(d))return flash('رقم العميل غير صالح لواتساب',false);
   const link=document.createElement('a');link.href='https://wa.me/'+d+'?text='+encodeURIComponent(trackMsg(o));link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();

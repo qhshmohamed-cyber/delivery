@@ -710,6 +710,17 @@ async function setStatus(id, to, note) {
   flash('تم التحديث', true);
   refreshView();
 }
+async function cancelOrderDialog(id){
+ if(!me||!(isOwner()||isLocationManager()))return flash('الإلغاء متاح للمالك ومدير الفرع فقط',false);
+ const reason=window.prompt('اكتب سبب إلغاء الطلب:');if(reason===null)return;
+ if(reason.trim().length<3||reason.trim().length>300)return flash('السبب مطلوب من 3 إلى 300 حرف',false);
+ if(!window.confirm('تأكيد إلغاء الطلب نهائيًا؟'))return;
+ if(!requireOnline('إلغاء الطلب'))return;
+ const {error}=await safeRpc('dlv_cancel_order',{p_id:id,p_reason:reason.trim()});
+ if(error)return flash(error.message,false);
+ flash('تم إلغاء الطلب وتسجيل السبب',true);refreshView();
+ if($('managerOpsPending'))loadManagerOpsPending();
+}
 function newOrderForm() {
   const wf = me?.workflow_role || me?.role;
   if (!me || !['callcenter_followup','manager','admin'].includes(wf)) return flash('إنشاء الطلب متاح لمتابعة الكول سنتر والإدارة فقط', false);
@@ -787,7 +798,7 @@ function failDialog(id) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const id = +b.dataset.id, a = b.dataset.act;
-  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'cpmsg') copyMsg(id); else if (a === 'wa') waMsg(id); else if (a === 'kfwd') kitchenForward(id); else setStatus(id, a);
+  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'cpmsg') copyMsg(id); else if (a === 'wa') waMsg(id); else if (a === 'kfwd') kitchenForward(id); else if(a==='cancelled')cancelOrderDialog(id); else setStatus(id, a);
 });
 
 /* ---------- واجهة الدليفري ---------- */
@@ -1220,7 +1231,7 @@ function managerView() {
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;
   if ($('ad')) $('ad').onclick = addDriverForm; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
-    $('managerSearch').onclick = async () => { const q=$('f_q').value.trim().replace(/[^\\p{L}\\p{N}\\s-]/gu,'').slice(0,60); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div></div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    $('managerSearch').onclick = async () => { const q=$('f_q').value.trim().replace(/[^\\p{L}\\p{N}\\s-]/gu,'').slice(0,60); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
     return;
   }
@@ -1236,7 +1247,7 @@ async function loadManagerOpsPending() {
   const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status')).eq('status','new').order('created_at',{ascending:true}).limit(200);
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل طلبات الانتظار</div>';return;}
   const rows=data||[];
-  box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · منذ ${elapsed} دقيقة</div></div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
+  box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · منذ ${elapsed} دقيقة</div><button class="r" data-act="cancelled" data-id="${o.id}">إلغاء الطلب</button></div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
 }
 function startManagerBoardRefresh(){
   clearInterval(managerBoardTimer); clearInterval(managerClockTimer);
@@ -1320,7 +1331,7 @@ async function loadAll() {
   $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
     ((o.data || []).map(x => {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
-      const cancel = ['new','received'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
+      const cancel = (isOwner()||isLocationManager()) && ['new','received','out'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
       return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
         <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${esc(x.track_code || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
     }).join('') || '<tr><td colspan="14">لا طلبات</td></tr>') + '</table>';

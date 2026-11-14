@@ -623,10 +623,10 @@ async function ownerCompanyPicker(){
   await ownerCompanyPicker();
  });
  $('ownerAddCompany').onclick=async()=>{
-  const name=prompt('اسم الشركة الجديدة');if(name===null)return;
-  const slug=prompt('معرف الشركة بالإنجليزية (حروف صغيرة وأرقام وشرطة -)');if(slug===null)return;
+  const name=prompt('اسم الشركة الجديدة (عربي أو إنجليزي) — مثال: مطاعم النخيل');if(name===null)return;
+  const slug=prompt('معرّف داخلي فريد بالإنجليزية (لا يظهر للموظفين). مثال: al-nakheel-restaurant');if(slug===null)return;
   const cleanName=name.trim(),cleanSlug=slug.trim().toLowerCase();
-  if(cleanName.length<2||cleanName.length>120)return alert('اسم الشركة لازم يكون من 2 إلى 120 حرفًا.');
+  if(cleanName.length<2||cleanName.length>120)return alert('اسم الشركة بالعربي أو الإنجليزي لازم يكون من 2 إلى 120 حرفًا.');
   if(!/^[a-z0-9][a-z0-9-]{1,62}$/.test(cleanSlug))return alert('معرّف الشركة لازم يكون من 2 إلى 63 حرفًا إنجليزيًا صغيرًا أو رقمًا أو شرطة (-)، ويبدأ بحرف أو رقم. مثال: new-restaurant');
   if(!confirm('سيتم إنشاء الشركة في وضع التجهيز فقط، ولن يتم تفعيل تشغيلها قبل مراجعة عزل البيانات. متابعة؟'))return;
   const addButton=$('ownerAddCompany');if(addButton){addButton.disabled=true;addButton.textContent='⏳ جارٍ إنشاء الشركة...';}

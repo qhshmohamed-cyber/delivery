@@ -798,6 +798,7 @@ async function ownerBranchPicker(companyId=1){
   const r=await safeRpc('dlv_owner_add_company_branch',{p_company_id:companyId,p_name:name.trim()});
   if(r.error)return alert('تعذر إضافة الفرع: '+r.error.message);
   await ownerBranchPicker(companyId);
+  if($('ownerBranchPanel'))$('ownerBranchPanel').hidden=false;
   const branchButton=document.querySelector('[data-branch="'+Number(r.data)+'"]');
   if(branchButton && !branchButton.disabled)branchButton.click();
   else if(branchButton)branchButton.scrollIntoView({behavior:'smooth',block:'center'});

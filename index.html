@@ -1460,9 +1460,32 @@ function copyCallcenterStatus(id){
  const msg='طلبك رقم '+o.order_no+' — '+(STG[o.workflow_stage]||'قيد المتابعة')+(o.driver?.full_name?' — الطيار: '+o.driver.full_name:'')+'. '+(brandConfig.brand_name||'المطعم')+'.';
  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(msg).then(()=>flash('تم نسخ الرسالة',true)).catch(()=>prompt('انسخ الرسالة',msg));else prompt('انسخ الرسالة',msg);
 }
-function customStaffView(){
- $('app').innerHTML=shell('<section class="card" style="text-align:center;padding:26px"><h2>مرحبًا بك في '+esc(me.job_title||'وظيفتك')+'</h2><p class="meta">تم تفعيل حسابك وربطه بالفرع المصرح به. صلاحيات قسمك لم تُفعّل بعد، وسيتم إتاحتها عند تجهيز نظام القسم.</p><button onclick="ysRefreshNow()">تحديث الحالة</button></section>');bindOut();
+async function customStaffView(){
+ if(!me||me.workflow_role!=='custom_unassigned')return;
+ $('app').innerHTML=shell('<section class="card"><h2>مساحة عمل '+esc(me.job_title||'الوظيفة')+'</h2><p class="meta">مرحبًا بك. هذه مساحة مهامك الخاصة داخل فرعك، ويمكنك تسجيل المهام وإنجازها. أنظمة الكاشير والصالة ستضاف عند تجهيزها وربط صلاحياتها.</p><div class="row"><input id="customTaskInput" maxlength="160" placeholder="اكتب مهمة جديدة" aria-label="عنوان المهمة" style="flex:1"><button class="p" id="customTaskAdd">إضافة مهمة</button></div><div id="customTaskCount" class="meta" role="status"></div></section><section id="customTaskRows" aria-label="مهامي" class="card">جاري تحميل المهام...</section>');
+ bindOut();
+ const add=$('customTaskAdd'),input=$('customTaskInput');
+ add.onclick=async()=>{
+  const title=input.value.trim();if(title.length<2||title.length>160)return flash('اكتب مهمة من 2 إلى 160 حرفًا',false);
+  if(!requireOnline('إضافة المهمة'))return;
+  add.disabled=true;
+  try{const {error}=await sb.from('dlv_custom_staff_tasks').insert({user_id:me.user_id,title});if(error)throw error;input.value='';await loadCustomStaffTasks();}catch(e){flash('تعذر حفظ المهمة: '+e.message,false);}finally{if(add.isConnected)add.disabled=false;}
+ };
+ input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.click();}};
+ await loadCustomStaffTasks();
 }
+async function loadCustomStaffTasks(){
+ if(!me||me.workflow_role!=='custom_unassigned')return;
+ const box=$('customTaskRows');if(!box)return;
+ const {data,error}=await sb.from('dlv_custom_staff_tasks').select('id,title,done,created_at').eq('user_id',me.user_id).order('created_at',{ascending:false}).limit(150);
+ if(!box.isConnected)return;
+ if(error){box.textContent='تعذر تحميل المهام: '+error.message;return;}
+ const tasks=data||[];const count=$('customTaskCount');if(count)count.textContent='المهام المتبقية: '+tasks.filter(t=>!t.done).length+' من '+tasks.length;
+ box.innerHTML=tasks.length?tasks.map(t=>'<div class="row" style="align-items:center;padding:10px 0;border-bottom:1px solid var(--line)"><button type="button" data-task-toggle="'+Number(t.id)+'" aria-label="'+(t.done?'إعادة فتح المهمة':'إنهاء المهمة')+'">'+(t.done?'↩':'✓')+'</button><span style="flex:1;overflow-wrap:anywhere;'+(t.done?'text-decoration:line-through;opacity:.65':'')+'">'+esc(t.title)+'</span><button type="button" data-task-delete="'+Number(t.id)+'" aria-label="حذف المهمة">حذف</button></div>').join(''):'<p class="meta">لا توجد مهام بعد. أضف أول مهمة من الأعلى.</p>';
+ box.querySelectorAll('[data-task-toggle]').forEach(btn=>btn.onclick=async()=>{btn.disabled=true;const id=Number(btn.dataset.taskToggle),t=tasks.find(x=>x.id===id);if(!t)return;const {error:e}=await sb.from('dlv_custom_staff_tasks').update({done:!t.done,updated_at:new Date().toISOString()}).eq('id',id).eq('user_id',me.user_id);if(e)flash(e.message,false);await loadCustomStaffTasks();});
+ box.querySelectorAll('[data-task-delete]').forEach(btn=>btn.onclick=async()=>{if(!confirm('حذف هذه المهمة؟'))return;btn.disabled=true;const {error:e}=await sb.from('dlv_custom_staff_tasks').delete().eq('id',Number(btn.dataset.taskDelete)).eq('user_id',me.user_id);if(e)flash(e.message,false);await loadCustomStaffTasks();});
+}
+
 function complaintsOfficerView(){
  if(!me||!(isOwner()||isLocationManager()||(me.role==='complaints_officer'||me.workflow_role==='complaints_officer')))return flash('غير مصرح',false);
  $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث بالعميل أو الطلب أو الشكوى أو موظف المتابعة" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');

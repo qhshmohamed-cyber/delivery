@@ -497,15 +497,18 @@ async function boot() {
   try{startKitchenDelayMonitor();}catch(e){console.warn('Kitchen monitor unavailable:',e)}
   try{startOrderRealtime();}catch(e){console.warn('Realtime unavailable:',e)}
 }
+let branchPickerRequestId=0;
 async function employeeBranchPicker(permitted){
+  const requestId=++branchPickerRequestId;
   const {data,error}=await safeRpc('dlv_my_branches');
   if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
+  if(requestId!==branchPickerRequestId)return;
   const branches=(data||[]).filter(b=>permitted.includes(Number(b.id)) && Number.isInteger(Number(b.id)) && Number(b.id)>0);
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div>${selectedBranch&&branches.some(b=>Number(b.id)===Number(selectedBranch))?'<button id="empBack" class="g big" style="margin-top:12px">↩️ الرجوع للفرع الحالي</button>':''}<button id="empOut">تسجيل الخروج</button></div>`;
-  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>Number(x.id)===id))return;selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
-  if($('empBack'))$('empBack').onclick=()=>enterEmployeeDashboard();
-  $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>Number(x.id)===id))return;branchPickerRequestId++;document.querySelectorAll('[data-emp-branch]').forEach(btn=>btn.disabled=true);selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
+  if($('empBack'))$('empBack').onclick=()=>{branchPickerRequestId++;return enterEmployeeDashboard();};
+  $('empOut').onclick=async()=>{branchPickerRequestId++;await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){
   if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_branch_drivers',{p_branch_id:selectedBranch});if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||Number(x.branch_id)===Number(selectedBranch));}

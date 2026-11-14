@@ -1189,8 +1189,10 @@ function newOrderForm() {
     if(orderBranchesReady)loadOrderStaff();
   }
   let staffRequestId=0;
+  let staffBranchReady=0;
   async function loadOrderStaff(){
     const request=++staffRequestId;
+    staffBranchReady=0;
     const sel=d.querySelector('#n_staff');
     const branchSelect=d.querySelector('#n_branch');
     const branch=branchSelect?Number(branchSelect.value):Number(selectedBranch||me.branch_id);
@@ -1204,6 +1206,7 @@ function newOrderForm() {
     if(!d.isConnected||request!==staffRequestId)return;
     sel.innerHTML='<option value="">اختر الموظف صاحب الطلب</option>'+(data||[]).map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');
     sel.disabled=!!error||!(data||[]).length;
+    if(!error&&(data||[]).length)staffBranchReady=branch;
     if(error){$('ferr').textContent='تعذر تحميل موظفي الفرع: '+error.message;$('ferr').className='msg e';}
     else if(!(data||[]).length){$('ferr').textContent='لا يوجد موظف متابعة كول سنتر مسجل في هذا الفرع';$('ferr').className='msg e';}
   }
@@ -1225,13 +1228,14 @@ function newOrderForm() {
     label.textContent=count?'العميل طلب من هذه الشركة '+count+' مرة سابقًا — الطلب الحالي سيكون رقم '+(count+1):'عميل جديد — لم يُسجّل له طلب سابق في هذه الشركة.';
   }
   if($('n_p')){$('n_p').addEventListener('change',updateCustomerOrderCount);$('n_p').addEventListener('blur',updateCustomerOrderCount);}
-  if($('n_branch'))$('n_branch').addEventListener('change',updateCustomerOrderCount);
   if($('n_branch'))$('n_branch').onchange=()=>{loadOrderStaff();updateCustomerOrderCount();};
   if($('n_branch'))loadOrderBranches();else loadOrderStaff();
   $('n_x').onclick = () => d.remove();
   $('n_ok').onclick = async () => {
     if (!requireOnline('إنشاء الطلب')) return;
     if($('n_branch')&&(!orderBranchesReady||!$('n_branch').value)){ $('ferr').textContent='اختر فرعًا مصرحًا به أولاً';$('ferr').className='msg e';return; }
+    const activeOrderBranch=Number($('n_branch')?.value||selectedBranch||me.branch_id);
+    if(!staffBranchReady||staffBranchReady!==activeOrderBranch){$('ferr').textContent='انتظر تحميل موظفي الفرع الصحيح قبل تسجيل الطلب';$('ferr').className='msg e';return;}
     if(!$('n_staff')?.value){$('ferr').textContent='اختار موظف الكول سنتر صاحب الطلب';$('ferr').className='msg e';return;}
     const orderNumber=String($('n_no')?.value||'').trim();
     if(!orderNumber){const e=$('ferr');e.textContent='اكتب رقم الطلب أولاً';e.className='msg e';$('n_no')?.focus();return;}

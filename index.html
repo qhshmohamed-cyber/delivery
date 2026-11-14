@@ -319,13 +319,24 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 /* ============================================================================= */
 const sb = supabase.createClient(SB_URL, SB_KEY);
 const sessionActions = createSessionActions(sb.auth);
-let appLogoutBusy=false;
+let appLogoutBusy=false,appSessionEpoch=0;
+function clearPrivateSessionDialogs(){
+ document.querySelectorAll('.modal,#ownerAssistantOverlay').forEach(dialog=>{
+  dialog.dispatchEvent(new Event('private-session-ended'));
+  dialog.querySelectorAll('input,textarea').forEach(input=>{input.value='';});
+  dialog.remove();
+ });
+}
 async function appSignOut(scope='global',message=''){
  if(appLogoutBusy)return false;
  appLogoutBusy=true;
  let result;
  try{result=await sessionActions.signOut(scope);}finally{appLogoutBusy=false;}
  if(!result.localCleared){showLogoutFailure(scope);return false;}
+ appSessionEpoch++;
+ clearPrivateSessionDialogs();
+ complaintsInboxRows=[];
+ clearInterval(followupMapTimer);followupMapTimer=null;
  // Clear operational data and GPS even if remote revocation is unavailable.
  await stopShare(false);
  clearInterval(timer);clearInterval(delayTimer);clearInterval(managerBoardTimer);clearInterval(managerClockTimer);
@@ -2139,7 +2150,10 @@ function ownerAssistantIntent(raw){
 async function openOwnerAssistant(){
  if(!isOwner())return flash('المساعد متاح لمالك النظام فقط',false);
  if($('ownerAssistantOverlay'))return;
+ const sessionEpoch=appSessionEpoch,ownerId=me.user_id;
  const [companiesResult,historyResult]=await Promise.all([safeRpc('dlv_owner_list_companies'),safeRpc('dlv_owner_assistant_history')]);
+ if(sessionEpoch!==appSessionEpoch||!isOwner()||me.user_id!==ownerId)return;
+ if($('ownerAssistantOverlay'))return;
  if(companiesResult.error||historyResult.error)return flash('تعذر فتح المساعد. تأكد من فتح قفل صفحة المالك واتصال الإنترنت.',false);
  const companies=companiesResult.data||[];
  const overlay=document.createElement('div');overlay.id='ownerAssistantOverlay';overlay.className='oa-overlay';
@@ -2152,6 +2166,7 @@ async function openOwnerAssistant(){
  const drawHistory=items=>{by('oaHistory').innerHTML=items.length?items.map(h=>'<article class="oa-history"><p>'+esc(h.result?.summary||'عملية إدارية')+'</p><small>'+esc(new Date(h.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}))+'</small></article>').join(''):'<p class="meta">لا توجد عمليات مسجلة بعد.</p>';};
  drawHistory(historyResult.data||[]);
  const close=()=>{if(busy)return;if(logoObjectUrl)URL.revokeObjectURL(logoObjectUrl);overlay.remove();};
+ overlay.addEventListener('private-session-ended',()=>{busy=false;prepared=null;uploaded=null;context={branches:[],employees:[]};close();},{once:true});
  by('oaClose').onclick=close;
  const action=()=>by('oaAction').value;
  const employee=()=>context.employees.find(e=>e.user_id===by('oaEmployee')?.value);
@@ -2245,7 +2260,9 @@ async function openOwnerAssistant(){
     }
     plan.data.logo_url=uploaded.url;
    }
+   if(sessionEpoch!==appSessionEpoch||!overlay.isConnected)return;
    const r=await safeRpc('dlv_owner_assistant_execute',{p_request_id:plan.id,p_action:plan.action,p_company_id:plan.company,p_branch_id:plan.branch,p_user:plan.user,p_data:plan.data});
+   if(sessionEpoch!==appSessionEpoch||!overlay.isConnected)return;
    if(r.error){if(r.error.code==='40001')prepared=null;throw r.error;}
 const latestCompanies=await safeRpc('dlv_owner_list_companies');
    if(!latestCompanies.error){companies.splice(0,companies.length,...latestCompanies.data);const selectedCompany=by('oaCompany').value;by('oaCompany').innerHTML='<option value="">اختر الشركة</option>'+companies.map(c=>'<option value="'+Number(c.id)+'">'+esc(c.name)+'</option>').join('');by('oaCompany').value=selectedCompany;}
@@ -2259,7 +2276,7 @@ const latestCompanies=await safeRpc('dlv_owner_list_companies');
    by('oaReview').hidden=true;
    const resultButton=document.createElement('button');resultButton.type='button';resultButton.className='g big';resultButton.textContent='فتح الشركة بعد التعديل';resultButton.onclick=()=>{close();ownerBranchPicker(Number(r.data.company_id));};by('oaResult').appendChild(resultButton);
   }catch(e){by('oaResult').className='msg e';by('oaResult').textContent=e.code==='42501'?'انتهت صلاحية قفل المالك أو الحساب غير مصرح. أغلق المساعد وأعد فتح قفل الصفحة.':e.code==='40001'?'تغيرت البيانات بعد المعاينة. أعد اختيار النطاق والمعاينة.':e.code==='23505'?'الاسم أو كود الموظف مستخدم بالفعل. راجع البيانات.':'تعذر التنفيذ: '+(e.message||'تحقق من الاتصال. إعادة المحاولة تستخدم معرّف العملية نفسه لتجنب التكرار.');}
-  finally{busy=false;overlay.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);by('oaRun').disabled=!prepared;}
+  finally{busy=false;if(overlay.isConnected){overlay.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);by('oaRun').disabled=!prepared;}}
  };
  fields();
  if(ownerActiveCompanyId&&companies.some(c=>Number(c.id)===Number(ownerActiveCompanyId))){by('oaCompany').value=String(ownerActiveCompanyId);await loadScope(false);}

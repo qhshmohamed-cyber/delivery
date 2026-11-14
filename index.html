@@ -1162,13 +1162,32 @@ function newOrderForm() {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
     <label>اسم موظف الكول سنتر صاحب الطلب *</label><select id="n_staff"><option value="">اختر الموظف</option></select><div class="meta">مسؤول المتابعة: ${esc(me.full_name||"الحساب الحالي")}</div><label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
-    ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch">${Object.entries(branchNames).map(([id,name])=>`<option value="${id}" ${Number(selectedBranch)===Number(id)?'selected':''}>${esc(name)}</option>`).join('')}</select>` : ''}
+    ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch" disabled><option value="">جاري تحميل الفروع المصرح بها...</option></select>` : ''}
     ${isMgr ? `<label>اسم العميل</label><input id="n_c"><label>رقم الهاتف</label><input id="n_p" inputmode="tel"><div id="n_customer_count" class="meta" aria-live="polite">رقم الهاتف اختياري — يمكن تسجيل الطلب بدونه.</div>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="n_wa_consent" style="width:auto"> العميل وافق على استلام رابط المتابعة عبر واتساب</label>
     <label>العنوان</label><input id="n_a">` : ''}
     ${isMgr ? '<label>ملاحظات</label><textarea id="n_n" rows="2"></textarea>' : ''}
     <div class="row" style="margin-top:14px"><button class="p big" id="n_ok" style="flex:1">تسجيل</button><button class="big" id="n_x" style="flex:0 0 90px">إلغاء</button></div></div>`;
   document.body.appendChild(d);
+  let orderBranchesReady=false;
+  async function loadOrderBranches(){
+    const sel=d.querySelector('#n_branch');
+    if(!sel){orderBranchesReady=true;return;}
+    const result=isOwner()
+      ?await safeRpc('dlv_owner_company_branches',{p_company_id:Number(ownerActiveCompanyId)})
+      :await safeRpc('dlv_my_branches');
+    if(!d.isConnected)return;
+    if(result.error){$('ferr').textContent='تعذر تحميل الفروع: '+result.error.message;$('ferr').className='msg e';sel.innerHTML='<option value="">تعذر تحميل الفروع</option>';return;}
+    const branches=(result.data||[]).filter(b=>b.active!==false);
+    sel.innerHTML='<option value="">اختر الفرع</option>'+branches.map(b=>'<option value="'+Number(b.id)+'">'+esc(b.name)+'</option>').join('');
+    const wanted=Number(selectedBranch||me.branch_id);
+    if(branches.some(b=>Number(b.id)===wanted))sel.value=String(wanted);
+    else if(branches.length===1)sel.value=String(branches[0].id);
+    sel.disabled=!branches.length;
+    orderBranchesReady=!!branches.length;
+    if(!orderBranchesReady){$('ferr').textContent='لا توجد فروع مصرح بها لإنشاء طلب';$('ferr').className='msg e';}
+    if(orderBranchesReady)loadOrderStaff();
+  }
   async function loadOrderStaff(){const branch=Number($('n_branch')?.value||selectedBranch||me.branch_id);const sel=$('n_staff');sel.innerHTML='<option value="">جاري تحميل الموظفين...</option>';const {data,error}=await safeRpc('dlv_callcenter_staff_list',{p_branch:branch});if(!d.isConnected)return;sel.innerHTML='<option value="">اختر الموظف صاحب الطلب</option>'+(data||[]).map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');if(error)flash(error.message,false);}
   let customerCountRequest=0;
   async function updateCustomerOrderCount(){
@@ -1189,10 +1208,12 @@ function newOrderForm() {
   }
   if($('n_p')){$('n_p').addEventListener('change',updateCustomerOrderCount);$('n_p').addEventListener('blur',updateCustomerOrderCount);}
   if($('n_branch'))$('n_branch').addEventListener('change',updateCustomerOrderCount);
-  if($('n_branch'))$('n_branch').onchange=loadOrderStaff;loadOrderStaff();
+  if($('n_branch'))$('n_branch').onchange=()=>{loadOrderStaff();updateCustomerOrderCount();};
+  if($('n_branch'))loadOrderBranches();else loadOrderStaff();
   $('n_x').onclick = () => d.remove();
   $('n_ok').onclick = async () => {
     if (!requireOnline('إنشاء الطلب')) return;
+    if($('n_branch')&&(!orderBranchesReady||!$('n_branch').value)){ $('ferr').textContent='اختر فرعًا مصرحًا به أولاً';$('ferr').className='msg e';return; }
     if(!$('n_staff')?.value){$('ferr').textContent='اختار موظف الكول سنتر صاحب الطلب';$('ferr').className='msg e';return;}
     const orderNumber=String($('n_no')?.value||'').trim();
     if(!orderNumber){const e=$('ferr');e.textContent='اكتب رقم الطلب أولاً';e.className='msg e';$('n_no')?.focus();return;}
@@ -2194,7 +2215,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     if(!validChoices.length){branchError.textContent='لا توجد فروع مفعلة ومصرح بها لهذا الحساب. يلزم منح صلاحية الفرع من إدارة الشركة، أو فتح إنشاء الحساب من لوحة مالك المنصة.';branchError.className='msg e';}
   }
   loadAccountBranches().catch(e=>{if(!d.isConnected)return;branchError.textContent='تعذر تحميل الفروع، أعد فتح النافذة';branchError.className='msg e';console.error('Branch selector failed',e)});
-  const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
+  const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@yourstaff.invalid'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
   $('a_x').onclick = () => d.remove();
   $('a_ok').onclick = async () => {

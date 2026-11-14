@@ -2696,10 +2696,23 @@ const trackMsg = o => customerWelcomeMessage(o);
 async function copyMsg(id) { const o=ORD[id];if(!o)return;try{const msg=await customerWelcomeMessageForOrder(o);await navigator.clipboard.writeText(msg);flash('تم نسخ رسالة شركة الطلب',true);}catch(e){flash('تعذر تجهيز الرسالة: '+e.message,false);} }
 async function waMsg(id) {
   if(!(isOwner() || isLocationManager() || me?.workflow_role==='callcenter_followup' || me?.role==='admin')) return flash('واتساب العميل متاح للمدير ومتابعة الكول سنتر فقط',false);
-  const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);
-  if(!/^20(?:10|11|12|15)\d{8}$/.test(d))return flash('رقم العميل غير صالح لواتساب',false);
-  let msg;try{msg=await customerWelcomeMessageForOrder(o);}catch(e){return flash('تعذر تجهيز رسالة الشركة: '+e.message,false);}
-  const link=document.createElement('a');link.href='https://wa.me/'+d+'?text='+encodeURIComponent(msg);link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();
+  const o=ORD[id];if(!o)return;
+  const phone=String(o.phone||'');
+  const digits=phone.replace(/\D/g,'');
+  const normalized=digits.startsWith('0')?'20'+digits.slice(1):digits;
+  if(!/^20(?:10|11|12|15)\d{8}$/.test(normalized))return flash('رقم العميل غير صالح لواتساب',false);
+  if(!window.confirm('هل وافق العميل على استقبال رسالة متابعة الطلب عبر واتساب؟'))return;
+  const btn=document.querySelector('[data-act="wa"][data-id="'+Number(id)+'"]');
+  if(btn?.dataset.sending==='1')return;
+  if(btn){btn.dataset.sending='1';btn.disabled=true;}
+  try{
+    const msg=await customerWelcomeMessageForOrder(o);
+    const link=customerWhatsAppUrl(phone,msg);
+    if(!link)throw Error('رابط واتساب غير صالح');
+    const a=document.createElement('a');a.href=link;a.target='_blank';a.rel='noopener noreferrer';
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){flash('تعذر تجهيز رسالة الشركة: '+e.message,false);}
+  finally{if(btn){btn.disabled=false;delete btn.dataset.sending;}}
 }
 async function loadCodes() {
   const box = $('codes'); if (!box) return;

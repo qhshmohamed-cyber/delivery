@@ -420,7 +420,7 @@ async function boot() {
   selectedBranch = permitted.includes(Number(selectedBranch)) ? Number(selectedBranch) : permitted[0];
   try{await loadBrandConfig();subscribeBrandConfig();}catch(e){console.warn('تعذر تحميل مظهر الشركة، جاري فتح لوحة العمل بالتصميم الافتراضي:',e);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
-    const r = await safeRpc('dlv_list_active_drivers');
+    const r = await safeRpc('dlv_list_branch_drivers',{p_branch_id:selectedBranch});
     if (r.error) { drivers = []; console.error('تعذر تحميل الطيارين:', r.error.message); }
     else drivers = (r.data || []).filter(x => !selectedBranch || x.branch_id === selectedBranch);
   } else {
@@ -442,7 +442,7 @@ async function employeeBranchPicker(permitted){
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){
-  if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_active_drivers');if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);}
+  if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_branch_drivers',{p_branch_id:selectedBranch});if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);}
   try{me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():me.role==='complaints_officer'?complaintsOfficerView():managerView();}
   catch(e){console.error('Employee dashboard render failed:',e);return reconnectView('خطأ في واجهة الحساب ('+String(e?.name||'Error')+'): '+String(e?.message||'غير معروف').slice(0,130));}
   try{startKitchenDelayMonitor();}catch(e){console.warn('Kitchen monitor unavailable:',e)}
@@ -1494,6 +1494,7 @@ function bikeIcon(bearing=0, live=true, size=90) {
 /* ---------- خريطة الطيارين (المدير) ---------- */
 let map, markers = {}, mapTimer;
 function openMap() {
+  if(!selectedBranch || !me || !(isOwner() || isLocationManager() || me.workflow_role==='supervisor')) return flash('اختار فرعًا مصرحًا به لعرض مواقع طياريه.',false);
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
   d.innerHTML = '<div class="ys-map-head"><div class="row"><div style="flex:1"><b style="font-size:16px">خريطة أسطول '+esc(brandConfig?.brand_name||'الشركة')+'</b><div class="meta">متابعة مواقع الطيارين لحظيًا</div></div><span id="mcount" class="meta">0 طيار</span><button id="mclose" style="background:#f2dfb7;color:#551412;border:1px solid #d5b36c">إغلاق</button></div></div><div class="ys-map-shell" style="padding:9px 12px"><select id="msel" style="width:100%;border:1px solid #d8c59c;border-radius:10px;background:#fffdf8;padding:10px"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1;min-height:240px"></div><div class="ys-map-legend"><span><i class="ys-map-dot" style="background:#27ae60"></i> متصل الآن</span><span><i class="ys-map-dot" style="background:#9aa0a6"></i> آخر ظهور</span></div>';
@@ -1507,7 +1508,7 @@ function openMap() {
     mapBusy = true;
     let l, o;
     try { [l, o] = await Promise.all([
-      branchQuery(sb.from('dlv_locations').select('driver_id,branch_id,lat,lng,accuracy,updated_at')).limit(500),
+      sb.from('dlv_locations').select('driver_id,branch_id,lat,lng,accuracy,updated_at').eq('branch_id',selectedBranch).limit(500),
       branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).in('status', ['received', 'out']).limit(500)]); }
     catch(e) { mapBusy = false; return; }
     mapBusy = false;
@@ -1648,7 +1649,7 @@ async function managePilots() {
   load();
 }
 async function refreshDrivers() {
-  const rr = await safeRpc('dlv_list_active_drivers');
+  const rr = await safeRpc('dlv_list_branch_drivers',{p_branch_id:selectedBranch});
   if (rr.data) drivers = rr.data.filter(x=>!selectedBranch||x.branch_id===selectedBranch);
   const f = $('f_dr'); if (f) { const cur = f.value; f.innerHTML = '<option value="">كل الدليفري</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join(''); f.value = cur; }
 }

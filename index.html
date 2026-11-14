@@ -272,7 +272,7 @@ function stopProfileSync(){
  profileSyncFingerprint='';
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void checkProfileUpdates();});
-const activeBranchTitle = () => selectedBranch ? branchTitle(selectedBranch) : 'عرض الفرعين معًا';
+const activeBranchTitle = () => selectedBranch ? branchTitle(selectedBranch) : (isOwner() ? 'جميع فروع الشركة الحالية' : 'لم يتم اختيار فرع');
 const canViewManagerBoard = () => isOwner() || isLocationManager();
 
 function flash(t, ok) {
@@ -502,8 +502,9 @@ async function employeeBranchPicker(permitted){
   if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
   const branches=(data||[]).filter(b=>permitted.includes(Number(b.id)) && Number.isInteger(Number(b.id)) && Number(b.id)>0);
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
-  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
+  $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div>${selectedBranch&&branches.some(b=>Number(b.id)===Number(selectedBranch))?'<button id="empBack" class="g big" style="margin-top:12px">↩️ الرجوع للفرع الحالي</button>':''}<button id="empOut">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>Number(x.id)===id))return;selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
+  if($('empBack'))$('empBack').onclick=()=>enterEmployeeDashboard();
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){

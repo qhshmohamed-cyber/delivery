@@ -1188,7 +1188,25 @@ function newOrderForm() {
     if(!orderBranchesReady){$('ferr').textContent='لا توجد فروع مصرح بها لإنشاء طلب';$('ferr').className='msg e';}
     if(orderBranchesReady)loadOrderStaff();
   }
-  async function loadOrderStaff(){const branch=Number($('n_branch')?.value||selectedBranch||me.branch_id);const sel=$('n_staff');sel.innerHTML='<option value="">جاري تحميل الموظفين...</option>';const {data,error}=await safeRpc('dlv_callcenter_staff_list',{p_branch:branch});if(!d.isConnected)return;sel.innerHTML='<option value="">اختر الموظف صاحب الطلب</option>'+(data||[]).map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');if(error)flash(error.message,false);}
+  let staffRequestId=0;
+  async function loadOrderStaff(){
+    const request=++staffRequestId;
+    const sel=d.querySelector('#n_staff');
+    const branchSelect=d.querySelector('#n_branch');
+    const branch=branchSelect?Number(branchSelect.value):Number(selectedBranch||me.branch_id);
+    sel.disabled=true;
+    sel.innerHTML='<option value="">جاري تحميل الموظفين...</option>';
+    if(!Number.isInteger(branch)||branch<1){
+      sel.innerHTML='<option value="">اختر فرعًا صحيحًا أولاً</option>';
+      return;
+    }
+    const {data,error}=await safeRpc('dlv_callcenter_staff_list',{p_branch:branch});
+    if(!d.isConnected||request!==staffRequestId)return;
+    sel.innerHTML='<option value="">اختر الموظف صاحب الطلب</option>'+(data||[]).map(x=>'<option value="'+Number(x.id)+'">'+esc(x.name)+'</option>').join('');
+    sel.disabled=!!error||!(data||[]).length;
+    if(error){$('ferr').textContent='تعذر تحميل موظفي الفرع: '+error.message;$('ferr').className='msg e';}
+    else if(!(data||[]).length){$('ferr').textContent='لا يوجد موظف متابعة كول سنتر مسجل في هذا الفرع';$('ferr').className='msg e';}
+  }
   let customerCountRequest=0;
   async function updateCustomerOrderCount(){
     const label=$('n_customer_count'),phone=String($('n_p')?.value||'').trim();
@@ -2172,7 +2190,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
     '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير فرع</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option><option value="complaints_officer">مسؤول الشكاوى</option></select>' +
     '<label>الفرع *</label><select id="a_branch"></select>' +
-    '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (12 حرفًا على الأقل: كبير وصغير ورقم ورمز)</label><input id="a_p" value="' + pw + '">' +
+    '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (12 حرفًا على الأقل: كبير وصغير ورقم ورمز)</label><input id="a_p" type="password" autocomplete="new-password" value="' + pw + '"><label style="display:flex;gap:8px;align-items:center"><input id="a_show_pw" type="checkbox" style="width:auto"> إظهار كلمة السر مؤقتًا</label>' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
   document.body.appendChild(d);
@@ -2221,6 +2239,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
   loadAccountBranches().catch(e=>{if(!d.isConnected)return;branchError.textContent='تعذر تحميل الفروع، أعد فتح النافذة';branchError.className='msg e';console.error('Branch selector failed',e)});
   const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
+  d.querySelector('#a_show_pw').onchange=()=>{d.querySelector('#a_p').type=d.querySelector('#a_show_pw').checked?'text':'password'};
   $('a_x').onclick = () => d.remove();
   $('a_ok').onclick = async () => {
     if (!requireOnline('إنشاء حساب الموظف')) return;

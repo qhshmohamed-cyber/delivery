@@ -676,7 +676,24 @@ async function ownerBranchPicker(companyId=1){
   const result=await safeRpc('dlv_owner_list_branch_addons',{p_branch_id:branchId});
   if(result.error)return alert('تعذر تحميل الميزات: '+result.error.message);
   const rows=result.data||[];
-  alert('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+rows.map(x=>(x.implemented?(x.enabled?'✅ ':'⬜ '):'🔒 ')+x.title_ar+(x.implemented?'':' — قيد التطوير')).join('\\n')+'\\n\\nلا يمكن تفعيل أي ميزة قبل اكتمال تنفيذها واختبارها.');
+  const available=rows.filter(x=>x.implemented);
+  const menu=rows.map((x,i)=>(i+1)+'. '+x.title_ar+' — '+(!x.implemented?'قيد التطوير':x.enabled?'مفعلة':'جاهزة للتفعيل')).join('\\n');
+  const action=prompt('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+menu+'\\n\\nاكتب رقم الميزة الجاهزة لتفعيلها أو إيقافها، أو اكتب تقرير لعرض نتائج التقييمات:');
+  if(action===null)return;
+  if(action.trim()==='تقرير'){
+    const report=await safeRpc('dlv_owner_branch_rating_summary',{p_branch_id:branchId});
+    if(report.error)return alert('تعذر عرض التقرير: '+report.error.message);
+    const x=(report.data||[])[0]||{};
+    return alert('تقرير تقييمات الفرع\\nعدد التقييمات: '+Number(x.total_ratings||0)+'\\nمتوسط التوصيل: '+(x.avg_delivery??'لا توجد تقييمات')+'\\nمتوسط المطعم: '+(x.avg_restaurant??'لا توجد تقييمات')+'\\nمتوسط الكول سنتر: '+(x.avg_callcenter??'لا توجد تقييمات'));
+  }
+  const index=Number(action)-1;
+  if(!Number.isInteger(index)||index<0||index>=rows.length)return alert('اختيار غير صحيح.');
+  const item=rows[index];
+  if(!item.implemented)return alert('هذه الميزة لم يكتمل تنفيذها بعد، ولا يمكن تفعيلها.');
+  if(!confirm((item.enabled?'إيقاف':'تفعيل')+' ميزة '+item.title_ar+' لهذا الفرع فقط؟'))return;
+  const change=await safeRpc('dlv_owner_set_branch_addon',{p_branch_id:branchId,p_code:item.code,p_enabled:!item.enabled});
+  if(change.error)return alert('تعذر حفظ الميزة: '+change.error.message);
+  alert('تم '+(item.enabled?'إيقاف':'تفعيل')+' '+item.title_ar+' لهذا الفرع. '+(!item.enabled?'استخدم زر الميزات مرة أخرى واكتب تقرير لعرض النتائج.':''));
  };
  $('ownerEditCompanyBrand').onclick=async()=>{
   const current=ownerBrandCache.get(Number(companyId))||{};

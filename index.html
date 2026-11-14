@@ -292,6 +292,7 @@ body.ys-tenant button.r{border-color:var(--ys-danger)!important}
 body.ys-tenant .ys-connection.online{color:var(--ys-success)!important}
 body.ys-tenant input::placeholder,body.ys-tenant textarea::placeholder{color:var(--ys-muted-card);opacity:1}
 
+[data-register-complaint] label{font-size:15px;font-weight:600;line-height:1.7}[data-register-complaint] .meta{font-size:14px;line-height:1.8}[data-register-complaint] input,[data-register-complaint] select,[data-register-complaint] textarea{font-size:16px}
 </style>
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
@@ -811,17 +812,13 @@ async function ownerPasswordSettings(){
   if(old===pw)return fail('اختر كلمة مرور مختلفة عن الحالية');
   $('ownerSavePass').disabled=true;
   try{
-   const session=await sb.auth.getUser();
-   const email=session.data?.user?.email;
-   if(!email)throw Error('تعذر التحقق من الحساب');
-   const checked=await sb.auth.signInWithPassword({email,password:old});
-   if(checked.error||checked.data?.user?.id!==me.user_id)throw Error('كلمة المرور الحالية غير صحيحة');
-   const changed=await sb.auth.updateUser({password:pw});
+   const changed=await safeRpc('dlv_owner_change_login_password',{p_current:old,p_new:pw});
    if(changed.error)throw Error(changed.error.message);
+   if(!changed.data?.success)throw Error(changed.data?.message||'تعذر تحديث كلمة المرور');
    $('ownerOldPass').value='';$('ownerNewPass').value='';$('ownerConfirmPass').value='';
-   msg.className='msg o';msg.textContent='تم تغيير كلمة المرور بنجاح';
+   msg.className='msg o';msg.textContent='تم تغيير كلمة المرور بنجاح بعد فحص التسريب وإغلاق الجلسات الأخرى';
   }catch(e){fail(e.message||'تعذر تحديث كلمة المرور');}
-  finally{$('ownerSavePass').disabled=false;}
+  finally{if($('ownerSavePass'))$('ownerSavePass').disabled=false;}
  };
 }
 function ownerBillingHistory(){
@@ -1689,10 +1686,45 @@ async function loadCustomStaffTasks(){
  box.querySelectorAll('[data-task-delete]').forEach(btn=>btn.onclick=async()=>{if(!confirm('حذف هذه المهمة؟'))return;btn.disabled=true;const {error:e}=await sb.from('dlv_custom_staff_tasks').delete().eq('id',Number(btn.dataset.taskDelete)).eq('user_id',me.user_id);if(e)flash(e.message,false);await loadCustomStaffTasks();});
 }
 
+function openRegisterComplaint(){
+ if(!me||!(isOwner()||isLocationManager()||me.role==='complaints_officer'||me.workflow_role==='complaints_officer'))return flash('غير مصرح',false);
+ if(document.querySelector('[data-register-complaint]'))return;
+ const branch=Number(selectedBranch||me.branch_id);
+ if(!Number.isInteger(branch)||branch<1)return flash('اختر الفرع أولًا',false);
+ const d=document.createElement('div');d.className='modal';d.dataset.registerComplaint='true';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-labelledby','registerComplaintTitle');
+ const request=crypto.randomUUID();let busy=false,submitted=null;
+ d.innerHTML='<div><h2 id="registerComplaintTitle">تسجيل شكوى برقم الطلب</h2><p class="meta">الفرع: '+esc(branchTitle(branch))+' · سيُحفظ اسمك ووقت التسجيل تلقائيًا.</p><label for="newComplaintorder">رقم الطلب *</label><input id="newComplaintorder" data-new-complaint-order maxlength="60" inputmode="numeric" autocomplete="off"><label for="newComplaintday">تاريخ الطلب *</label><input id="newComplaintday" data-new-complaint-day type="date" value="'+reportOperationalDay()+'" max="'+reportOperationalDay()+'"><label for="newComplainttitle">عنوان الشكوى *</label><input id="newComplainttitle" data-new-complaint-title maxlength="160"><label for="newComplaintdetails">تفاصيل الشكوى</label><textarea id="newComplaintdetails" data-new-complaint-details rows="3" maxlength="2000"></textarea><label for="newComplaintpriority">الأولوية</label><select id="newComplaintpriority" data-new-complaint-priority><option value="medium">متوسطة</option><option value="low">منخفضة</option><option value="high">عالية</option><option value="critical">عاجلة جدًا</option></select><label for="newComplaintstatus">حالة الشكوى</label><select id="newComplaintstatus" data-new-complaint-status><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل مع العميل</option></select><label for="newComplaintaction">الإجراء المتخذ / اتحلت مع العميل إزاي؟ *</label><textarea id="newComplaintaction" data-new-complaint-action rows="4" maxlength="1500" placeholder="اكتب ما تم مع العميل، أو الإجراء الحالي والخطوة التالية إذا لم تُحل بعد"></textarea><p class="meta">يظهر التسجيل والإجراء في تقرير نهاية اليوم للمالك ومدير الفرع. تاريخ الطلب يحدد الطلب المقصود؛ الشكوى تُسجل بتاريخ ووقت الحفظ الفعلي.</p><div class="msg e hide" data-new-complaint-error role="alert"></div><div class="row"><button class="p" data-new-complaint-save>حفظ الشكوى والإجراء</button><button data-new-complaint-close>رجوع</button></div></div>';
+ document.body.appendChild(d);
+ const val=n=>d.querySelector('[data-new-complaint-'+n+']').value.trim();
+ d.querySelector('[data-new-complaint-close]').onclick=()=>{if(!busy)d.remove();};
+ d.querySelector('[data-new-complaint-save]').onclick=async()=>{
+  if(busy||!requireOnline('تسجيل الشكوى'))return;
+  const errorBox=d.querySelector('[data-new-complaint-error]'),button=d.querySelector('[data-new-complaint-save]');
+  const payload={p_request:request,p_branch:branch,p_day:val('day'),p_order_no:val('order').replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))),p_title:val('title'),p_details:val('details'),p_priority:val('priority'),p_status:val('status'),p_action:val('action')};
+  const fail=message=>{errorBox.textContent=message;errorBox.classList.remove('hide');};
+  if(!payload.p_order_no||!/^\d{4}-\d{2}-\d{2}$/.test(payload.p_day)||payload.p_title.length<3||payload.p_action.length<3)return fail('أدخل رقم الطلب وتاريخه، وعنوانًا وإجراءً واضحين (3 أحرف على الأقل).');
+  if(submitted&&JSON.stringify(submitted)!==JSON.stringify(payload))return fail('تم إرسال طلب الحفظ بالفعل. أعد المحاولة بنفس البيانات للتحقق من النتيجة، ثم افتح تسجيلًا جديدًا لأي تغيير.');
+  submitted=payload;busy=true;button.disabled=true;errorBox.classList.add('hide');
+  let result,uncertain=false;try{result=await safeRpc('dlv_register_complaint_by_order',payload);}catch(e){uncertain=true;result={error:{message:'تعذر الاتصال. أعد الحفظ بنفس البيانات؛ النظام يمنع تكرار الشكوى.'}};}
+  busy=false;button.disabled=false;
+  if(result.error){if(!uncertain)submitted=null;return fail(result.error.message||'تعذر الحفظ؛ أعد المحاولة بنفس البيانات.');}
+  if(!result.data?.success)return fail('لم يتم تأكيد الحفظ من الخادم؛ أعد المحاولة بنفس البيانات.');
+  d.remove();flash('تم حفظ الشكوى #'+result.data.id+' والإجراء وإتاحتهما لتقرير الإدارة',true);await loadComplaintsInbox();
+ };
+}
+function complaintDailyReportHtml(summary,h){
+ const labels={open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'};
+ const time=v=>v?new Date(v).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—';
+ const cell=v=>'<td>'+h(v)+'</td>';
+ const items=(summary.items||[]).map(x=>'<tr>'+[x.id,x.order_no,x.order_day,x.title,x.details,labels[x.status]||x.status,x.action||'لم يُسجل إجراء',x.officer,time(x.followup_at),time(x.resolved_at)].map(cell).join('')+'</tr>').join('');
+ const actions=(summary.actions||[]).map(x=>'<tr>'+[x.complaint_id,x.order_no,x.title,x.action,labels[x.status]||x.status,x.officer,time(x.at)].map(cell).join('')+'</tr>').join('');
+ return '<h2>شكاوى العملاء المسجلة خلال يوم التشغيل ('+(summary.items||[]).length+')</h2><p>حالة الشكاوى وآخر إجراء حتى '+h(time(summary.as_of))+'؛ تفاصيل الطلبات المؤرشفة محفوظة كما صدرت.</p><table><tr><th>الشكوى</th><th>الطلب</th><th>تاريخ الطلب</th><th>الموضوع</th><th>التفاصيل</th><th>الحالة الحالية</th><th>الإجراء وطريقة الحل</th><th>المسؤول</th><th>وقت المتابعة</th><th>وقت الحل</th></tr>'+ (items||'<tr><td colspan="10">لا توجد شكاوى جديدة خلال اليوم</td></tr>')+'</table><h2>سجل إجراءات الشكاوى خلال اليوم ('+(summary.actions||[]).length+')</h2><p>يشمل إجراءات اليوم على الشكاوى القديمة والجديدة.</p><table><tr><th>الشكوى</th><th>الطلب</th><th>الموضوع</th><th>الإجراء / كيفية الحل</th><th>الحالة بعد الإجراء</th><th>المسؤول</th><th>التاريخ والوقت</th></tr>'+(actions||'<tr><td colspan="7">لا توجد إجراءات خلال اليوم</td></tr>')+'</table>';
+}
+
 function complaintsOfficerView(){
  if(!me||!(isOwner()||isLocationManager()||(me.role==='complaints_officer'||me.workflow_role==='complaints_officer')))return flash('غير مصرح',false);
- $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث بالعميل أو الطلب أو الشكوى أو موظف المتابعة" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');
- bindOut();$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
+ $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button class="p" id="complaintsNew">تسجيل شكوى برقم الطلب</button><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث بالعميل أو الطلب أو الشكوى أو موظف المتابعة" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');
+ bindOut();$('complaintsNew').onclick=openRegisterComplaint;$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
  loadComplaintsInbox();
 }
 
@@ -1755,7 +1787,7 @@ function paintComplaintsInbox(){
 function complaintActionDialog(x){
  if(!me||!(isOwner()||isLocationManager()||(me.role==='complaints_officer'||me.workflow_role==='complaints_officer')))return flash('غير مصرح',false);
  const d=document.createElement('div');d.className='modal';
- d.innerHTML='<div><h2>متابعة شكوى طلب #'+esc(x.order_no||'—')+'</h2><p class="meta">سيُحفظ الإجراء باسم '+esc(me.full_name)+' مع الوقت والتاريخ.</p><label>حالة الشكوى</label><select data-complaint-state><option value="in_progress">جارٍ المتابعة — استلام المسؤولية</option><option value="resolved">تم الحل</option><option value="open">إعادة فتح الشكوى</option></select><label>الإجراء المتخذ *</label><textarea data-complaint-action rows="4" maxlength="1500" placeholder="اكتب ما تم مع العميل والخطوة التالية"></textarea><div class="msg e hide" data-complaint-error></div><div class="row" style="margin-top:12px"><button class="p" data-complaint-save>حفظ الإجراء</button><button data-complaint-close>رجوع</button></div></div>';
+ d.innerHTML='<div><h2>متابعة شكوى طلب #'+esc(x.order_no||'—')+'</h2><p class="meta">سيُحفظ الإجراء باسم '+esc(me.full_name)+' مع الوقت والتاريخ.</p><label>حالة الشكوى</label><select data-complaint-state><option value="in_progress">جارٍ المتابعة — استلام المسؤولية</option><option value="resolved">تم الحل</option><option value="open">إعادة فتح الشكوى</option></select><label>الإجراء المتخذ / كيفية حل الشكوى مع العميل *</label><textarea data-complaint-action rows="4" maxlength="1500" placeholder="اكتب ما تم مع العميل والخطوة التالية"></textarea><div class="msg e hide" data-complaint-error></div><div class="row" style="margin-top:12px"><button class="p" data-complaint-save>حفظ الإجراء</button><button data-complaint-close>رجوع</button></div></div>';
  document.body.appendChild(d);d.querySelector('[data-complaint-close]').onclick=()=>d.remove();
  d.querySelector('[data-complaint-save]').onclick=async()=>{
  if(!requireOnline('حفظ إجراء الشكوى'))return;
@@ -2282,10 +2314,15 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  const h=x=>esc(String(x??''));
  if(!data||typeof data!=='object'||Array.isArray(data)||!data.orders||typeof data.orders!=='object'||!Array.isArray(data.order_details))return alert('الخادم لم يرجع تقريرًا مكتملًا. لن يتم تنزيل ملف ناقص.');
  if(Number(data.branch_id)!==Number(id)||data.day!==day)return alert('بيانات التقرير لا تطابق الفرع أو التاريخ المطلوب. تم إيقاف التنزيل لحماية البيانات.');
+ const complaintResult=await safeRpc('dlv_daily_complaint_summary',{p_branch:Number(id),p_day:day});
+ if(complaintResult.error)return alert('تعذر تحميل تفاصيل الشكاوى؛ لم يتم تنزيل تقرير ناقص: '+complaintResult.error.message);
+ const summary=complaintResult.data;
+ if(!summary||Number(summary.branch_id)!==Number(id)||summary.day!==day||!Array.isArray(summary.items)||!Array.isArray(summary.actions))return alert('تفاصيل الشكاوى غير مكتملة أو لا تطابق الفرع والتاريخ.');
+ const complaintHtml=complaintDailyReportHtml(summary,h);
  const orders=data.orders||{}, incidents=data.incidents||{};
  const staff=(Array.isArray(data.staff)?data.staff:[]).map(x=>'<tr><td>'+h(x.employee)+'</td><td>'+h(x.orders)+'</td></tr>').join('');
  const issues=(Array.isArray(incidents.items)?incidents.items:[]).map(x=>'<tr><td>'+h(x.category)+'</td><td>'+h(x.title)+'</td><td>'+h(x.status)+'</td></tr>').join('');
- const html='<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><title>تقرير '+h(data.company)+' - '+h(data.branch)+' - '+h(day)+'</title><style>body{font:16px Arial,sans-serif;margin:28px;color:#222}table{border-collapse:collapse;width:100%;margin:12px 0 24px}td,th{border:1px solid #bbb;padding:9px;text-align:right}h1,h2{color:#6b4b23}@media print{button{display:none}}</style><h1>تقرير تشغيل يومي</h1><p>'+h(data.company)+' — '+h(data.branch)+' — '+h(day)+'</p><p>من 5 صباحًا إلى 5 صباح اليوم التالي بتوقيت القاهرة</p><h2>الطلبات</h2><table><tr><th>الإجمالي</th><th>المسلّم</th><th>الملغي</th><th>الفاشل</th><th>الصافي بعد الكنسلة</th><th>تأخيرات أكثر من 60 دقيقة</th></tr><tr>'+[orders.total,orders.delivered,orders.cancelled,orders.failed,orders.net_after_cancel,orders.late_over_60m].map(x=>'<td>'+h(x)+'</td>').join('')+'</tr></table><h2>إنتاجية الكول سنتر</h2><table><tr><th>الموظف</th><th>الطلبات</th></tr>'+staff+'</table><h2>الشكاوى والمشاكل ('+h(incidents.total)+')</h2><table><tr><th>النوع</th><th>الموضوع</th><th>الحالة</th></tr>'+issues+'</table><h2>تفاصيل الطلبات</h2><table><tr><th>رقم الطلب</th><th>الحالة</th><th>الموظف</th><th>وقت الإنشاء</th><th>وقت التسليم</th><th>سبب الإلغاء/الفشل</th><th>ملاحظات الطيار</th></tr>'+(Array.isArray(data.order_details)?data.order_details:[]).map(x=>'<tr>'+[x.number,x.status,x.staff,x.created_at,x.delivered_at,x.failed_reason,x.driver_note].map(v=>'<td>'+h(v)+'</td>').join('')+'</tr>').join('')+'</table><p>لا توجد مبالغ مالية مسجلة في جدول الطلبات؛ الصافي هنا عدد الطلبات بعد الكنسلة وليس صافي الإيرادات.</p><button onclick="window.print()">طباعة / حفظ PDF</button></html>';
+ const html='<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><title>تقرير '+h(data.company)+' - '+h(data.branch)+' - '+h(day)+'</title><style>body{font:16px Arial,sans-serif;margin:28px;color:#222}table{border-collapse:collapse;width:100%;margin:12px 0 24px}td,th{border:1px solid #bbb;padding:9px;text-align:right;overflow-wrap:anywhere;white-space:pre-wrap;vertical-align:top}h1,h2{color:#6b4b23}@media print{button{display:none}}</style><h1>تقرير تشغيل يومي</h1><p>'+h(data.company)+' — '+h(data.branch)+' — '+h(day)+'</p><p>من 5 صباحًا إلى 5 صباح اليوم التالي بتوقيت القاهرة</p><h2>الطلبات</h2><table><tr><th>الإجمالي</th><th>المسلّم</th><th>الملغي</th><th>الفاشل</th><th>الصافي بعد الكنسلة</th><th>تأخيرات أكثر من 60 دقيقة</th></tr><tr>'+[orders.total,orders.delivered,orders.cancelled,orders.failed,orders.net_after_cancel,orders.late_over_60m].map(x=>'<td>'+h(x)+'</td>').join('')+'</tr></table><h2>إنتاجية الكول سنتر</h2><table><tr><th>الموظف</th><th>الطلبات</th></tr>'+staff+'</table><h2>الشكاوى والمشاكل ('+h(incidents.total)+')</h2><table><tr><th>النوع</th><th>الموضوع</th><th>الحالة</th></tr>'+issues+'</table>'+complaintHtml+'<h2>تفاصيل الطلبات</h2><table><tr><th>رقم الطلب</th><th>الحالة</th><th>الموظف</th><th>وقت الإنشاء</th><th>وقت التسليم</th><th>سبب الإلغاء/الفشل</th><th>ملاحظات الطيار</th></tr>'+(Array.isArray(data.order_details)?data.order_details:[]).map(x=>'<tr>'+[x.number,x.status,x.staff,x.created_at,x.delivered_at,x.failed_reason,x.driver_note].map(v=>'<td>'+h(v)+'</td>').join('')+'</tr>').join('')+'</table><p>لا توجد مبالغ مالية مسجلة في جدول الطلبات؛ الصافي هنا عدد الطلبات بعد الكنسلة وليس صافي الإيرادات.</p><button onclick="window.print()">طباعة / حفظ PDF</button></html>';
  const file=new Blob([html],{type:'text/html;charset=utf-8'});
  const url=URL.createObjectURL(file),a=document.createElement('a');
  a.href=url;a.download=[data.company,data.branch,day].map(x=>String(x).replace(/[\\/:*?"<>|]/g,'-')).join(' - ')+'.html';
@@ -3331,4 +3368,5 @@ const _t = new URLSearchParams(location.search).get('t'); (async()=>{if (_t !== 
 </script>
 </body>
 </html>
+
 

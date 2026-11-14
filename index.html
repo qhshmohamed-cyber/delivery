@@ -1584,7 +1584,7 @@ function attachLocationWatch() {
     if (s) s.textContent = e.code === 1
       ? '⚠ صلاحية الموقع مرفوضة — راجع إعدادات المتصفح'
       : '⚠ الموقع غير متاح مؤقتًا — سنعيد المحاولة عند عودة الصفحة';
-    if (e.code === 1) { stopShare(true); }
+    if (e.code === 1) { void stopShare(false); }
     else {
       if (watchId != null) {try{navigator.geolocation.clearWatch(watchId);}catch(e){}}watchId = null;
       // إعادة المحاولة المؤقتة فقط إذا كانت الصفحة ظاهرة؛ لا ننشئ حلقات إرسال بالخلفية.
@@ -1610,7 +1610,7 @@ async function startShare() {
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
   shareWanted = true; lastSend = 0;
   attachLocationWatch();
-  navigator.geolocation.getCurrentPosition(p=>sendDriverPosition(p,true),()=>{}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
+  navigator.geolocation.getCurrentPosition(p=>void sendDriverPosition(p,true),e=>{const s=$('locst');if(s)s.textContent=e.code===1?'⚠ تم رفض إذن الموقع — اسمح للموقع بالوصول إلى GPS':'⚠ لم نتمكن من تحديد موقعك؛ اضغط تحديث GPS للمحاولة';}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
   clearInterval(gpsPollTimer);
   gpsPollTimer=setInterval(()=>{
     if(!shareWanted || document.visibilityState!=='visible' || !navigator.onLine || locationBusy || gpsPollBusy)return;

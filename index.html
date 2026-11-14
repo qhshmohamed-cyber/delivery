@@ -774,8 +774,8 @@ function newOrderForm() {
     const rawPhone=String($('n_p')?.value||'').replace(/\D/g,'');
     const normalizedPhone=rawPhone.startsWith('0')?'20'+rawPhone.slice(1):rawPhone;
     const validPhone=/^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone);
-    d.remove();
     refreshView();
+    d.querySelector('div').innerHTML='';
     const oldPanel=document.getElementById('createdOrderTrackingPanel');if(oldPanel)oldPanel.remove();
     const panel=document.createElement('section');
     panel.id='createdOrderTrackingPanel';panel.className='card';
@@ -797,7 +797,9 @@ function newOrderForm() {
     }else{
       const note=document.createElement('div');note.className='msg e';note.textContent='تم حفظ الطلب، لكن لم نتمكن من قراءة كود المتابعة. افتح قائمة أكواد العملاء لإعادة المحاولة.';panel.appendChild(note);
     }
-    $('app')?.prepend(panel);
+    panel.style.cssText='width:min(520px,94vw);max-height:85vh;overflow:auto;padding:20px';
+    d.firstElementChild.appendChild(panel);
+    const done=document.createElement('button');done.className='p big';done.textContent='إغلاق والعودة للطلبات';done.style.cssText='margin:12px;width:100%';done.onclick=()=>d.remove();d.firstElementChild.appendChild(done);
     flash('تم تسجيل الطلب'+(trackingCode?' — كود المتابعة: '+trackingCode:''),true);
   };
 }

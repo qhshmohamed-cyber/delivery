@@ -2707,6 +2707,8 @@ async function waMsg(id) {
   if(btn){btn.dataset.sending='1';btn.disabled=true;}
   try{
     const msg=await customerWelcomeMessageForOrder(o);
+    const {data:consentRecorded,error:consentError}=await safeRpc('dlv_record_customer_whatsapp_consent',{p_order_id:Number(o.id)});
+    if(consentError||consentRecorded!==true)throw Error('تعذر تسجيل تأكيد موافقة العميل؛ لم يتم فتح واتساب');
     const link=customerWhatsAppUrl(phone,msg);
     if(!link)throw Error('رابط واتساب غير صالح');
     const a=document.createElement('a');a.href=link;a.target='_blank';a.rel='noopener noreferrer';

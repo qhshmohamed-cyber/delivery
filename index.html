@@ -1781,7 +1781,7 @@ function openMap() {
       const ageMs=Date.now()-new Date(r.updated_at).getTime();
       const live = ageMs>=0&&ageMs<30000, nm = name[r.driver_id] || 'طيار';
       const roadInfo='<div style="font-size:12px;color:#49301e;margin-top:5px">📍 الشارع: غير محدد بعد — يحتاج خدمة تحديد أسماء الشوارع آمنة</div>';
-      const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '● آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
+      const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '⚠ موقع قديم — آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
       const oldPos = prevPos[r.driver_id];
       const displacement=oldPos ? L.latLng(oldPos).distanceTo(L.latLng(r.lat,r.lng)) : 0;
       const gpsAccuracy=Number(r.accuracy);

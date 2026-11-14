@@ -1498,6 +1498,7 @@ function openMap() {
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
   d.innerHTML = '<div class="ys-map-head"><div class="row"><div style="flex:1"><b style="font-size:16px">خريطة أسطول '+esc(brandConfig?.brand_name||'الشركة')+'</b><div class="meta">متابعة مواقع الطيارين لحظيًا</div></div><span id="mcount" class="meta">0 طيار</span><button id="mclose" style="background:#f2dfb7;color:#551412;border:1px solid #d5b36c">إغلاق</button></div></div><div class="ys-map-shell" style="padding:9px 12px"><select id="msel" style="width:100%;border:1px solid #d8c59c;border-radius:10px;background:#fffdf8;padding:10px"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1;min-height:240px"></div><div class="ys-map-legend"><span><i class="ys-map-dot" style="background:#27ae60"></i> متصل الآن</span><span><i class="ys-map-dot" style="background:#9aa0a6"></i> آخر ظهور</span></div>';
   document.body.appendChild(d);
+  if(typeof L==='undefined'){ $('lmap').textContent='تعذر تحميل خدمة الخرائط. تحقق من الاتصال ثم افتح الخريطة مجددًا.'; $('mclose').onclick=()=>d.remove(); return; }
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains:'abcd', maxZoom: 19, attribution: '© OpenStreetMap contributors · © CARTO' }).addTo(map);
   markers = {}; const prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
@@ -1506,7 +1507,7 @@ function openMap() {
     mapBusy = true;
     let l, o;
     try { [l, o] = await Promise.all([
-      sb.from('dlv_locations').select('driver_id,lat,lng,updated_at'),
+      branchQuery(sb.from('dlv_locations').select('driver_id,branch_id,lat,lng,accuracy,updated_at')).limit(500),
       branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).in('status', ['received', 'out']).limit(500)]); }
     catch(e) { mapBusy = false; return; }
     mapBusy = false;
@@ -1515,9 +1516,12 @@ function openMap() {
     const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
     const seen = new Set();
     const only = $('msel').value;
-    (l.data || []).filter(r => !only || r.driver_id === only).forEach(r => {
+    const authorizedDrivers=new Set(drivers.map(x=>x.user_id));
+    const validLocations=(l.data||[]).filter(r=>authorizedDrivers.has(r.driver_id)&&Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lng))&&Math.abs(Number(r.lat))<=90&&Math.abs(Number(r.lng))<=180);
+    validLocations.filter(r => !only || r.driver_id === only).forEach(r => {
       seen.add(r.driver_id);
-      const live = (Date.now() - new Date(r.updated_at)) < 30000, nm = name[r.driver_id] || 'طيار';
+      const ageMs=Date.now()-new Date(r.updated_at).getTime();
+      const live = ageMs>=0&&ageMs<30000, nm = name[r.driver_id] || 'طيار';
       const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '● آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
       const oldPos = prevPos[r.driver_id];
       const moved = oldPos && L.latLng(oldPos).distanceTo(L.latLng(r.lat,r.lng)) > 5;
@@ -1526,14 +1530,15 @@ function openMap() {
       prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 72);
       const m = markers[r.driver_id];
-      if (m) { if(moved)animateRiderMarker(m,r.lat,r.lng,4200); else if(!oldPos)m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
+      if (m) { if(moved&&live)animateRiderMarker(m,r.lat,r.lng,4200); else m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
       else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
-    $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+(l.data||[]).filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';
+    $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+validLocations.filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';
     if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }
   $('msel').onchange = () => { fitted = false; refresh(); };
+  setTimeout(()=>{if(document.getElementById('lmap'))map.invalidateSize()},150);
   refresh(); mapTimer = setInterval(refresh, 5000);
   $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
 }

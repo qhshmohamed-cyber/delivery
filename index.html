@@ -139,6 +139,15 @@ body.ys-tenant #ys-live-clock .ys-clock-zone{color:var(--gold,#c69b53);opacity:1
 
 @media(max-width:480px){#ys-live-clock{gap:6px;font-size:11px;padding:5px 8px}#ys-live-clock .ys-clock-time{font-size:13px}}
 @media print{#ys-live-clock{display:none!important}}
+
+/* Compact, accessible operational controls across mobile and desktop */
+.ys-operations-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:12px}
+.ys-operations-bar button{min-height:42px;padding:8px 12px;margin-inline-start:auto}
+.ys-operations-bar small{color:var(--muted);font-size:11px}
+.ys-connection{font-size:12px;font-weight:700}
+.ys-connection.online{color:#81d5a2}
+.ys-connection.offline{color:#ffb18a}
+@media(max-width:520px){.ys-operations-bar button{width:100%;margin-inline-start:0}.ys-operations-bar small{width:100%}}
 </style>
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
@@ -349,7 +358,25 @@ function roleWorkGuide(){
 }
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});
-const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> — <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}${(isOwner()||['manager','callcenter_followup','complaints_officer'].includes(me?.workflow_role))?'<button onclick="openRatingsActions()">⭐ تقييمات وشكاوى</button>':''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
+// Operations UX: connection awareness and a deliberate one-tap refresh.
+let ysRefreshBusy=false;
+function ysConnectionStatus(){
+ const el=document.getElementById('ysConnectionStatus');if(!el)return;
+ const online=navigator.onLine;
+ el.textContent=online?'● الجهاز متصل بالإنترنت':'● لا يوجد اتصال بالإنترنت — قد تكون البيانات قديمة';
+ el.className=online?'ys-connection online':'ys-connection offline';
+}
+function ysRefreshNow(){
+ if(ysRefreshBusy||!me)return;
+ ysRefreshBusy=true;
+ const btn=document.getElementById('ysRefreshButton');if(btn){btn.disabled=true;btn.textContent='جارٍ التحديث…';}
+ try{refreshView();const t=document.getElementById('ysRefreshTime');if(t)t.textContent='آخر طلب تحديث: '+new Intl.DateTimeFormat('ar-EG',{timeZone:'Africa/Cairo',hour:'2-digit',minute:'2-digit'}).format(new Date());}
+ finally{setTimeout(()=>{ysRefreshBusy=false;const b=document.getElementById('ysRefreshButton');if(b){b.disabled=false;b.textContent='↻ تحديث البيانات';}},1200);}
+}
+window.addEventListener('online',()=>{ysConnectionStatus();if(me)flash('عاد الاتصال بالإنترنت؛ اضغط تحديث البيانات لعرض الأحدث',true);});
+window.addEventListener('offline',ysConnectionStatus);
+new MutationObserver(()=>ysConnectionStatus()).observe(document.getElementById('app'),{childList:true});
+const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> — <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}${(isOwner()||['manager','callcenter_followup','complaints_officer'].includes(me?.workflow_role))?'<button onclick="openRatingsActions()">⭐ تقييمات وشكاوى</button>':''}<button id="out">خروج</button></header><div class="ys-operations-bar"><span id="ysConnectionStatus" class="ys-connection" role="status" aria-live="polite"></span><button type="button" id="ysRefreshButton" onclick="ysRefreshNow()" aria-label="تحديث بيانات التشغيل">↻ تحديث البيانات</button><small id="ysRefreshTime">التحديث اليدوي متاح</small></div><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {

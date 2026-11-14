@@ -227,7 +227,18 @@ async function checkProfileUpdates(){
   const {data,error}=await sb.from('dlv_profiles').select('*').eq('user_id',me.user_id).maybeSingle();
   if(error){console.warn('Profile refresh failed:',error.message);return;}
   const sig=profileSignature(data);
-  if(sig!==profileSyncFingerprint){profileSyncFingerprint=sig;selectedBranch=null;await boot();}
+  if(sig!==profileSyncFingerprint){profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
+  if(!isOwner()){
+   const {data:allowed,error:accessError}=await safeRpc('dlv_my_branches');
+   if(!accessError && !(allowed||[]).length){
+    if(me.role==='driver')await stopShare(false);
+    stopProfileSync();selectedBranch=null;
+    resetPlatformBrand();document.body.classList.add('ys-platform');
+    $('app').innerHTML='<div class="card" style="max-width:520px;margin:60px auto;text-align:center"><h2>⛔ الخدمة متوقفة مؤقتًا</h2><p>الشركة موقوفة أو لم يعد لديك فرع مصرح به. جميع البيانات محفوظة دون حذف.</p><button class="p big" id="suspendedRetry">إعادة التحقق من التفعيل</button><button id="suspendedOut" style="margin-top:12px">تسجيل الخروج</button></div>';
+    $('suspendedRetry').onclick=()=>boot();
+    $('suspendedOut').onclick=async()=>{await sb.auth.signOut();me=null;loginView()};
+   }
+  }
  }catch(e){console.warn('Profile refresh unavailable:',e)}
  finally{profileSyncBusy=false;}
 }

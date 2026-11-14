@@ -1,7 +1,7 @@
 begin;
 create temporary table five_feature_results(test text,passed boolean) on commit drop;
 do $$
-declare f uuid;s uuid;m uuid;d uuid;k uuid;b integer;staff bigint;oid bigint;n bigint;prev bigint;j jsonb;lim integer;cnt integer;report_day date:=(now() at time zone 'Africa/Cairo')::date-1;
+declare f uuid;s uuid;m uuid;d uuid;k uuid;b integer;staff bigint;oid bigint;n bigint;prev bigint;j jsonb;lim integer;cnt integer;oid2 bigint;c2 bigint;b2 integer;report_day date:=(now() at time zone 'Africa/Cairo')::date-1;
 begin
  select branch_id,user_id into b,f from public.dlv_profiles where active and workflow_role='callcenter_followup' limit 1;
  select user_id into s from public.dlv_profiles where active and branch_id=b and workflow_role='supervisor' limit 1;
@@ -42,6 +42,25 @@ begin
  begin perform public.dlv_order_dossier(oid);raise exception 'Driver got manager dossier';exception when raise_exception then if sqlerrm<>'غير مصرح' then raise;end if;end;
  begin perform public.dlv_shift_summary(report_day,'full',b);raise exception 'Driver got management report';exception when raise_exception then if sqlerrm<>'غير مصرح' then raise;end if;end;
  insert into five_feature_results values('restricted_roles_denied_management_endpoints',true);
+ perform set_config('request.jwt.claim.sub',f::text,true);
+ oid2:=public.dlv_create_order('QA5-ACTION-'||substr(gen_random_uuid()::text,1,8),null,null,null,null,null,b,staff);
+ update public.dlv_orders set kitchen_received_at=now()-make_interval(mins=>lim+5) where id=oid2;
+ perform private.dlv_scan_stage_delays(b);
+ perform public.dlv_record_delay_action(oid2,'QA action before escalation');
+ update public.dlv_orders set kitchen_received_at=now()-make_interval(mins=>lim+15) where id=oid2;
+ perform private.dlv_scan_stage_delays(b);
+ if exists(select 1 from public.dlv_notifications where order_id=oid2 and notification_type='stage_escalated_kitchen') then raise exception 'Escalated despite recorded action';end if;
+ insert into five_feature_results values('recorded_action_suppresses_unattended_escalation',true);
+ insert into public.dlv_companies(name,slug,active,onboarding_status) values('QA5 company','qa5-'||substr(gen_random_uuid()::text,1,10),true,'active') returning id into c2;
+ select coalesce(min(id),0)-1 into b2 from public.dlv_branches;
+ insert into public.dlv_branches(id,name,company_id) values(b2,'QA5 branch '||gen_random_uuid()::text,c2);
+ update public.dlv_profiles set branch_id=b2,allowed_branch_ids=array[b2] where user_id=m;
+ perform set_config('request.jwt.claim.sub',m::text,true);
+ begin perform public.dlv_order_dossier(oid);raise exception 'Cross company dossier';exception when raise_exception then if sqlerrm<>'الطلب غير متاح' then raise;end if;end;
+ begin perform public.dlv_suggest_drivers(oid);raise exception 'Cross company suggestion';exception when raise_exception then if sqlerrm<>'الطلب غير متاح' then raise;end if;end;
+ begin perform public.dlv_shift_summary(report_day,'full',b);raise exception 'Cross company report';exception when raise_exception then if sqlerrm<>'فرع غير مصرح' then raise;end if;end;
+ if exists(select 1 from public.dlv_list_stage_notifications() n where n.order_id in(oid,oid2)) then raise exception 'Cross company notification';end if;
+ insert into five_feature_results values('all_new_read_endpoints_reject_second_company_access',true);
 end $$;
 select * from five_feature_results;
 rollback;

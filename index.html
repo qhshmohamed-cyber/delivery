@@ -2828,7 +2828,7 @@ function trackView(code0) {
             if(data?.rate_limited){$('sendRating').disabled=false;$('rateMsg').textContent=data.message||'محاولات كثيرة. حاول مرة أخرى بعد دقيقة';return;}
             if(data?.already_rated){$('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">تم استلام تقييم هذا الطلب من قبل.</div>';return;}
             if(data?.success!==true){$('sendRating').disabled=false;$('rateMsg').textContent=data?.message||'لم نتمكن من حفظ التقييم. حاول مرة أخرى.';return;}
-            $('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">وصل تقييمك لصاحب النظام وفريق متابعة الكول سنتر.</div>';
+            $('ratingCard').innerHTML='<h2>شكرًا لتقييمك ❤️</h2><div class="meta">وصل تقييمك لفريق الشركة المختص.</div>';
           } catch(e) {
             $('sendRating').disabled=false;
             $('rateMsg').textContent='تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.';
@@ -2845,7 +2845,7 @@ function trackView(code0) {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-const _t = new URLSearchParams(location.search).get('t'); (async()=>{if (_t !== null) {document.documentElement.classList.remove('ys-public');await loadBrandConfig();subscribeBrandConfig();trackView(_t);} else boot();})();
+const _t = new URLSearchParams(location.search).get('t'); (async()=>{if (_t !== null) {document.documentElement.classList.remove('ys-public');trackView(_t);} else boot();})();
 </script>
 </body>
 </html>

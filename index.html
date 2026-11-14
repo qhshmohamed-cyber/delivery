@@ -678,8 +678,44 @@ async function ownerBranchPicker(companyId=1){
   const rows=result.data||[];
   const available=rows.filter(x=>x.implemented);
   const menu=rows.map((x,i)=>(i+1)+'. '+x.title_ar+' — '+(!x.implemented?'قيد التطوير':x.enabled?'مفعلة':'جاهزة للتفعيل')).join('\\n');
-  const action=prompt('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+menu+'\\n\\nاكتب رقم الميزة الجاهزة لتفعيلها أو إيقافها، أو اكتب تقرير لنتائج التقييمات، أو مطبخ لتقرير أداء المطبخ:');
+  const action=prompt('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+menu+'\\n\\nاكتب رقم الميزة الجاهزة لتفعيلها أو إيقافها، أو اكتب تقرير لنتائج التقييمات، أو مطبخ لتقرير أداء المطبخ، أو إدارة لتشغيل الميزات الأخرى:');
   if(action===null)return;
+  if(action.trim()==='إدارة'){
+    const active=rows.filter(x=>x.enabled&&x.implemented&&x.code!=='customer_ratings'&&x.code!=='advanced_kitchen');
+    if(!active.length)return alert('فعّل ميزة إضافية أولًا.');
+    const choice=prompt('اختر رقم الميزة لإدارتها:\\n'+active.map((x,i)=>(i+1)+'. '+x.title_ar).join('\\n'));
+    if(choice===null)return;
+    const item=active[Number(choice)-1];if(!item)return alert('اختيار غير صحيح');
+    let operation='report',payload={};
+    if(item.code==='profit_reports'){
+      const k=prompt('اكتب تقرير أو إيراد أو مصروف');if(k===null)return;
+      if(k==='إيراد'||k==='مصروف'){operation='add';payload.kind=k==='إيراد'?'revenue':'expense';payload.amount=prompt('القيمة المالية');if(payload.amount===null)return;payload.note=prompt('ملاحظة اختيارية')||'';}
+      else if(k!=='تقرير')return alert('اختيار غير صحيح');
+    }else if(item.code==='digital_menu'){
+      const k=prompt('اكتب تقرير أو إضافة');if(k===null)return;
+      if(k==='إضافة'){operation='add';payload.name=prompt('اسم الصنف');if(payload.name===null)return;payload.price=prompt('السعر');if(payload.price===null)return;}
+      else if(k!=='تقرير')return alert('اختيار غير صحيح');
+    }else if(item.code==='vip_customers'){
+      const k=prompt('اكتب تقرير أو إضافة');if(k===null)return;
+      if(k==='إضافة'){operation='add';payload.phone=prompt('رقم العميل');if(payload.phone===null)return;payload.note=prompt('ملاحظة الخدمة')||'';}
+      else if(k!=='تقرير')return alert('اختيار غير صحيح');
+    }else if(item.code==='driver_shifts'){
+      const k=prompt('اكتب تقرير أو بداية أو نهاية');if(k===null)return;
+      if(k==='بداية'||k==='نهاية'){operation=k==='بداية'?'start':'end';payload.driver_id=prompt('معرف الطيار UUID من سجل الموظفين');if(payload.driver_id===null)return;}
+      else if(k!=='تقرير')return alert('اختيار غير صحيح');
+    }
+    const response=await safeRpc('dlv_owner_addon_action',{p_branch_id:branchId,p_code:item.code,p_action:operation,p_payload:payload});
+    if(response.error)return alert('تعذر تنفيذ العملية: '+response.error.message);
+    const data=response.data;
+    if(item.code==='vip_customers')return alert('عدد عملاء VIP: '+(data?.vip_count??0));
+    if(item.code==='profit_reports')return alert('الإيرادات: '+data.revenue+'\\nالمصروفات: '+data.expenses+'\\nالصافي: '+data.net);
+    if(item.code==='driver_shifts')return alert('الشيفتات المفتوحة: '+data.open_shifts+'\\nإجمالي الشيفتات: '+data.total_shifts);
+    if(item.code==='restaurant_owner')return alert('طلبات آخر 30 يوم: '+data.orders_30d+'\\nتم التسليم: '+data.delivered_30d+'\\nبدون طيار: '+data.unassigned);
+    if(item.code==='digital_menu')return alert('أصناف المنيو:\\n'+(data||[]).map(x=>x.name+' — '+x.price).join('\\n').slice(0,3500));
+    if(item.code==='smart_dispatch')return alert('الطيارون المتاحون للمراجعة:\\n'+(data||[]).map(x=>x.name+' — طلبات مفتوحة: '+x.open_orders+' — آخر GPS: '+(x.gps_updated_at||'غير متاح')).join('\\n').slice(0,3500));
+    alert('تمت العملية');
+    return;
+  }
   if(action.trim()==='مطبخ'){
     const report=await safeRpc('dlv_owner_branch_kitchen_summary',{p_branch_id:branchId});
     if(report.error)return alert('تعذر عرض تقرير المطبخ: '+report.error.message);

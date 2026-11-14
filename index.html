@@ -786,6 +786,8 @@ function newOrderForm() {
       if(trackError)console.warn('Tracking code lookup:',trackError.message);
       trackingCode=String(createdOrder?.track_code||'').trim();
     }
+    const customerBranchId=Number($('n_branch')?.value||selectedBranch||me.branch_id);
+    const customerNameForMessage=$('n_c')?.value||'';
     const consent=$('n_wa_consent')?.checked===true;
     const rawPhone=String($('n_p')?.value||'').replace(/\D/g,'');
     const normalizedPhone=rawPhone.startsWith('0')?'20'+rawPhone.slice(1):rawPhone;
@@ -798,10 +800,10 @@ function newOrderForm() {
     const title=document.createElement('h2');title.textContent='تم تسجيل الطلب #'+orderNo;panel.appendChild(title);
     if(trackingCode){
       const link=location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
-      const branchId=Number($('n_branch')?.value||selectedBranch||me.branch_id);
+      const branchId=customerBranchId;
       const {data:welcomeTemplate,error:welcomeError}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
       if(welcomeError)console.warn('Welcome template:',welcomeError.message);
-      const msg=fillCustomerMessage(welcomeTemplate||'مطاعم {company} - {branch} ترحب بكم!\\nطلبك رقم {order_no}.\\nتابع حالة طلبك من هنا: {tracking_link}',{company:brandConfig?.brand_name||'المطعم',branch:branchNames[branchId]||activeBranchTitle(),order_no:orderNo,tracking_link:link,customer:$('n_c')?.value||''});
+      const msg=fillCustomerMessage(welcomeTemplate||'مطاعم {company} - {branch} ترحب بكم!\\nطلبك رقم {order_no}.\\nتابع حالة طلبك من هنا: {tracking_link}',{company:brandConfig?.brand_name||'المطعم',branch:branchNames[branchId]||activeBranchTitle(),order_no:orderNo,tracking_link:link,customer:customerNameForMessage});
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};

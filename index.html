@@ -500,10 +500,10 @@ async function boot() {
 async function employeeBranchPicker(permitted){
   const {data,error}=await safeRpc('dlv_my_branches');
   if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
-  const branches=(data||[]).filter(b=>permitted.includes(Number(b.id)));
+  const branches=(data||[]).filter(b=>permitted.includes(Number(b.id)) && Number.isInteger(Number(b.id)) && Number(b.id)>0);
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
-  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>Number(x.id)===id))return;selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){
@@ -848,6 +848,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
 }
 async function enterOwnerDashboard(){
  document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
+ if(!Number.isInteger(Number(ownerActiveCompanyId))||Number(ownerActiveCompanyId)<1)return ownerCompanyPicker();
  const selectedCompanyBrand=ownerBrandCache.get(Number(ownerActiveCompanyId));
  if(selectedCompanyBrand)applyBrandConfig(selectedCompanyBrand,true);
  else {
@@ -1672,6 +1673,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(id),p_day:day});
  if(error)return alert('تعذر إنشاء التقرير: '+error.message);
  const h=x=>esc(String(x??''));
+ if(!data||typeof data!=='object')return alert('الخادم لم يرجع بيانات تقرير صحيحة. لم يتم تنزيل تقرير فارغ.');
  const orders=data.orders||{}, incidents=data.incidents||{};
  const staff=(data.staff||[]).map(x=>'<tr><td>'+h(x.employee)+'</td><td>'+h(x.orders)+'</td></tr>').join('');
  const issues=(incidents.items||[]).map(x=>'<tr><td>'+h(x.category)+'</td><td>'+h(x.title)+'</td><td>'+h(x.status)+'</td></tr>').join('');

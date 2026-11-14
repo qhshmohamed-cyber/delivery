@@ -2721,9 +2721,14 @@ async function waMsg(id) {
 }
 async function loadCodes() {
   const box = $('codes'); if (!box) return;
-  const { data, error } = await branchQuery(sb.from('dlv_orders').select('*, driver:driver_id(full_name)')).not('track_code', 'is', null).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false }).limit(200);
+  if(!canAccessCustomerTracking()){box.innerHTML='';return;}
+  const { data, error } = await branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,status,created_at,driver:driver_id(full_name)')).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false }).limit(200);
   if (error) return;
-  const rows = data || []; rows.forEach(o => ORD[o.id] = o);
+  const rawRows=data||[];
+  const branches=[...new Set(rawRows.map(o=>Number(o.branch_id)))];
+  const codes=new Map();
+  for(const branchId of branches){const {data:secureRows,error:secureError}=await safeRpc('dlv_list_order_tracking_codes',{p_branch:branchId});if(secureError){box.innerHTML='';return flash('تعذر التحقق من صلاحية أكواد المتابعة',false);}for(const item of secureRows||[])codes.set(Number(item.order_id),item.track_code);}
+  const rows=rawRows.filter(o=>codes.has(Number(o.id))).map(o=>({...o,track_code:codes.get(Number(o.id))}));rows.forEach(o=>ORD[o.id]=o);
   box.innerHTML = rows.length ? '<h2>🔑 أكواد متابعة العملاء (' + rows.length + ')</h2>' + rows.map(o => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><b dir="ltr" style="font-size:22px;letter-spacing:2px;color:#4e2c12">' + esc(o.track_code) + '</b></div><div class="meta">' + esc([o.customer_name, o.phone].filter(Boolean).join(' · ')) + ' — الطيار: ' + esc(o.driver ? o.driver.full_name : '') + '</div><div class="acts"><button class="p" data-act="cpmsg" data-id="' + o.id + '">نسخ رسالة العميل</button>' + (o.phone ? '<button class="g" data-act="wa" data-id="' + o.id + '">واتساب</button>' : '') + '</div></div>').join('') : '';
 }
 

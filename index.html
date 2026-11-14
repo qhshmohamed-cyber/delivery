@@ -1201,7 +1201,34 @@ function driverView() {
   $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
     <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
     <div class="card"><div class="meta" id="locst">📍 جاري تشغيل مشاركة الموقع... بيفضل شغّال لحد ما تعمل خروج، سيب الصفحة مفتوحة.</div><div class="meta" id="locdetail">التتبع يتطلب إبقاء التطبيق ظاهرًا أثناء التوصيل.</div><button id="gpsRetry" class="g">↻ تحديث GPS الآن</button></div><h2>📦 طلباتي الحالية</h2><p class="meta">اختار الإجراء المناسب من كل طلب لتحديث حالته مباشرة.</p><div id="ol"></div>`);
-  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>{if(!shareWanted)void startShare();else void resumeDriverLocationNow();}; loadMine(); if(!shareWanted)void startShare();
+  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>{if(!shareWanted)void startShare();else void resumeDriverLocationNow();}; loadMine(); void ensureDriverShiftForAssignment();
+}
+// Keep the legacy four duty controls hidden. One explicit start-shift action
+// restores the backend's assignment eligibility without silently starting a shift.
+async function ensureDriverShiftForAssignment(){
+  if(me?.role!=='driver')return;
+  const {data,error}=await safeRpc('dlv_my_driver_duty');
+  const status=$('locst');
+  if(error){if(status)status.textContent='⚠ تعذر التحقق من الشفت: '+error.message;return;}
+  if(data?.state==='available'||data?.state==='delivering'){
+    if(status)status.textContent='📍 الشفت نشط — جاري تفعيل GPS';
+    if(!shareWanted)void startShare();
+    return;
+  }
+  if(status)status.textContent='الشفت لم يبدأ. ابدأ الشفت حتى يتمكن المشرف من إسناد الطلبات إليك.';
+  const card=status?.parentElement;
+  if(!card||card.querySelector('#startDriverShift'))return;
+  const button=document.createElement('button');
+  button.id='startDriverShift';button.className='p';button.textContent='▶ بدء الشفت';
+  card.appendChild(button);
+  button.onclick=async()=>{
+    if(!requireOnline('بدء الشفت'))return;
+    button.disabled=true;
+    const result=await safeRpc('dlv_set_my_driver_duty',{p_state:'available'});
+    if(result.error){button.disabled=false;return flash('تعذر بدء الشفت: '+result.error.message,false);}
+    button.remove();if(status)status.textContent='📍 الشفت بدأ — جاري تشغيل GPS';
+    void startShare();
+  };
 }
 async function loadMine() {
   const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);

@@ -305,7 +305,7 @@ async function loadStageSla(){
 function roleWorkGuide(){
  const wf=me?.workflow_role||me?.role;
  const guides={kitchen:['تجهيز الطلبات','ابدأ بالأقدم. بعد انتهاء التجهيز اضغط جاهز للتحويل للمشرف.'],supervisor:['استلام وتوزيع الطلبات','استلم الجاهز من المطبخ، ثم اختر الطيار المتاح وحوّل له الطلب.'],driver:['توصيل طلباتي','استلم الطلب، سجّل الخروج، ثم أكّد التسليم أو سجّل سبب التعذر.'],callcenter_followup:['تسجيل ومتابعة العملاء','سجّل الطلب، أرسل رابط واتساب، وتابع أي طلب يقترب من التأخير.'],manager:['متابعة تشغيل الفرع','راجع الطلبات المتأخرة والشكاوى وحدّد الإجراء المطلوب.'],admin:['متابعة الشركات والفروع','اختر الشركة والفرع لمتابعة التشغيل وفق الصلاحيات.'],complaints_officer:['حل شكاوى العملاء','استلم متابعة الشكوى وسجّل الإجراء حتى الحل؛ اسم منفذ كل إجراء محفوظ.']};
- const g=guides[wf]||guides.manager;return '<section class="ys-role-guide"><strong>'+g[0]+'</strong><span class="meta">'+g[1]+'</span>'+(['admin','manager'].includes(wf)?'<div class="row" style="margin-top:10px"><button onclick="openShiftSummary()">تسليم الوردية</button><button onclick="openShiftSummary(true)">تحليل التأخيرات</button></div>':'')+'</section>';
+ const g=guides[wf]||guides.manager;return '<section class="ys-role-guide"><strong>'+g[0]+'</strong><span class="meta">'+g[1]+'</span><div class="row" style="margin-top:10px"><button onclick="openRoleHelp()">مساعدة سريعة</button><button onclick="openTrainingMode()">وضع التدريب</button>'+(['admin','manager','supervisor','kitchen','callcenter_followup'].includes(wf)?'<button onclick="openShiftHandover()">تسليم واستلام الشفت</button>':'')+'</div>'+(['admin','manager'].includes(wf)?'<div class="row" style="margin-top:10px"><button onclick="openShiftSummary()">تسليم الوردية</button><button onclick="openShiftSummary(true)">تحليل التأخيرات</button></div>':'')+'</section>';
 }
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});
@@ -326,7 +326,7 @@ function loginView(err) {
     <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
-    <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#eac27b;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div><section aria-label="شركاؤنا" style="border-top:1px solid #a77d3e;margin-top:22px;padding-top:14px"><h2 style="text-align:center;color:#eac27b;font-size:15px">شركاؤنا</h2><div id="publicPartners" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;min-height:40px"></div></section></div>`;
+    <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#eac27b;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div><button class="big" style="margin-top:14px" onclick="openTrainingMode()">تدريب ببيانات وهمية — بدون دخول</button><section aria-label="شركاؤنا" style="border-top:1px solid #a77d3e;margin-top:22px;padding-top:14px"><h2 style="text-align:center;color:#eac27b;font-size:15px">شركاؤنا</h2><div id="publicPartners" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;min-height:40px"></div></section></div>`;
   // Public opt-in showcase: no branch, user or private tenant data is queried.
   sb.from('dlv_public_partners').select('display_name,logo_url,display_order').eq('is_published',true).order('display_order').limit(20).then(({data,error})=>{
    const target=$('publicPartners');if(!target||error)return;
@@ -855,6 +855,52 @@ function customerMessageSettings(){
  safeRpc('dlv_owner_customer_message_branches').then(({data,error})=>{if(!d.isConnected)return;if(error){d.querySelector('#welcomeError').textContent=error.message;return}rows=data||[];select.innerHTML=rows.map(x=>'<option value="'+x.branch_id+'">'+esc(x.company_name)+' — '+esc(x.branch_name)+'</option>').join('');update()});
 }
 
+
+const dutyLabels={available:'متاح',delivering:'في توصيل',break:'استراحة',off_shift:'أنهى الشفت'};
+const delayReasons={kitchen_load:'ضغط المطبخ',waiting_driver:'انتظار طيار',traffic:'زحمة الطريق',customer_unreachable:'العميل لا يرد',address_issue:'مشكلة في العنوان',other:'سبب آخر',unknown:'غير محدد'};
+let driverDutyState='off_shift',driverDutyBusy=false;
+async function loadDriverDuty(){
+ if(me?.role!=='driver'||driverDutyBusy||!$('driverDuty'))return;driverDutyBusy=true;const user=me.user_id;
+ try{const {data,error}=await safeRpc('dlv_my_driver_duty');if(me?.user_id!==user||!$('driverDuty'))return;
+ if(error){$('driverDuty').textContent='تعذر تحميل حالة الشفت';return;}
+ driverDutyState=data.state;$('driverDuty').innerHTML='<b>حالتي: '+esc(dutyLabels[data.state]||data.state)+'</b><div class="meta">طلبات جارية: '+Number(data.active_orders)+'</div><div class="row">'+Object.entries(dutyLabels).map(([key,label])=>'<button data-duty="'+key+'" '+(key===data.state?'disabled':'')+'>'+label+'</button>').join('')+'</div>';
+ $('driverDuty').querySelectorAll('[data-duty]').forEach(b=>b.onclick=async()=>{if(!requireOnline('تغيير حالة الشفت'))return;b.disabled=true;const {data:updated,error}=await safeRpc('dlv_set_my_driver_duty',{p_state:b.dataset.duty});if(error){b.disabled=false;return flash(error.message,false);}driverDutyState=updated.state;await loadDriverDuty();});
+ if(['break','off_shift'].includes(driverDutyState)){if(shareWanted)await stopShare();const st=$('locst');if(st)st.textContent='مشاركة الموقع متوقفة أثناء الاستراحة أو خارج الشفت';}
+ else if(!shareWanted)await startShare();
+ }finally{driverDutyBusy=false;}
+}
+function openRoleHelp(){
+ const d=opsPanel('مساعدة سريعة حسب وظيفتك','roleHelp');if(!d)return;
+ const wf=me?.workflow_role||me?.role;
+ const steps={kitchen:['راجع أقدم طلب والعداد الظاهر عليه.','عند انتهاء التجهيز اضغط جاهز لتحويله للمشرف.','لو فيه تأخير اختار السبب وسجّل الإجراء.'],supervisor:['استلم الطلب الجاهز من المطبخ.','راجع حالة الطيار والاقتراحات، ثم اعتمد التحويل.','قبل نهاية الشفت سجّل تسليم الطلبات المفتوحة.'],driver:['اختار متاح عند بدء الشفت.','استلم طلبك، سجّل الخروج، ثم التسليم أو التعذر.','سيب الصفحة ظاهرة أثناء التوصيل؛ GPS قد يتوقف عند قفل الشاشة.','بعد إنهاء طلباتك اختار أنهى الشفت لإيقاف مشاركة الموقع.'],callcenter_followup:['سجّل رقم الطلب وموظف الكول سنتر وبيانات العميل اللازمة.','بعد الحفظ افتح واتساب العميل برسالة المتابعة ثم اضغط إرسال.','تابع التأخيرات والشكاوى وسجّل تسليم الشفت.'],manager:['راجع التنبيهات والتصعيد وملفات الطلبات.','استخدم تقرير الوردية وتحليل الأسباب المسجلة.','تابع تسليم الشفت وتأكيد الاستلام.'],admin:['اختر الشركة والفرع أولًا.','راجع التشغيل والتقارير وفق نطاق الفرع المحدد.','لا تضع بيانات شخصية غير لازمة في ملاحظات التسليم.']};
+ d.querySelector('[data-body]').innerHTML='<section class="card"><ol>'+((steps[wf]||steps.manager).map(x=>'<li style="margin-bottom:12px">'+esc(x)+'</li>').join(''))+'</ol><button onclick="openTrainingMode()">جرّب في وضع التدريب</button></section>';
+}
+async function openShiftHandover(){
+ if(!selectedBranch)return flash('اختر فرعًا محددًا لتسليم الشفت',false);
+ const branch=Number(selectedBranch),d=opsPanel('تسليم واستلام الشفت','shiftHandover');if(!d)return;
+ const box=d.querySelector('[data-body]');box.innerHTML='<section class="card"><h2>'+esc(branchTitle(branch))+'</h2><p class="meta">لقطة لحظة التسليم للطلبات المفتوحة، وليست إعادة إسناد للطلبات. لا تكتب أسماء أو هواتف أو عناوين عملاء في الملاحظة.</p><textarea data-handover-note maxlength="500" placeholder="اكتب المطلوب متابعته في الشفت التالي"></textarea><button data-handover-create>تسجيل تسليم شفت جديد</button><div data-handover-error class="meta"></div></section><div data-handover-list></div>';
+ async function load(){const {data,error}=await safeRpc('dlv_list_shift_handovers',{p_branch:branch});if(!d.isConnected)return;const list=box.querySelector('[data-handover-list]');if(error){list.textContent='تعذر تحميل التسليمات';return;}
+ list.innerHTML=(data||[]).map(h=>'<section class="card"><b>'+esc(h.created_by_name)+' · '+esc(opsTime(h.created_at))+'</b><p>'+esc(h.note||'بدون ملاحظات إضافية')+'</p><div>طلبات مفتوحة لحظة التسليم: '+Number(h.snapshot.active_count)+'</div>'+(h.snapshot.open_complaints!=null?'<div>شكاوى مفتوحة: '+Number(h.snapshot.open_complaints)+'</div>':'')+'<details><summary>الطلبات المطلوب متابعتها</summary>'+h.snapshot.orders.map(o=>'<div class="ord"><b>#'+esc(o.order_no)+'</b><span>'+esc(stageLabel(o.stage))+'</span></div>').join('')+'</details>'+(h.accepted_at?'<div class="msg o">استلم '+esc(h.accepted_by_name)+' · '+esc(opsTime(h.accepted_at))+'</div>':h.is_mine?'<div class="meta">بانتظار استلام موظف آخر</div>':'<button data-accept="'+esc(h.id)+'">أؤكد استلام ومراجعة الشفت</button>')+'</section>').join('')||'<div class="card">لا توجد تسليمات سابقة</div>';
+ list.querySelectorAll('[data-accept]').forEach(b=>b.onclick=async()=>{if(!requireOnline('استلام الشفت'))return;b.disabled=true;const {error}=await safeRpc('dlv_accept_shift_handover',{p_id:b.dataset.accept});if(error){b.disabled=false;return flash(error.message,false);}load();});}
+ box.querySelector('[data-handover-create]').onclick=async()=>{if(!requireOnline('تسليم الشفت'))return;const button=box.querySelector('[data-handover-create]');button.disabled=true;const {error}=await safeRpc('dlv_create_shift_handover',{p_branch:branch,p_note:box.querySelector('[data-handover-note]').value});button.disabled=false;if(error){box.querySelector('[data-handover-error]').textContent=error.message;return;}box.querySelector('[data-handover-note]').value='';box.querySelector('[data-handover-error]').textContent='تم تسجيل التسليم. ينتظر تأكيد موظف آخر.';load();};load();
+}
+function trainingNext(order,role,action){
+ const route=[['callcenter_followup','create'],['kitchen','ready'],['supervisor','receive'],['supervisor','assign'],['driver','receive'],['driver','out'],['driver','deliver']];
+ const step=route[order.step];if(!step||step[0]!==role||step[1]!==action)throw Error('اختار الوظيفة والإجراء الصحيحين حسب المرحلة');
+ return {...order,step:order.step+1,history:[...order.history,{role,action}]};
+}
+function openTrainingMode(){
+ const d=opsPanel('تدريب فقط — بيانات وهمية','trainingMode');if(!d)return;
+ // Entire training flow is local memory: no persistence, network, location or real messaging.
+ let order={step:0,history:[]},role='callcenter_followup',sent=false;
+ const box=d.querySelector('[data-body]');
+ function draw(){const stages=['ابدأ بإنشاء طلب','عند المطبخ','جاهز للمشرف','عند المشرف','مع الطيار','استلمه الطيار','خرج للتوصيل','تم التسليم'],actions=[['create','تسجيل طلب تجريبي'],['ready','جاهز من المطبخ'],['receive','استلام'],['assign','تعيين طيار تجريبي'],['out','خرج للتوصيل'],['deliver','تم التسليم']];
+ box.innerHTML='<div class="msg o">وضع تدريب منفصل: لا يُحفظ طلب حقيقي، ولا تُرسل رسالة، ولا يُطلب موقعك.</div><section class="card"><label>جرّب وظيفة</label><select data-training-role>'+[['callcenter_followup','متابعة الكول سنتر'],['kitchen','المطبخ'],['supervisor','المشرف'],['driver','الطيار']].map(([v,l])=>'<option value="'+v+'" '+(v===role?'selected':'')+'>'+l+'</option>').join('')+'</select><h2>طلب TRAIN-001 · عميل تجريبي</h2><b>'+stages[order.step]+'</b><p class="meta">الخطوة التالية: '+['متابعة الكول سنتر تسجل الطلب','المطبخ يجهز الطلب','المشرف يستلم من المطبخ','المشرف يعين الطيار','الطيار يستلم','الطيار يسجل الخروج','الطيار يؤكد التسليم','اكتمل التدريب بنجاح'][order.step]+'</p><div class="row">'+actions.map(([v,l])=>'<button data-training-act="'+v+'">'+l+'</button>').join('')+'</div><div data-training-error class="meta"></div><hr><button data-training-message>معاينة رسالة واتساب تجريبية</button><div data-training-preview>'+(sent?'مطاعم تجريبية ترحب بكم — رقم الطلب TRAIN-001 — كود DEMO1234 — لا يوجد رابط حقيقي.':'')+'</div><p>الحركات المسجلة داخل التدريب: '+order.history.length+'</p><button data-training-reset>بدء تدريب جديد</button></section>';
+ box.querySelector('[data-training-role]').onchange=e=>{role=e.target.value;draw();};
+ box.querySelectorAll('[data-training-act]').forEach(b=>b.onclick=()=>{try{order=trainingNext(order,role,b.dataset.trainingAct);draw();}catch(e){box.querySelector('[data-training-error]').textContent=e.message;}});
+ box.querySelector('[data-training-message]').onclick=()=>{sent=true;draw();};box.querySelector('[data-training-reset]').onclick=()=>{order={step:0,history:[]};sent=false;draw();};}
+ draw();
+}
 function opsPanel(title,id){
  const old=$(id);if(old)return null;
  const d=document.createElement('div');d.id=id;d.style.cssText='position:fixed;inset:0;z-index:80;background:var(--bg);overflow:auto;padding:16px';
@@ -867,15 +913,15 @@ async function suggestOrderDriver(id){
  const d=opsPanel('اقتراح الطيار المناسب','driverSuggestions');if(!d)return;
  const {data,error}=await safeRpc('dlv_suggest_drivers',{p_order:Number(id)});if(!d.isConnected)return;
  const box=d.querySelector('[data-body]');if(error){box.textContent='تعذر تحميل الاقتراحات أو الطلب غير متاح لدورك';return;}
- box.innerHTML='<div class="card meta">الترتيب حسب الأقل في الطلبات الجارية، ثم حداثة تحديث الموقع. لا يعني تأكيد التواجد أو حساب الأقرب جغرافيًا. راجع التوفر ثم اعتمد التحويل بنفسك.</div>'+(data||[]).map((x,i)=>'<div class="card"><b>'+esc(x.full_name)+(i===0?' · الاقتراح الأول':'')+'</b><div class="meta">طلبات جارية: '+Number(x.active_orders)+' · آخر موقع: '+esc(opsTime(x.location_updated_at))+'</div><button data-pick="'+esc(x.user_id)+'">اختيار هذا الطيار</button></div>').join('');
+ box.innerHTML='<div class="card meta">تظهر الحالات المعلنة حديثًا: متاح أو في توصيل. الترتيب حسب الأقل في الطلبات الجارية، ثم حداثة الموقع. لا يعني تأكيد التواجد أو حساب الأقرب جغرافيًا. راجع التوفر ثم اعتمد التحويل بنفسك.</div>'+(data||[]).map((x,i)=>'<div class="card"><b>'+esc(x.full_name)+(i===0?' · الاقتراح الأول':'')+'</b><div class="meta">الحالة: '+esc(dutyLabels[x.duty_state]||'غير محددة')+' · طلبات جارية: '+Number(x.active_orders)+' · آخر موقع: '+esc(opsTime(x.location_updated_at))+'</div><button data-pick="'+esc(x.user_id)+'">اختيار هذا الطيار</button></div>').join('');
  if(!data?.length)box.innerHTML+='<div class="card">لا يوجد طيار نشط ومصرح له بهذا الفرع</div>';
  box.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const x=data.find(v=>v.user_id===b.dataset.pick),sel=$('as_'+id);if(!sel)return flash('استلم الطلب من المطبخ أولًا ثم اختر الطيار',false);let option=[...sel.options].find(v=>v.value===x.user_id);if(!option){option=document.createElement('option');option.value=x.user_id;option.textContent=x.full_name;sel.appendChild(option);}sel.value=x.user_id;d.remove();sel.focus();flash('تم الاختيار فقط؛ اضغط تحويل للطيار لاعتماد التعيين',true);});
 }
 async function recordOrderDelay(id){
- const note=prompt('سجّل الإجراء الذي اتخذته لحل التأخير (بدون بيانات شخصية غير لازمة)');if(note===null)return;
- if(!requireOnline('تسجيل إجراء التأخير'))return;
- const {error}=await safeRpc('dlv_record_delay_action',{p_order:Number(id),p_note:note.trim()});
- if(error)return flash('تعذر تسجيل الإجراء: '+error.message,false);flash('تم تسجيل الإجراء باسمك في ملف الطلب',true);refreshKitchenDelayNotices();
+ const d=opsPanel('سبب التأخير والإجراء المتخذ','delayAction');if(!d)return;const box=d.querySelector('[data-body]');
+ box.innerHTML='<section class="card"><label>سبب التأخير</label><select data-delay-reason>'+Object.entries(delayReasons).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select><label>ما الإجراء الذي اتخذته؟</label><textarea data-delay-note maxlength="500" placeholder="بدون بيانات شخصية غير لازمة"></textarea><button data-delay-save>حفظ السبب والإجراء</button><div data-delay-error class="meta"></div></section>';
+ box.querySelector('[data-delay-reason]').value='unknown';
+ box.querySelector('[data-delay-save]').onclick=async()=>{if(!requireOnline('تسجيل إجراء التأخير'))return;const button=box.querySelector('[data-delay-save]');button.disabled=true;const {error}=await safeRpc('dlv_record_delay_reason',{p_order:Number(id),p_reason:box.querySelector('[data-delay-reason]').value,p_note:box.querySelector('[data-delay-note]').value.trim()});if(error){button.disabled=false;box.querySelector('[data-delay-error]').textContent=error.message;return;}d.remove();flash('تم تسجيل السبب والإجراء باسمك',true);refreshKitchenDelayNotices();};
 }
 async function openOrderDossier(id){
  const d=opsPanel('ملف الطلب الكامل','orderDossier');if(!d)return;
@@ -892,8 +938,10 @@ async function openShiftSummary(analysis=false){
  let loaded=null,version=0;
  function reportText(j){return 'تسليم الوردية '+j.day+' — '+(selectedBranch?branchTitle(selectedBranch):'الفروع المصرح بها')+'\nإجمالي '+j.total+' · مكتملة '+j.delivered+' · ملغية '+j.cancelled+' · متعذرة '+j.failed+' · جارية '+j.active+'\nشكاوى '+j.complaints+'\nتأخير المطبخ '+j.delays.kitchen+' · الإسناد والخروج '+j.delays.dispatch+' · التوصيل '+j.delays.delivery;}
  async function run(){const token=++version;loaded=null;const target=box.querySelector('[data-result]');target.textContent='جاري إعداد التقرير...';const {data,error}=await safeRpc('dlv_shift_summary',{p_day:box.querySelector('[data-shift-day]').value,p_shift:box.querySelector('[data-shift-kind]').value,p_branch:selectedBranch||null});if(!d.isConnected||token!==version)return;if(error){target.textContent='تعذر تحميل التقرير';return;}loaded=data;
+ const reasonsResult=await safeRpc('dlv_delay_reason_summary',{p_day:box.querySelector('[data-shift-day]').value,p_branch:selectedBranch||null});if(!d.isConnected||token!==version)return;
+ const reasonsHtml=reasonsResult.error?'<div>تعذر تحميل الأسباب المسجلة</div>':(reasonsResult.data||[]).map(x=>'<div class="ord"><b>'+esc(delayReasons[x.reason]||x.reason)+'</b><span>'+Number(x.count)+' مرة</span></div>').join('')||'<div>لا توجد أسباب مسجلة في اليوم المحدد</div>';
  const causes=Object.entries(data.delays).sort((a,b)=>b[1]-a[1]);
- target.innerHTML='<section class="card"><h2>تقرير الوردية — '+esc(data.day)+'</h2><p class="meta">'+esc(selectedBranch?branchTitle(selectedBranch):'الفروع المصرح بها')+' · '+esc(opsTime(data.start_at))+' إلى '+esc(opsTime(data.end_at))+'</p><p class="meta">الطلبات حسب وقت إنشائها؛ الشكاوى حسب وقت تسجيلها. التقرير لا يحتوي أسماء أو هواتف أو عناوين العملاء.</p><div class="grid">'+[['الطلبات',data.total],['تم التسليم',data.delivered],['ملغي',data.cancelled],['تعذر',data.failed],['جاري',data.active],['شكاوى',data.complaints]].map(x=>'<div class="stat"><b>'+Number(x[1])+'</b><span>'+x[0]+'</span></div>').join('')+'</div><h2>أكثر مراحل التأخير تكرارًا</h2><div class="meta">تحليل التوقيتات المسجلة، وليس إثباتًا لسبب التأخير. الطلب قد يتأخر في أكثر من مرحلة. الطلبات التي تنقصها التوقيتات لا يُفترض لها زمن.</div>'+causes.map(([key,count])=>'<div class="ord"><b>'+esc(stageLabel(key))+'</b><span>'+Number(count)+' طلب</span></div>').join('')+'<h2>أداء الطيارين خلال الوردية</h2>'+data.drivers.map(x=>'<div class="ord"><b>'+esc(x.full_name)+'</b><span>مسند '+Number(x.total)+' · مكتمل '+Number(x.delivered)+' · تعذر '+Number(x.failed)+'</span></div>').join('')+'</section>';
+ target.innerHTML='<section class="card"><h2>تقرير الوردية — '+esc(data.day)+'</h2><p class="meta">'+esc(selectedBranch?branchTitle(selectedBranch):'الفروع المصرح بها')+' · '+esc(opsTime(data.start_at))+' إلى '+esc(opsTime(data.end_at))+'</p><p class="meta">الطلبات حسب وقت إنشائها؛ الشكاوى حسب وقت تسجيلها. التقرير لا يحتوي أسماء أو هواتف أو عناوين العملاء.</p><div class="grid">'+[['الطلبات',data.total],['تم التسليم',data.delivered],['ملغي',data.cancelled],['تعذر',data.failed],['جاري',data.active],['شكاوى',data.complaints]].map(x=>'<div class="stat"><b>'+Number(x[1])+'</b><span>'+x[0]+'</span></div>').join('')+'</div><h2>أكثر مراحل التأخير تكرارًا</h2><div class="meta">تحليل التوقيتات المسجلة، وليس إثباتًا لسبب التأخير. الطلب قد يتأخر في أكثر من مرحلة. الطلبات التي تنقصها التوقيتات لا يُفترض لها زمن.</div>'+causes.map(([key,count])=>'<div class="ord"><b>'+esc(stageLabel(key))+'</b><span>'+Number(count)+' طلب</span></div>').join('')+'<h2>أسباب التأخير المسجلة في اليوم</h2><div class="meta">تصنيف الموظفين حسب يوم رصد التأخير؛ قد يتكرر الطلب في أكثر من مرحلة، ولا يطابق بالضرورة حدود الوردية.</div>'+reasonsHtml+'<h2>أداء الطيارين خلال الوردية</h2>'+data.drivers.map(x=>'<div class="ord"><b>'+esc(x.full_name)+'</b><span>مسند '+Number(x.total)+' · مكتمل '+Number(x.delivered)+' · تعذر '+Number(x.failed)+'</span></div>').join('')+'</section>';
  }
  box.querySelector('[data-run]').onclick=run;box.querySelector('[data-shift-day]').onchange=run;box.querySelector('[data-shift-kind]').onchange=run;box.querySelector('[data-print]').onclick=()=>{if(loaded)window.print();};box.querySelector('[data-copy]').onclick=async()=>{if(!loaded)return;try{await navigator.clipboard.writeText(reportText(loaded));flash('تم نسخ ملخص الوردية',true);}catch(e){prompt('انسخ الملخص:',reportText(loaded));}};run();
 }
@@ -990,12 +1038,12 @@ document.addEventListener('click', e => {
 
 /* ---------- واجهة الدليفري ---------- */
 function driverView() {
-  $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
+  $('app').innerHTML = shell(`<section class="card" id="driverDuty">جاري تحميل حالة الشفت...</section><div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
     <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
     <div class="card"><div class="meta" id="locst">📍 جاري تشغيل مشاركة الموقع... بيفضل شغّال لحد ما تعمل خروج، سيب الصفحة مفتوحة.</div><div class="meta" id="locdetail">التتبع يتطلب إبقاء التطبيق ظاهرًا أثناء التوصيل.</div><button id="gpsRetry" class="g">↻ تحديث GPS الآن</button></div><h2>📦 طلباتي الحالية</h2><p class="meta">اختار الإجراء المناسب من كل طلب لتحديث حالته مباشرة.</p><div id="ol"></div>`);
-  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>resumeDriverLocationNow(); if (!shareWanted || watchId == null) startShare(); loadMine();
+  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>resumeDriverLocationNow(); void loadDriverDuty(); loadMine();
 }
-async function loadMine() {
+async function loadMine() { void loadDriverDuty();
   const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
   if (error) return flash(error.message, false);
   const o = data || []; o.forEach(x => ORD[x.id] = x);
@@ -1579,6 +1627,7 @@ async function acquireWakeLock() {
   } catch (e) { /* Wake Lock تحسين اختياري وليس ضمانًا للتتبع بالخلفية */ }
 }
 async function startShare() {
+  if(['break','off_shift'].includes(driverDutyState))return;
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
   if (!navigator.onLine) return flash('شغّل الإنترنت قبل بدء مشاركة الموقع',false);
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
@@ -2144,7 +2193,7 @@ async function kitchenForward(id) {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && me && me.role === 'driver') {
-    if (!shareWanted && watchId == null && !window._sd) startShare();
+    if (!shareWanted && watchId == null && !window._sd && !['break','off_shift'].includes(driverDutyState)) startShare();
     else if (shareWanted) resumeDriverLocationNow();
   }
 });

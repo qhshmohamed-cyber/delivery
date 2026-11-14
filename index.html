@@ -1094,7 +1094,7 @@ function customerWelcomeMessage(o,template='',companyOverride=''){
 
  const link=location.origin+location.pathname+'?t='+encodeURIComponent(o.track_code);
  const company=companyOverride||brandConfig?.brand_name||'المطعم';
- let message=fillCustomerMessage(template||'مطاعم {company} ترحب بكم 🌴\nرقم طلبكم: {order_no}\nكود المتابعة: {tracking_code}\nتابعوا حالة طلبكم من هنا: {tracking_link}',{company,branch:branchNames[o.branch_id]||'',customer:o.customer_name||'',order_no:o.order_no,tracking_code:o.track_code,tracking_link:link});
+ let message=fillCustomerMessage(template||'{company} ترحب بكم\nرقم طلبكم: {order_no}\nكود المتابعة: {tracking_code}\nتابعوا حالة طلبكم من هنا: {tracking_link}',{company,branch:branchNames[o.branch_id]||'',customer:o.customer_name||'',order_no:o.order_no,tracking_code:o.track_code,tracking_link:link});
  if(!message.includes(String(o.order_no)))message+='\nرقم الطلب: '+o.order_no;
  if(!message.includes('كود المتابعة: '+o.track_code))message+='\nكود المتابعة: '+o.track_code;
  if(!message.includes(link))message+='\nتابعوا حالة طلبكم: '+link;
@@ -2738,6 +2738,13 @@ function trackView(code0) {
         if (!warn) box.insertAdjacentHTML('afterbegin','<div class="msg" id="trackConnectionNotice" style="background:#fff4d6;color:#72521a">ضغط مؤقت على خدمة التتبع؛ سنعيد المحاولة تلقائيًا.</div>');
         return;
       }
+      // Never keep the previous restaurant's identity when a different code fails.
+      brandConfig={...PLATFORM_BRAND};
+      document.documentElement.style.removeProperty('--brand');
+      document.documentElement.style.removeProperty('--gold');
+      document.querySelectorAll('[data-brand-logo]').forEach(el=>{el.src='yourstaff-icon.svg';el.alt='شعار المنصة';});
+      document.querySelectorAll('[data-brand-title]').forEach(el=>el.textContent='متابعة الطلب');
+      document.title='متابعة الطلب — Your Staff';
       box.innerHTML = '<div class="msg e">' + (j && j.expired ? 'انتهت صلاحية الكود' : 'الكود غير صحيح، راجع الكود مع خدمة العملاء') + '</div>';
       $('tmap').style.display = 'none'; clearInterval(tmr); return;
     }

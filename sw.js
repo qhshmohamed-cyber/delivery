@@ -1,9 +1,8 @@
 
 const CACHE_PREFIX = 'yourstaff-static-';
 const LEGACY_CACHE_PREFIX = 'wahat-delivery-static-';
-const CACHE_NAME = CACHE_PREFIX + 'v4';
+const CACHE_NAME = CACHE_PREFIX + 'v5';
 const STATIC_FILES = [
-  './',
   './manifest.webmanifest',
   './yourstaff-icon.svg'
 ];
@@ -44,8 +43,8 @@ self.addEventListener('fetch', event => {
         }
         return fresh;
       } catch (_) {
-        return (await caches.match(request)) ||
-          (await caches.match('./index.html'));
+        return (await caches.match('./index.html')) ||
+          Response.error();
       }
     })());
     return;

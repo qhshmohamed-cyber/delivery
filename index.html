@@ -1674,7 +1674,7 @@ function openOwnerPermissions(){
  const d=document.createElement('div');d.id='ownerPermPanel';d.style.cssText='position:fixed;inset:0;z-index:38;background:var(--bg);overflow:auto;padding:16px';
  d.innerHTML='<div class="card"><div class="ord"><h2>إعدادات صلاحيات المالك</h2><button id="opClose">إغلاق</button></div><p class="meta">هذه إعدادات محفوظة للتجهيز؛ لا تغيّر الصلاحيات الفعلية حتى تُربط بسياسات الوصول على السيرفر.</p><div id="opRows"></div></div>';
  document.body.appendChild(d);$('opClose').onclick=()=>d.remove();
- const roles=['manager','supervisor','callcenter_followup','kitchen','driver'],perms=['view_reports','view_incidents','view_audit','manage_incidents'];
+ const roles=['manager','supervisor','callcenter_followup','complaints_officer','kitchen','driver'],perms=['view_reports','view_incidents','view_audit','manage_incidents'];
  async function reload(){
   const {data,error}=await sb.from('dlv_role_permissions').select('role_name,permission,enabled');
   if(error){$('opRows').textContent=error.message;return;}
@@ -2321,6 +2321,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
     '<label>الاسم *</label><input id="a_n"><label>كود الموظف * (أرقام أو حروف إنجليزي)</label><input id="a_c"><label>الوظيفة *</label><select id="a_j"><option value="driver">طيار</option><option value="supervisor">مشرف</option><option value="manager">مدير فرع</option><option value="callcenter">متابعة كول سنتر</option><option value="kitchen">كنترول المطبخ</option><option value="complaints_officer">مسؤول الشكاوى</option></select>' +
+    '<div class="meta" id="a_job_help" role="status" aria-live="polite" style="margin:8px 0">اختر الوظيفة لتحديد الشاشة والصلاحيات تلقائيًا.</div>' +
     '<label>الفرع *</label><select id="a_branch"></select>' +
     '<label>الإيميل (اختياري — لو سبته فاضي بيتعمل تلقائي من الكود)</label><input id="a_m" type="email" dir="ltr" placeholder="name@gmail.com"><label>كلمة السر (12 حرفًا على الأقل: كبير وصغير ورقم ورمز)</label><input id="a_p" type="password" autocomplete="new-password" value="' + pw + '"><label style="display:flex;gap:8px;align-items:center"><input id="a_show_pw" type="checkbox" style="width:auto"> إظهار كلمة السر مؤقتًا</label>' +
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
@@ -2371,6 +2372,10 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
   loadAccountBranches().catch(e=>{if(!d.isConnected)return;branchError.textContent='تعذر تحميل الفروع، أعد فتح النافذة';branchError.className='msg e';console.error('Branch selector failed',e)});
   const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
+  const jobHelp=d.querySelector('#a_job_help');
+  const jobHints={driver:'الطيار: يرى الطلبات المسندة إليه فقط.',supervisor:'المشرف: يستلم الجاهز من المطبخ ويوزعه على الطيارين.',manager:'مدير الفرع: يتابع التشغيل والتقارير داخل فروعه المصرح بها.',callcenter:'متابعة الكول سنتر: تسجيل الطلبات والتواصل المصرح مع العملاء.',kitchen:'كنترول المطبخ: استلام وتجهيز الطلبات وتحويلها للمشرف.',complaints_officer:'مسؤول الشكاوى: شاشة مستقلة للشكاوى، البحث والمتابعة وتسجيل الإجراءات، والتواصل المصرح مع العميل.'};
+  const updateJobHelp=()=>{jobHelp.textContent=jobHints[d.querySelector('#a_j').value]||'';};
+  d.querySelector('#a_j').addEventListener('change',updateJobHelp);updateJobHelp();
   d.querySelector('#a_show_pw').onchange=()=>{d.querySelector('#a_p').type=d.querySelector('#a_show_pw').checked?'text':'password'};
   $('a_x').onclick = () => d.remove();
   $('a_ok').onclick = async () => {
@@ -2472,9 +2477,9 @@ async function refreshDrivers() {
 function editPilotForm(r, done) {
 
   const self = r.user_id === me.user_id;
-  const JOBS = [['driver', 'طيار'], ['supervisor', 'مشرف'], ['manager', 'مدير'], ['callcenter', 'متابعة كول سنتر'], ['kitchen', 'كنترول المطبخ']];
+  const JOBS = [['driver', 'طيار'], ['supervisor', 'مشرف'], ['manager', 'مدير'], ['callcenter', 'متابعة كول سنتر'], ['complaints_officer', 'مسؤول الشكاوى'], ['kitchen', 'كنترول المطبخ']];
   if (r.role === 'admin') JOBS.push(['admin','مالك النظام']);
-  const W = { supervisor: 'supervisor', manager: 'manager', callcenter_followup: 'callcenter', kitchen: 'kitchen' };
+  const W = { supervisor: 'supervisor', manager: 'manager', callcenter_followup: 'callcenter', complaints_officer: 'complaints_officer', kitchen: 'kitchen' };
   const curJob = r.role === 'admin' ? 'admin' : r.role === 'driver' ? 'driver' : (W[r.workflow_role] || (r.job_title === 'مشرف' ? 'supervisor' : 'manager'));
   const d = document.createElement('div'); d.className = 'modal'; d.style.zIndex = 30;
   d.innerHTML = '<div><h2 style="font-size:16px">تعديل ' + esc(r.full_name) + '</h2><div id="perr" class="msg e hide"></div>' +

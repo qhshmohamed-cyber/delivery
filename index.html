@@ -1593,7 +1593,16 @@ async function loadCallcenterOrders() {
  const {data,error}=await req;
  if(!box.isConnected||box.dataset.requestId!==requestId)return;
  if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
- const rows=data||[];rows.forEach(o=>ORD[o.id]=o);
+ const rows=data||[];
+ if(canAccessCustomerTracking()&&rows.length){
+  const branchIds=[...new Set(rows.map(o=>Number(o.branch_id)))];
+  const secureCodes=new Map();
+  for(const branchId of branchIds){const {data:items,error:codeError}=await safeRpc('dlv_list_order_tracking_codes',{p_branch:branchId});if(codeError){box.innerHTML='<div class="msg e">تعذر التحقق من صلاحيات أكواد المتابعة</div>';return;}for(const item of items||[])secureCodes.set(Number(item.order_id),item.track_code);}
+  if(q){for(const o of rows.filter(o=>!secureCodes.has(Number(o.id)))){const {data:code,error:codeError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(o.id)});if(!codeError&&code)secureCodes.set(Number(o.id),code);}}
+  if(!box.isConnected||box.dataset.requestId!==requestId)return;
+  for(const o of rows)o.track_code=secureCodes.get(Number(o.id))||null;
+ }
+ rows.forEach(o=>ORD[o.id]=o);
  box.innerHTML='<div class="meta" style="margin:8px 0">'+(q?'نتائج البحث: '+rows.length+' طلب':'الطلبات الجارية: '+rows.length+' · المكتملة والملغية تظهر بالبحث فقط')+'</div>'+
  rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
  <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>

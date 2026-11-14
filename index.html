@@ -1501,7 +1501,7 @@ function openMap() {
   document.body.appendChild(d);
   if(typeof L==='undefined'){ $('lmap').textContent='تعذر تحميل خدمة الخرائط. تحقق من الاتصال ثم افتح الخريطة مجددًا.'; $('mclose').onclick=()=>d.remove(); return; }
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains:'abcd', maxZoom: 19, attribution: '© OpenStreetMap contributors · © CARTO' }).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors', crossOrigin: true }).addTo(map);
   markers = {}; const prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
   async function refresh() {
     if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine || !document.getElementById('lmap')) return;

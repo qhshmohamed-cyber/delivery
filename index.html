@@ -675,13 +675,22 @@ async function ownerBranchPicker(companyId=1){
  <button id="ownerEditCompanyBrand" class="big" style="min-height:84px">🎨<div>الهوية</div></button>
  <button id="ownerBranchAddons" class="big" style="min-height:84px">🧩<div>الإضافات</div></button>
  <button id="ownerPreviewAddons" class="big" style="min-height:84px">👁️<div>معاينة</div></button>
- <button id="ownerStaffSetup" class="big" style="min-height:84px">👥<div>تجهيز الفريق</div></button>
+ <button id="ownerStaffSetup" class="big" style="min-height:84px">👥<div>تجهيز الفريق</div></button><button id="ownerSetupStatus" class="big" style="min-height:84px">🛡️<div>فحص التجهيز</div></button>
  <button id="backCompanies" class="big" style="min-height:84px">↩️<div>الشركات</div></button>
  </div>
  ${setupPending?'<p class="msg e">الشركة قيد التجهيز؛ لا تُفتح فروعها للتشغيل قبل التحقق الأمني.</p>':''}
  <div id="ownerBranchPanel" hidden><h3>فروع الشركة</h3><div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:12px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div></div>
  </div>`;
  $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
+ $('ownerSetupStatus').onclick=async()=>{
+   const b=$('ownerSetupStatus');b.disabled=true;
+   try{
+     const {data,error}=await safeRpc('dlv_owner_company_setup_status',{p_company_id:Number(companyId)});
+     if(error)return alert('تعذر تحميل فحص التجهيز: '+error.message);
+     const lines=(data.branches||[]).map(x=>x.name+' — '+(x.ready_for_accounts?'جاهز لإنشاء حسابات':'قيد التجهيز')+' — حسابات نشطة: '+x.staff_count);
+     alert('تجهيز شركة '+data.company_name+'\nالحالة: '+(data.onboarding_status==='active'?'مفعلة':'قيد المراجعة الأمنية')+'\n\n'+(lines.join('\n')||'لا توجد فروع')+'\n\nلا يتم تفعيل الشركات تلقائيًا.');
+   }finally{b.disabled=false;}
+ };
  $('ownerStaffSetup').onclick=()=>{
    const roles='متابعة كول سنتر • كنترول المطبخ • مشرف الطيارين • طيار • مدير فرع • مسؤول الشكاوى';
    const enabled=branches.filter(b=>b.active);

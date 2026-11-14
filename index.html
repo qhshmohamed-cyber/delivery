@@ -128,12 +128,33 @@ body.ys-platform .meta{color:#d8cbb5}
 .ys-role-guide{border-inline-start:4px solid var(--gold);padding:12px 16px;background:var(--card);border-radius:12px;margin-bottom:12px}
 .ys-role-guide strong{display:block;margin-bottom:5px}.ys-stage-clock{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin:10px 0;font-size:13px;line-height:1.6}.ys-stage-clock[data-level="warning"]{border-color:#e4b54e;background:#805b151f}.ys-stage-clock[data-level="late"]{border-color:#ef806d;background:#ae382021}.ys-stage-clock b{font-variant-numeric:tabular-nums}.ys-complaint-status{font-weight:700}.acts{flex-wrap:wrap}.acts button{min-width:100px}@media(max-width:600px){.ys-role-guide{padding:12px}.ys-stage-clock{font-size:12px}.modal>div{padding-bottom:24px}}
 @media print{#rpt .card,#rpt .stat{background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important}#rpt .meta,#rpt .stat span,#rpt h2{color:#333!important}#rpt .ord{break-inside:avoid}#rpt .grid{grid-template-columns:repeat(3,1fr)}}
+
+/* Persistent platform clock: shared by all tenants and screens. */
+#ys-live-clock{position:sticky;top:0;z-index:1100;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;min-height:38px;padding:7px 12px;background:#121b2a;color:#f7f2e7;border-bottom:1px solid #b68a47;font:600 13px/1.5 system-ui,sans-serif;direction:rtl;font-variant-numeric:tabular-nums;box-shadow:0 2px 12px #0002}
+#ys-live-clock .ys-clock-time{color:#f2cb7c;font-weight:800;font-size:15px;direction:ltr;unicode-bidi:isolate}
+#ys-live-clock .ys-clock-zone{font-size:11px;opacity:.78}
+@media(max-width:480px){#ys-live-clock{gap:6px;font-size:11px;padding:5px 8px}#ys-live-clock .ys-clock-time{font-size:13px}}
+@media print{#ys-live-clock{display:none!important}}
 </style>
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
 <body class="ys-platform">
+<div id="ys-live-clock" role="timer" aria-label="الوقت والتاريخ الحالي بتوقيت مصر"><span id="ys-clock-date">جاري تحديد التاريخ...</span><span class="ys-clock-time" id="ys-clock-time">--:--:--</span><span class="ys-clock-zone">توقيت مصر</span></div>
 <div class="wrap" id="app"></div>
 <script>
+
+// Display-only clock. Operational timestamps must continue to be recorded by the server.
+const egyptClockDateFormatter=new Intl.DateTimeFormat('ar-EG',{timeZone:'Africa/Cairo',weekday:'long',year:'numeric',month:'long',day:'numeric'});
+const egyptClockTimeFormatter=new Intl.DateTimeFormat('ar-EG',{timeZone:'Africa/Cairo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+function updateGlobalEgyptClock(){
+ const now=new Date();
+ const dateNode=document.getElementById('ys-clock-date'),timeNode=document.getElementById('ys-clock-time');
+ if(dateNode)dateNode.textContent=egyptClockDateFormatter.format(now);
+ if(timeNode)timeNode.textContent=egyptClockTimeFormatter.format(now);
+}
+updateGlobalEgyptClock();
+setInterval(updateGlobalEgyptClock,1000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')updateGlobalEgyptClock()});
 /* ===== الإعدادات: ضع بيانات مشروعك من Supabase > Project Settings > API ===== */
 const SB_URL = 'https://mkptmejkcemdhlhdaort.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcHRtZWprY2VtZGhsaGRhb3J0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwODE2MTQsImV4cCI6MjEwOTY1NzYxNH0.ovPRrF8RDXPut2jY8HMHdO27sFvxmyDymBVAKBV7mC8';

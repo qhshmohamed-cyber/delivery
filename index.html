@@ -148,6 +148,9 @@ body.ys-tenant #ys-live-clock .ys-clock-zone{color:var(--gold,#c69b53);opacity:1
 .ys-connection.online{color:#81d5a2}
 .ys-connection.offline{color:#ffb18a}
 @media(max-width:520px){.ys-operations-bar button{width:100%;margin-inline-start:0}.ys-operations-bar small{width:100%}}
+.ys-guide-highlight{outline:3px solid var(--gold)!important;outline-offset:4px;box-shadow:0 0 0 7px rgba(198,155,83,.16)!important}
+.ys-role-guide button{min-height:44px}
+@media(max-width:520px){.ys-role-guide .row button{width:100%}}
 </style>
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
@@ -351,10 +354,22 @@ async function loadStageSla(){
  if(error||me?.user_id!==sessionUser)return;
  (data||[]).forEach(x=>stageSlaCache.set(Number(x.branch_id),x));updateStageClocks();
 }
+// One-tap guidance: navigate to an available action, never execute an order action automatically.
+function ysGuideNextAction(){
+ const role=me?.workflow_role||me?.role;
+ const targets={kitchen:['#kq [data-act="kfwd"]','#kq'],supervisor:['#pend button','#pend'],driver:['#mine button','#mine','#myOrders'],callcenter_followup:['#cc_q','#ccOrders input','#ccOrders'],complaints_officer:['#complaintsInbox button','#complaintsInbox'],manager:['#pend button','#pend'],admin:['#pend button','#pend']};
+ let target=null;
+ for(const selector of targets[role]||targets.manager){try{target=document.querySelector(selector);if(target&&target.getClientRects().length)break;}catch(_){ }target=null;}
+ if(!target){const buttons=[...document.querySelectorAll('#app button')].filter(b=>!b.disabled&&b.getClientRects().length&&!b.closest('header,.ys-operations-bar,.ys-role-guide'));target=buttons[0]||null;}
+ if(!target)return flash('لا توجد إجراءات ظاهرة الآن؛ جرّب تحديث البيانات',false);
+ target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'});
+ target.classList.add('ys-guide-highlight');setTimeout(()=>target.classList.remove('ys-guide-highlight'),2200);
+ if(target.matches('button,input,select,textarea'))target.focus({preventScroll:true});
+}
 function roleWorkGuide(){
  const wf=me?.workflow_role||me?.role;
  const guides={kitchen:['تجهيز الطلبات','ابدأ بالأقدم. بعد انتهاء التجهيز اضغط جاهز للتحويل للمشرف.'],supervisor:['استلام وتوزيع الطلبات','استلم الجاهز من المطبخ، ثم اختر الطيار المتاح وحوّل له الطلب.'],driver:['توصيل طلباتي','ابدأ شفتك باختيار متاح، وانتظر إسناد المشرف. تظهر لك طلباتك فقط لتسجيل الاستلام والخروج والتسليم.'],callcenter_followup:['تسجيل ومتابعة العملاء','سجّل الطلب، أرسل رابط واتساب، وتابع أي طلب يقترب من التأخير.'],manager:['متابعة تشغيل الفرع','راجع الطلبات المتأخرة والشكاوى وحدّد الإجراء المطلوب.'],admin:['متابعة الشركات والفروع','اختر الشركة والفرع لمتابعة التشغيل وفق الصلاحيات.'],complaints_officer:['حل شكاوى العملاء','استلم متابعة الشكوى وسجّل الإجراء حتى الحل؛ اسم منفذ كل إجراء محفوظ.']};
- const g=guides[wf]||guides.manager;return '<section class="ys-role-guide"><strong>'+g[0]+'</strong><span class="meta">'+g[1]+'</span>'+(['admin','manager'].includes(wf)?'<div class="row" style="margin-top:10px"><button onclick="openShiftSummary()">تسليم الوردية</button><button onclick="openShiftSummary(true)">تحليل التأخيرات</button></div>':'')+'</section>';
+ const g=guides[wf]||guides.manager;return '<section class="ys-role-guide"><strong>'+g[0]+'</strong><span class="meta">'+g[1]+'</span><div class="row" style="margin-top:10px"><button type="button" class="p" onclick="ysGuideNextAction()">ابدأ المهمة التالية ←</button></div>'+(['admin','manager'].includes(wf)?'<div class="row" style="margin-top:10px"><button onclick="openShiftSummary()">تسليم الوردية</button><button onclick="openShiftSummary(true)">تحليل التأخيرات</button></div>':'')+'</section>';
 }
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});

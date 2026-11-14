@@ -854,9 +854,17 @@ async function enterOwnerDashboard(){
   applyBrandConfig(brandLookup.data,true);
  }
 
-  const r=await sb.from('dlv_profiles').select('user_id,full_name,employee_code,branch_id').eq('role','driver').eq('active',true).order('full_name');
-  if(r.error){console.warn('تعذر تحميل الطيارين:',r.error.message);return reconnectView('تعذر تحميل بيانات الطيارين الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
-  drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);
+  if(!Number.isInteger(Number(ownerActiveCompanyId))||Number(ownerActiveCompanyId)<1)return ownerCompanyPicker();
+  const branchQuery=await sb.from('dlv_branches').select('id').eq('company_id',Number(ownerActiveCompanyId));
+  if(branchQuery.error)return reconnectView('تعذر التحقق من فروع الشركة الحالية.');
+  const scopedIds=(branchQuery.data||[]).map(b=>Number(b.id)).filter(Number.isInteger);
+  if(selectedBranch&&!scopedIds.includes(Number(selectedBranch)))return ownerBranchPicker(Number(ownerActiveCompanyId));
+  if(!scopedIds.length)drivers=[];
+  else {
+   const r=await sb.from('dlv_profiles').select('user_id,full_name,employee_code,branch_id').eq('role','driver').eq('active',true).in('branch_id',selectedBranch?[Number(selectedBranch)]:scopedIds).order('full_name');
+   if(r.error){console.warn('تعذر تحميل الطيارين:',r.error.message);return reconnectView('تعذر تحميل بيانات الطيارين الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
+   drivers=r.data||[];
+  }
   managerView(); startKitchenDelayMonitor();
   startOrderRealtime();
 }
@@ -1285,7 +1293,7 @@ async function openCallcenterComplaint(id){
 }
 function copyCallcenterStatus(id){
  const o=ORD[id];if(!o)return;
- const msg='طلبك رقم '+o.order_no+' — '+(STG[o.workflow_stage]||'قيد المتابعة')+(o.driver?.full_name?' — الطيار: '+o.driver.full_name:'')+'. مطاعم واحة اليمن.';
+ const msg='طلبك رقم '+o.order_no+' — '+(STG[o.workflow_stage]||'قيد المتابعة')+(o.driver?.full_name?' — الطيار: '+o.driver.full_name:'')+'. '+(brandConfig.brand_name||'المطعم')+'.';
  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(msg).then(()=>flash('تم نسخ الرسالة',true)).catch(()=>prompt('انسخ الرسالة',msg));else prompt('انسخ الرسالة',msg);
 }
 function complaintsOfficerView(){
@@ -1642,7 +1650,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  const id=branchId===null?(selectedBranch||me?.branch_id):branchId;
  if(!Number.isInteger(Number(id))||Number(id)<1)return alert('اختر فرعًا واحدًا أولًا لسحب تقريره.');
  const day=isOwner()&&requestedDay?requestedDay:reportOperationalDay();
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day))return alert('تاريخ التقرير غير صحيح.');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return alert('تاريخ التقرير غير صحيح.');
  const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(id),p_day:day});
  if(error)return alert('تعذر إنشاء التقرير: '+error.message);
  const h=x=>esc(String(x??''));
@@ -1658,7 +1666,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
 }
 function managerView() {
   if(isOwner()||isLocationManager())setTimeout(()=>{const app=$('app');if(!app||$('dailyReportBtn'))return;const btn=document.createElement('button');btn.id='dailyReportBtn';btn.className='g big';btn.textContent='📄 تنزيل تقرير الوردية الحالية';btn.onclick=downloadBranchDailyReport;app.prepend(btn);},0);
-  const t = cairoDate();
+  const t = reportOperationalDay();
   const owner = isOwner();
   const board = canViewManagerBoard();
   const ownerTools = owner ? '<button id="ad">＋ إنشاء حساب موظف</button><button id="cancelPermissionsBtn">🔐 صلاحيات إلغاء الطلبات</button><button id="customerMessagesBtn">✉️ رسائل العملاء</button>' : '';

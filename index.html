@@ -14,7 +14,8 @@
 <link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg?v=2">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script>
+<script src="session-actions.js?v=1"></script>
 <style>
 :root{--bg:#101114;--card:#1b1d20;--text:#f7f0df;--muted:#d8cbb5;--line:#a77d3e;--brand:#a77d3e;--gold:#c69b53}
 
@@ -176,6 +177,37 @@ const SB_URL = 'https://mkptmejkcemdhlhdaort.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcHRtZWprY2VtZGhsaGRhb3J0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwODE2MTQsImV4cCI6MjEwOTY1NzYxNH0.ovPRrF8RDXPut2jY8HMHdO27sFvxmyDymBVAKBV7mC8';
 /* ============================================================================= */
 const sb = supabase.createClient(SB_URL, SB_KEY);
+const sessionActions = createSessionActions(sb.auth);
+let appLogoutBusy=false;
+async function appSignOut(scope='global',message=''){
+ if(appLogoutBusy)return false;
+ appLogoutBusy=true;
+ let result;
+ try{result=await sessionActions.signOut(scope);}finally{appLogoutBusy=false;}
+ if(!result.localCleared){showLogoutFailure(scope);return false;}
+ // Clear operational data and GPS even if remote revocation is unavailable.
+ await stopShare(false);
+ clearInterval(timer);clearInterval(delayTimer);clearInterval(managerBoardTimer);clearInterval(managerClockTimer);
+ stopProfileSync();
+ if(realtimeRetryTimer)clearTimeout(realtimeRetryTimer);
+ if(reconnectRefreshTimer)clearTimeout(reconnectRefreshTimer);
+ try{await sb.removeAllChannels();}catch(_){}
+ chan=null;brandChannel=null;me=null;selectedBranch=null;drivers=[];ownerActiveCompanyId=null;activeBrandCompanyId=null;tenantBranchCompanyCache.clear();
+ Object.keys(ORD).forEach(k=>delete ORD[k]);ownerBrandCache.clear();tenantBrandCache.clear();
+ document.querySelectorAll('.modal').forEach(e=>e.remove());resetPlatformBrand();
+ loginView(message||(!result.serverConfirmed?'تم قفل هذا الجهاز. تعذر تأكيد إلغاء الجلسة على السيرفر؛ أعد المحاولة عند عودة الاتصال.':''));
+ return true;
+}
+function showLogoutFailure(scope){
+ document.getElementById('logoutFailure')?.remove();
+ const d=document.createElement('div');d.id='logoutFailure';d.className='modal';d.style.zIndex='100';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','تعذر إتمام تسجيل الخروج');
+ d.innerHTML='<div><h2>لم يكتمل تسجيل الخروج</h2><p>تعذر تأكيد إلغاء الجلسة بسبب الاتصال. يمكنك إعادة المحاولة أو قفل هذا الجهاز فقط.</p><button class="p big" id="logoutRetry">إعادة محاولة الخروج</button><button class="big" id="logoutLocal">قفل هذا الجهاز فقط</button><button id="logoutCancel">الرجوع</button></div>';
+ document.body.appendChild(d);
+ d.querySelector('#logoutRetry').onclick=async()=>{if(appLogoutBusy)return;d.remove();await appSignOut(scope);};
+ d.querySelector('#logoutLocal').onclick=async()=>{if(appLogoutBusy)return;d.remove();await appSignOut('local');};
+ d.querySelector('#logoutCancel').onclick=()=>d.remove();
+ d.querySelector('#logoutRetry').focus();
+}
 const ST = {new:['جديد','#868e96'],received:['تم الاستلام','#1c7ed6'],out:['خرج للتوصيل','#e8590c'],
   delivered:['تم التوصيل','#2f9e44'],failed:['تعذر التوصيل','#e03131'],cancelled:['ملغي','#adb5bd']};
 const REASONS = ['العميل لا يرد','العميل ألغى الطلب','العنوان غير صحيح','مشكلة في الطلب','سبب آخر'];
@@ -257,7 +289,7 @@ function subscribeBrandConfig(){
  if(brandChannel){sb.removeChannel(brandChannel);brandChannel=null}
  if(!activeBrandCompanyId)return;
  const id=activeBrandCompanyId;
- brandChannel=sb.channel('company-brand-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},p=>{if(p.new&&activeBrandCompanyId===id){tenantBrandCache.set(id,p.new);applyBrandConfig(p.new)}}).subscribe();
+ brandChannel=sb.channel('brand:company:'+id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_company_branding',filter:'company_id=eq.'+id},()=>{if(activeBrandCompanyId===id){tenantBrandCache.delete(id);void loadBrandConfig().catch(()=>{});}}).subscribe();
 }
 
 const isLocationManager = () => !!me && me.role === 'manager' && me.workflow_role === 'manager';
@@ -294,7 +326,7 @@ async function checkProfileUpdates(){
     resetPlatformBrand();document.body.classList.add('ys-platform');
     $('app').innerHTML='<div class="card" style="max-width:520px;margin:60px auto;text-align:center"><h2>⛔ الخدمة متوقفة مؤقتًا</h2><p>الشركة موقوفة أو لم يعد لديك فرع مصرح به. جميع البيانات محفوظة دون حذف.</p><button class="p big" id="suspendedRetry">إعادة التحقق من التفعيل</button><button id="suspendedOut" style="margin-top:12px">تسجيل الخروج</button></div>';
     $('suspendedRetry').onclick=()=>boot();
-    $('suspendedOut').onclick=async()=>{await sb.auth.signOut();me=null;loginView()};
+    $('suspendedOut').onclick=async()=>{await appSignOut();};
    }
   }
  }catch(e){console.warn('Profile refresh unavailable:',e)}
@@ -304,7 +336,7 @@ function startProfileSync(){
  if(!me)return;
  profileSyncFingerprint=profileSignature(me);
  if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
- profileSyncChannel=sb.channel('my-profile-'+me.user_id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).subscribe();
+ profileSyncChannel=sb.channel('profile:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).subscribe();
  if(profileSyncTimer)clearInterval(profileSyncTimer);
  profileSyncTimer=setInterval(()=>{void checkProfileUpdates()},30000);
 }
@@ -397,7 +429,7 @@ const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().le
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
   $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="yourstaff-icon.svg" alt="Your Staff" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
   $('retryBoot').onclick=()=>boot();
-  $('retryLogout').onclick=async()=>{await sb.auth.signOut();stopProfileSync();me=null;selectedBranch=null;loginView();};
+  $('retryLogout').onclick=async()=>{await appSignOut();};
 }
 let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
@@ -470,7 +502,7 @@ setInterval(() => {
 function startOrderRealtime() {
   if (!me) return;
   if (chan) { try { sb.removeChannel(chan); } catch (e) {} chan = null; }
-  chan = sb.channel('dlv-orders-live')
+  chan = sb.channel('orders:user:'+me.user_id,{config:{private:true}})
     .on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, refreshOperationalData)
     .subscribe(status => {
       realtimeState = status;
@@ -503,7 +535,7 @@ async function ownerMfaGate(){
  if(level.error){reconnectView('تعذر فحص مستوى الجلسة');return false;}
  if(verified.length&&level.data?.currentLevel==='aal2')return true;
  $('app').innerHTML='<div class="card" style="max-width:420px;margin:30px auto;text-align:center"><h2>حماية حساب المالك</h2><p class="meta">التحقق باستخدام تطبيق رموز المصادقة (TOTP)، وليس بصمة الوجه.</p><div id="ownerMfaSetup"></div><div id="ownerMfaErr" class="msg e hide"></div><input id="ownerMfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="رمز من 6 أرقام"><button class="p big" id="ownerMfaSubmit">تحقق وادخل</button><button id="ownerMfaExit">خروج</button></div>';
- $('ownerMfaExit').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+ $('ownerMfaExit').onclick=async()=>{await appSignOut();};
  const fail=m=>{$('ownerMfaErr').textContent=m;$('ownerMfaErr').className='msg e';};
  let id=verified[0]?.id;
  if(!id){
@@ -542,10 +574,10 @@ async function boot() {
   catch (e) { return reconnectView(); }
   const {data, error} = profileResult;
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
-  if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
+  if (!data || !data.active) { return appSignOut('local','الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
   startProfileSync();
-  if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
+  if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerMfaGate()))return; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
   const branchResult=await safeRpc('dlv_my_branches');
   if(branchResult.error)return reconnectView('تعذر التحقق من الفروع المصرح بها حاليًا. أعد المحاولة.');
@@ -584,7 +616,7 @@ async function employeeBranchPicker(permitted){
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div>${selectedBranch&&branches.some(b=>Number(b.id)===Number(selectedBranch))?'<button id="empBack" class="g big" style="margin-top:12px">↩️ الرجوع للفرع الحالي</button>':''}<button id="empOut">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>Number(x.id)===id)||b.disabled)return;const previousBranch=selectedBranch;const switchRequestId=++branchPickerRequestId;document.querySelectorAll('[data-emp-branch]').forEach(btn=>btn.disabled=true);selectedBranch=id;try{try{await loadBrandConfig();if(switchRequestId!==branchPickerRequestId||!me||Number(selectedBranch)!==id)return;subscribeBrandConfig();}catch(brandError){if(switchRequestId!==branchPickerRequestId||!me||Number(selectedBranch)!==id)return;console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}if(switchRequestId!==branchPickerRequestId||!me||Number(selectedBranch)!==id)return;await enterEmployeeDashboard();}catch(e){if(switchRequestId!==branchPickerRequestId)return;selectedBranch=previousBranch;console.error('Branch switch failed:',e);reconnectView('تعذر فتح الفرع المختار. تم الاحتفاظ بالفرع السابق؛ أعد المحاولة.')}});
   if($('empBack'))$('empBack').onclick=()=>{branchPickerRequestId++;return enterEmployeeDashboard();};
-  $('empOut').onclick=async()=>{branchPickerRequestId++;await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+  $('empOut').onclick=async()=>{branchPickerRequestId++;await appSignOut();};
 }
 async function enterEmployeeDashboard(){
   if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_branch_drivers',{p_branch_id:selectedBranch});if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||Number(x.branch_id)===Number(selectedBranch));}
@@ -598,13 +630,13 @@ async function ownerPageGate(){
  if(r.error)return reconnectView('تعذر التحقق من حماية صفحة المالك');
  if(!r.data?.configured||r.data?.unlocked)return true;
  $('app').innerHTML='<div class="card" style="max-width:420px;margin:35px auto;padding:22px"><h2>قفل صفحة المالك</h2><p>أدخل كلمة مرور الصفحة المستقلة.</p><input type="password" id="ownerPageUnlock" autocomplete="off" placeholder="كلمة مرور الصفحة"><div id="ownerPageError" class="msg e hide"></div><button class="p big" id="ownerPageUnlockBtn">فتح الصفحة</button><button id="ownerPageExit">تسجيل الخروج</button></div>';
- $('ownerPageExit').onclick=async()=>{await sb.auth.signOut();me=null;loginView();};
+ $('ownerPageExit').onclick=async()=>{await appSignOut();};
  $('ownerPageUnlockBtn').onclick=async()=>{
   const pass=$('ownerPageUnlock').value;$('ownerPageUnlock').value='';
   $('ownerPageUnlockBtn').disabled=true;
   const result=await safeRpc('dlv_owner_page_unlock',{p_password:pass});
   if(!result.error&&result.data===true){await boot();return;}
-  $('ownerPageError').className='msg e';$('ownerPageError').textContent='كلمة مرور الصفحة غير صحيحة';
+  $('ownerPageError').className='msg e';$('ownerPageError').textContent='كلمة مرور الصفحة غير صحيحة أو تم تجاوز عدد المحاولات. انتظر 15 دقيقة بعد المحاولات المتكررة.';
   $('ownerPageUnlockBtn').disabled=false;
  };
  return false;
@@ -728,7 +760,7 @@ async function ownerCompanyPicker(){
  $('ownerBillingHistory').onclick=ownerBillingHistory;
  $('ownerChangePass').onclick=ownerPasswordSettings;
  $('ownerPagePass').onclick=ownerPagePasswordSettings;
- $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+ $('pickOut').onclick=async()=>{await appSignOut();};
 }
 function ownerPendingBranchPreview(companyId,branch){
  if(!isOwner())return;
@@ -995,7 +1027,7 @@ function startKitchenDelayMonitor() {
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut();stopProfileSync(); if (chan) sb.removeChannel(chan); loginView(); }; }
+function bindOut() { void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); }; }
 
 /* ---------- هوية النظام (مالك النظام فقط) ---------- */
 async function openBrandSettings(){
@@ -1067,7 +1099,7 @@ async function openBrandSettings(){
      $('oscBranch').textContent=activeBranchTitle();
      $('oscNetwork').textContent=navigator.onLine?'متصل بالإنترنت':'غير متصل بالإنترنت';
      $('oscClose').onclick=()=>sec.remove();
-     $('oscLogout').onclick=async()=>{if(!confirm('تأكيد تسجيل الخروج من هذا الجهاز؟'))return;sec.remove();const out=$('out');if(out)out.click();else await sb.auth.signOut();};
+     $('oscLogout').onclick=async()=>{if(!confirm('تأكيد تسجيل الخروج من هذا الجهاز؟'))return;sec.remove();const out=$('out');if(out)out.click();else await appSignOut();};
      return;
    }
  };
@@ -1778,7 +1810,7 @@ function openSecurityCommand(){
   const {error}=await sb.rpc('dlv_manage_incident',{p_id:null,p_branch:branch(),p_title:title,p_details:details,p_priority:priority,p_status:'open'});
   btn.disabled=false;if(error)status('فشل التسجيل: '+error.message);else{$('scTitle').value='';$('scDetails').value='';reload();}
  };
- $('scSignout').onclick=async()=>{if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;const {error}=await sb.auth.signOut({scope:'local'});if(error)status(error.message);else location.reload();};
+ $('scSignout').onclick=async()=>{if(!confirm('تسجيل الخروج من هذا الجهاز؟'))return;await appSignOut('local');};
  reload();
 }
 function openOperationsRoom(){
@@ -1866,7 +1898,7 @@ function openOperationsRoom(){
    roomRefreshBusy=true;try{await refresh()}finally{roomRefreshBusy=false}
   },1200);
  };
- roomChannel=sb.channel('owner-operations-'+Date.now()).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},scheduledRoomRefresh).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},scheduledRoomRefresh).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
+ roomChannel=sb.channel('owner:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},scheduledRoomRefresh).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},scheduledRoomRefresh).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
  scheduledRoomRefresh();refreshTimer=setInterval(scheduledRoomRefresh,30000);
 }
 function ownerQuickPanel(){
@@ -2530,7 +2562,7 @@ function editPilotForm(r, done) {
     '<label>الإيميل (بيه بيدخل)' + (self ? ' — إيميلك إنت مش بيتغيّر من هنا' : '') + '</label><input id="p_m" type="email" dir="ltr" value="' + esc(r.email) + '"' + (self ? ' disabled' : '') + '>' +
     '<label>الوظيفة' + (self ? ' — وظيفة حسابك إنت مش بتتغيّر من هنا' : '') + '</label><select id="p_j"' + (self ? ' disabled' : '') + '>' +
     JOBS.map(j => '<option value="' + j[0] + '"' + (j[0] === curJob ? ' selected' : '') + '>' + j[1] + '</option>').join('') + '</select>' +
-    '<label>كلمة سر جديدة (سيبها فاضية لو مش عايز تغيّرها)</label><div class="row"><input id="p_p" style="flex:1" placeholder="12 حرفًا على الأقل"><button id="p_g">توليد</button></div>' +
+    '<label>كلمة سر جديدة (سيبها فاضية لو مش عايز تغيّرها)</label><div class="row"><input id="p_p" type="password" autocomplete="new-password" style="flex:1" placeholder="12 حرفًا على الأقل"><button id="p_g">توليد</button></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="p_ok" style="flex:1">حفظ</button><button class="big" id="p_x" style="flex:0 0 90px">إلغاء</button></div></div>';
   document.body.appendChild(d);
   $('p_x').onclick = () => d.remove();
@@ -2704,10 +2736,7 @@ async function refreshMe() {
   // عدم وصول بيانات بسبب خطأ مؤقت لا يعني أن الحساب أُلغي أو عُطّل.
   if (!data) return;
   if (!data.active) {
-    await sb.auth.signOut();
-    me = null;
-    selectedBranch = null;
-    return loginView('الحساب اتعطّل');
+    return appSignOut('local','الحساب اتعطّل');
   }
   const roleChanged = data.role !== me.role || data.workflow_role !== me.workflow_role;
   me = data;

@@ -1,0 +1,27 @@
+const {createSessionActions}=require('../session-actions.js');
+const assert=require('node:assert/strict');
+(async()=>{
+ let calls=0;
+ const ok=createSessionActions({signOut:async()=>{calls++;return {error:null};}});
+ assert.deepEqual(await ok.signOut(),{localCleared:true,serverConfirmed:true,scope:'global'});
+ const network=new Error('offline');
+ const globalFailure=createSessionActions({signOut:async()=>({error:network})});
+ assert.equal((await globalFailure.signOut()).localCleared,false);
+ const thrown=createSessionActions({signOut:async()=>{throw network;}});
+ assert.equal((await thrown.signOut()).serverConfirmed,false);
+ const offlineLocal=createSessionActions({signOut:async()=>({error:network}),getSession:async()=>({data:{session:null},error:null})});
+ const local=await offlineLocal.signOut('local');assert.equal(local.localCleared,true);assert.equal(local.serverConfirmed,false);
+ const retained=createSessionActions({signOut:async()=>({error:network}),getSession:async()=>({data:{session:{}},error:null})});
+ assert.equal((await retained.signOut('local')).localCleared,false);
+ const uncertain=createSessionActions({signOut:async()=>({error:network}),getSession:async()=>({error:network})});
+ assert.equal((await uncertain.signOut('local')).localCleared,false);
+ let resolve;
+ const concurrent=createSessionActions({signOut:()=>{calls++;return new Promise(r=>{resolve=r;});}});
+ const a=concurrent.signOut();const b=concurrent.signOut();assert.equal(a,b);resolve({error:null});await a;
+ await assert.rejects(ok.signOut('others'),/Unsupported/);
+ const fs=require('fs');const html=fs.readFileSync('index.html','utf8');
+ assert(!html.includes('sb.auth.signOut('),'All UI exits must use checked sign-out');
+ assert(!html.includes('tenantBrandCache.set(id,p.new)'),'No authorization-sensitive state from Realtime payloads');
+ assert(html.includes('@supabase/supabase-js@2.119.0/'));
+ console.log('PASS: successful, failed, thrown, offline local, retained, uncertain and concurrent logout; all UI exits checked; Realtime payload authority removed');
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -680,9 +680,11 @@ async function ownerBranchPicker(companyId=1){
  <button id="backCompanies" class="big" style="min-height:84px">↩️<div>الشركات</div></button>
  </div>
  ${setupPending?'<p class="msg e">الشركة قيد التجهيز؛ لا تُفتح فروعها للتشغيل قبل التحقق الأمني.</p>':''}
+ <div class="card" style="margin:12px 0"><h3>📄 تقارير الفروع اليومية</h3><label>تاريخ يوم التشغيل <input type="date" id="ownerReportDay" value="${reportOperationalDay()}"></label><div class="meta">اختر تاريخًا ثم نزّل تقرير أي فرع. التقرير الحالي يكتمل عند الخامسة صباحًا التالية.</div><div class="grid" style="grid-template-columns:1fr;gap:8px;margin-top:10px">${branches.map(b=>'<button class="g big" data-report-branch="'+Number(b.id)+'">📄 '+esc(b.name)+'</button>').join('')}</div></div>
  <div id="ownerBranchPanel" hidden><h3>فروع الشركة</h3><div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:12px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div></div>
  </div>`;
  $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
+ $('app').querySelectorAll('[data-report-branch]').forEach(b=>b.onclick=()=>downloadBranchDailyReport(Number(b.dataset.reportBranch),$('ownerReportDay').value));
  $('ownerSetupStatus').onclick=async()=>{
    const b=$('ownerSetupStatus');b.disabled=true;
    try{
@@ -1615,11 +1617,13 @@ function reportOperationalDay(){
  if(Number(parts.hour)<5)date.setUTCDate(date.getUTCDate()-1);
  return date.toISOString().slice(0,10);
 }
-async function downloadBranchDailyReport(){
+async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  if(!isOwner()&&!isLocationManager())return;
- if(!Number.isInteger(Number(selectedBranch))||Number(selectedBranch)<1)return alert('اختر فرعًا واحدًا أولًا لسحب تقريره.');
- const day=reportOperationalDay();
- const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(selectedBranch),p_day:day});
+ const id=branchId===null?(selectedBranch||me?.branch_id):branchId;
+ if(!Number.isInteger(Number(id))||Number(id)<1)return alert('اختر فرعًا واحدًا أولًا لسحب تقريره.');
+ const day=isOwner()&&requestedDay?requestedDay:reportOperationalDay();
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day))return alert('تاريخ التقرير غير صحيح.');
+ const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(id),p_day:day});
  if(error)return alert('تعذر إنشاء التقرير: '+error.message);
  const h=x=>esc(String(x??''));
  const orders=data.orders||{}, incidents=data.incidents||{};

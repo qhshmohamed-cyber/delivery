@@ -625,10 +625,23 @@ async function ownerCompanyPicker(){
  $('ownerAddCompany').onclick=async()=>{
   const name=prompt('اسم الشركة الجديدة');if(name===null)return;
   const slug=prompt('معرف الشركة بالإنجليزية (حروف صغيرة وأرقام وشرطة -)');if(slug===null)return;
+  const cleanName=name.trim(),cleanSlug=slug.trim().toLowerCase();
+  if(cleanName.length<2||cleanName.length>120)return alert('اسم الشركة لازم يكون من 2 إلى 120 حرفًا.');
+  if(!/^[a-z0-9][a-z0-9-]{1,62}$/.test(cleanSlug))return alert('معرّف الشركة لازم يكون من 2 إلى 63 حرفًا إنجليزيًا صغيرًا أو رقمًا أو شرطة (-)، ويبدأ بحرف أو رقم. مثال: new-restaurant');
   if(!confirm('سيتم إنشاء الشركة في وضع التجهيز فقط، ولن يتم تفعيل تشغيلها قبل مراجعة عزل البيانات. متابعة؟'))return;
-  const result=await safeRpc('dlv_owner_register_company',{p_name:name.trim(),p_slug:slug.trim().toLowerCase()});
-  if(result.error)return alert('تعذر إنشاء الشركة: '+result.error.message);
-  await ownerCompanyPicker();
+  const addButton=$('ownerAddCompany');if(addButton){addButton.disabled=true;addButton.textContent='⏳ جارٍ إنشاء الشركة...';}
+  try{
+    const result=await safeRpc('dlv_owner_register_company',{p_name:cleanName,p_slug:cleanSlug});
+    if(result.error){
+      const msg=String(result.error.message||'');
+      const friendly=/duplicate|unique|already exists|dlv_companies_slug_key/i.test(msg)?'معرّف الشركة مستخدم بالفعل. جرّب معرّفًا مختلفًا.':/not authorized|permission denied|42501/i.test(msg)?'حسابك لا يملك صلاحية إنشاء الشركات. ادخل بحساب مالك المنصة.':/invalid company name or slug/i.test(msg)?'اسم الشركة أو معرّفها غير صالح. راجع الشروط وحاول مرة أخرى.':'تعذر إنشاء الشركة: '+msg;
+      return alert(friendly);
+    }
+    alert('تم إنشاء الشركة في وضع التجهيز. افتحها لإعداد بياناتها ومراجعة العزل قبل التفعيل.');
+    await ownerCompanyPicker();
+  }catch(e){alert('حدث خطأ أثناء إنشاء الشركة: '+String(e?.message||'تعذر الاتصال'));}
+  finally{const b=$('ownerAddCompany');if(b){b.disabled=false;b.textContent='＋ إضافة شركة جديدة';}}
+  
  };
  $('ownerBilling').onclick=ownerBillingSettings;
  $('ownerBillingHistory').onclick=ownerBillingHistory;

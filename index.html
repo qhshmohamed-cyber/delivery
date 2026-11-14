@@ -2742,7 +2742,7 @@ function trackView(code0) {
     let result;
     try { result = await safeRpc('dlv_track', { p_code: code }); }
     catch (e) { result = { error: e }; }
-    finally { trackBusy = false; }
+    finally { trackBusy = false; if(code!==($('tc')?.value.trim().toUpperCase()) && $('tc')?.value.trim()) void go(); }
     if(code!==displayedCode || code!==($('tc')?.value.trim().toUpperCase()))return;
     const { data: j, error } = result || {};
     const box = $('tinfo'); if (!box) return clearInterval(tmr);

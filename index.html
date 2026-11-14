@@ -1568,7 +1568,8 @@ function renderShare() {
   b.style.borderColor = on ? '#e03131' : '';
 }
 async function sendDriverPosition(p, force = false) {
-  if (!shareWanted || locationBusy || !navigator.onLine) return;
+  if (!shareWanted || !navigator.onLine) return;
+  if (locationBusy) { const el=$('locst'); if(el && force) el.textContent='⏳ جارٍ إرسال موقع سابق؛ سيُعاد تحديث GPS تلقائيًا'; return; }
   if (p?.timestamp && Date.now()-p.timestamp>30000) {const el=$('locst');if(el)el.textContent='⚠ قراءة GPS قديمة — ننتظر موقعًا أحدث';return;}
   // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
   if (!force && Date.now() - lastSend < 5000) return;
@@ -1683,6 +1684,13 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && me && me.role === 'driver' && shareWanted) {
     resumeDriverLocationNow();
   }
+});
+// Returning from another app or regaining connectivity must request a fresh GPS fix.
+window.addEventListener('focus', () => {
+  if (document.visibilityState === 'visible' && me?.role === 'driver' && shareWanted) void resumeDriverLocationNow();
+});
+window.addEventListener('online', () => {
+  if (document.visibilityState === 'visible' && me?.role === 'driver' && shareWanted) void resumeDriverLocationNow();
 });
 window.addEventListener('pageshow', () => {
   if (document.visibilityState === 'visible' && me && me.role === 'driver' && shareWanted) {

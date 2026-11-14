@@ -127,6 +127,7 @@ body.ys-platform .meta{color:#d8cbb5}
 
 .ys-role-guide{border-inline-start:4px solid var(--gold);padding:12px 16px;background:var(--card);border-radius:12px;margin-bottom:12px}
 .ys-role-guide strong{display:block;margin-bottom:5px}.ys-stage-clock{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin:10px 0;font-size:13px;line-height:1.6}.ys-stage-clock[data-level="warning"]{border-color:#e4b54e;background:#805b151f}.ys-stage-clock[data-level="late"]{border-color:#ef806d;background:#ae382021}.ys-stage-clock b{font-variant-numeric:tabular-nums}.ys-complaint-status{font-weight:700}.acts{flex-wrap:wrap}.acts button{min-width:100px}@media(max-width:600px){.ys-role-guide{padding:12px}.ys-stage-clock{font-size:12px}.modal>div{padding-bottom:24px}}
+@media print{#rpt .card,#rpt .stat{background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important}#rpt .meta,#rpt .stat span,#rpt h2{color:#333!important}#rpt .ord{break-inside:avoid}#rpt .grid{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
 <body class="ys-platform">
@@ -304,7 +305,7 @@ async function loadStageSla(){
 function roleWorkGuide(){
  const wf=me?.workflow_role||me?.role;
  const guides={kitchen:['تجهيز الطلبات','ابدأ بالأقدم. بعد انتهاء التجهيز اضغط جاهز للتحويل للمشرف.'],supervisor:['استلام وتوزيع الطلبات','استلم الجاهز من المطبخ، ثم اختر الطيار المتاح وحوّل له الطلب.'],driver:['توصيل طلباتي','استلم الطلب، سجّل الخروج، ثم أكّد التسليم أو سجّل سبب التعذر.'],callcenter_followup:['تسجيل ومتابعة العملاء','سجّل الطلب، أرسل رابط واتساب، وتابع أي طلب يقترب من التأخير.'],manager:['متابعة تشغيل الفرع','راجع الطلبات المتأخرة والشكاوى وحدّد الإجراء المطلوب.'],admin:['متابعة الشركات والفروع','اختر الشركة والفرع لمتابعة التشغيل وفق الصلاحيات.'],complaints_officer:['حل شكاوى العملاء','استلم متابعة الشكوى وسجّل الإجراء حتى الحل؛ اسم منفذ كل إجراء محفوظ.']};
- const g=guides[wf]||guides.manager;return '<section class="ys-role-guide"><strong>'+g[0]+'</strong><span class="meta">'+g[1]+'</span></section>';
+ const g=guides[wf]||guides.manager;return '<section class="ys-role-guide"><strong>'+g[0]+'</strong><span class="meta">'+g[1]+'</span>'+(['admin','manager'].includes(wf)?'<div class="row" style="margin-top:10px"><button onclick="openShiftSummary()">تسليم الوردية</button><button onclick="openShiftSummary(true)">تحليل التأخيرات</button></div>':'')+'</section>';
 }
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});
@@ -675,29 +676,29 @@ async function enterOwnerDashboard(){
 }
 
 async function refreshKitchenDelayNotices() {
-  if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
-  const {data,error} = await safeRpc('dlv_list_notifications');
+  if (!me) return;
+  const {data,error} = await safeRpc('dlv_list_stage_notifications');
   const box = $('delayNotices'); if (!box) return;
   if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل التنبيهات: '+esc(error.message)+'</div>'; return; }
-  // التنبيه المقروء يختفي من الشاشة نهائيًا، مع بقائه محفوظًا في السجل.
-  const rows = (data || []).filter(n => !n.read_at && (n.notification_type === 'kitchen_delay' || !n.notification_type));
-  box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ قرأت التنبيه</button></div>').join('')+'</section>' : '';
+  // قراءة التنبيه لا تعني تسجيل إجراء لحل التأخير؛ الإجراء يُحفظ مستقلًا.
+  const rows = (data || []).filter(n => !n.read_at && (n.notification_type === 'kitchen_delay' || String(n.notification_type||'').startsWith('stage_') || !n.notification_type));
+  box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+(String(n.notification_type||'').startsWith('stage_')?'<div><button onclick="recordOrderDelay('+Number(n.order_id)+')">تسجيل إجراء</button></div>':'')+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ قرأت التنبيه</button></div>').join('')+'</section>' : '';
   box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { if (!requireOnline('تحديث التنبيه')) return; b.disabled=true; const {error}=await safeRpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); if(error){b.disabled=false;return flash('تعذر حفظ قراءة التنبيه',false);} refreshKitchenDelayNotices(); });
 }
 async function runKitchenDelayCheck() {
-  if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
+  if (!me) return;
   const {error} = await safeRpc('dlv_check_kitchen_delays');
   if (error) console.warn('Kitchen delay check:', error.message);
   await refreshKitchenDelayNotices();
 }
 function startKitchenDelayMonitor() {
   clearInterval(delayTimer);
-  if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
+  if (!me) return;
   runKitchenDelayCheck();
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { void loadStageSla(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut();stopProfileSync(); if (chan) sb.removeChannel(chan); loginView(); }; }
+function bindOut() { void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut();stopProfileSync(); if (chan) sb.removeChannel(chan); loginView(); }; }
 
 /* ---------- هوية النظام (مالك النظام فقط) ---------- */
 async function openBrandSettings(){
@@ -853,6 +854,49 @@ function customerMessageSettings(){
  d.querySelector('#welcomeSave').onclick=async()=>{const branch=Number(select.value);if(!branch)return;if(!area.value.includes('{tracking_link}'))return flash('الرسالة لازم تحتوي {tracking_link}',false);const {error}=await safeRpc('dlv_owner_set_customer_message',{p_branch:branch,p_template:area.value});if(error)return flash(error.message,false);rows.find(x=>x.branch_id===branch).message_template=area.value;flash('تم حفظ رسالة الترحيب للفرع',true)};
  safeRpc('dlv_owner_customer_message_branches').then(({data,error})=>{if(!d.isConnected)return;if(error){d.querySelector('#welcomeError').textContent=error.message;return}rows=data||[];select.innerHTML=rows.map(x=>'<option value="'+x.branch_id+'">'+esc(x.company_name)+' — '+esc(x.branch_name)+'</option>').join('');update()});
 }
+
+function opsPanel(title,id){
+ const old=$(id);if(old)return null;
+ const d=document.createElement('div');d.id=id;d.style.cssText='position:fixed;inset:0;z-index:80;background:var(--bg);overflow:auto;padding:16px';
+ d.innerHTML='<div class="card noprint"><div class="ord"><h2>'+esc(title)+'</h2><button data-close>إغلاق</button></div></div><div data-body>جاري التحميل...</div>';
+ document.body.appendChild(d);d.querySelector('[data-close]').onclick=()=>d.remove();return d;
+}
+const opsTime=t=>t?new Date(t).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—';
+const stageLabel=s=>({received:'استلام الطيار',out:'خرج للتوصيل',kitchen:'المطبخ',dispatch:'انتظار الإسناد والخروج',departure:'خروج الطيار',delivery:'التوصيل',new:'عند المطبخ',kitchen_ready:'جاهز من المطبخ',supervisor_received:'استلام المشرف',driver_assigned:'تعيين الطيار',out_for_delivery:'خرج للتوصيل',delivered:'تم التسليم',failed:'تعذر التوصيل',cancelled:'ملغي'})[s]||s||'—';
+async function suggestOrderDriver(id){
+ const d=opsPanel('اقتراح الطيار المناسب','driverSuggestions');if(!d)return;
+ const {data,error}=await safeRpc('dlv_suggest_drivers',{p_order:Number(id)});if(!d.isConnected)return;
+ const box=d.querySelector('[data-body]');if(error){box.textContent='تعذر تحميل الاقتراحات أو الطلب غير متاح لدورك';return;}
+ box.innerHTML='<div class="card meta">الترتيب حسب الأقل في الطلبات الجارية، ثم حداثة تحديث الموقع. لا يعني تأكيد التواجد أو حساب الأقرب جغرافيًا. راجع التوفر ثم اعتمد التحويل بنفسك.</div>'+(data||[]).map((x,i)=>'<div class="card"><b>'+esc(x.full_name)+(i===0?' · الاقتراح الأول':'')+'</b><div class="meta">طلبات جارية: '+Number(x.active_orders)+' · آخر موقع: '+esc(opsTime(x.location_updated_at))+'</div><button data-pick="'+esc(x.user_id)+'">اختيار هذا الطيار</button></div>').join('');
+ if(!data?.length)box.innerHTML+='<div class="card">لا يوجد طيار نشط ومصرح له بهذا الفرع</div>';
+ box.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const x=data.find(v=>v.user_id===b.dataset.pick),sel=$('as_'+id);if(!sel)return flash('استلم الطلب من المطبخ أولًا ثم اختر الطيار',false);let option=[...sel.options].find(v=>v.value===x.user_id);if(!option){option=document.createElement('option');option.value=x.user_id;option.textContent=x.full_name;sel.appendChild(option);}sel.value=x.user_id;d.remove();sel.focus();flash('تم الاختيار فقط؛ اضغط تحويل للطيار لاعتماد التعيين',true);});
+}
+async function recordOrderDelay(id){
+ const note=prompt('سجّل الإجراء الذي اتخذته لحل التأخير (بدون بيانات شخصية غير لازمة)');if(note===null)return;
+ if(!requireOnline('تسجيل إجراء التأخير'))return;
+ const {error}=await safeRpc('dlv_record_delay_action',{p_order:Number(id),p_note:note.trim()});
+ if(error)return flash('تعذر تسجيل الإجراء: '+error.message,false);flash('تم تسجيل الإجراء باسمك في ملف الطلب',true);refreshKitchenDelayNotices();
+}
+async function openOrderDossier(id){
+ const d=opsPanel('ملف الطلب الكامل','orderDossier');if(!d)return;
+ const {data,error}=await safeRpc('dlv_order_dossier',{p_order:Number(id)});if(!d.isConnected)return;
+ const box=d.querySelector('[data-body]');if(error){box.textContent='الطلب غير متاح أو لا تملك صلاحية عرضه';return;}
+ const o=data.order;
+ box.innerHTML='<div class="card"><h2>طلب #'+esc(o.order_no)+'</h2><div>'+esc(branchTitle(o.branch_id))+' · '+esc(ST[o.status]?.[0]||o.status)+'</div><div class="meta">'+esc(o.notes||'')+'<br>'+esc(o.driver_note||'')+'</div><button data-delay-action>تسجيل إجراء لحل التأخير</button></div><h2>خط سير الطلب</h2>'+data.events.map(e=>'<div class="card"><b>'+esc(stageLabel(e.stage))+'</b><div class="meta">'+esc(opsTime(e.at))+' · '+esc(e.actor||'النظام')+'</div><div>'+esc(e.note||'')+'</div></div>').join('')+'<h2>الشكاوى المسموح لك بعرضها</h2>'+(data.complaints.map(c=>'<div class="card"><b>'+esc(c.title)+'</b><div>'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[c.status]||c.status)+'</div><div>'+esc(c.followup_action||'لم يسجل إجراء')+' · '+esc(c.responsible||'لم يستلمها مسؤول بعد')+'</div></div>').join('')||'<div class="card">لا توجد شكاوى متاحة لهذا الدور</div>')+'<h2>إجراءات التأخير والتصعيد</h2>'+(data.delay_actions.map(a=>'<div class="card"><b>'+esc(stageLabel(a.stage))+'</b><div>'+esc(a.action||'لم يسجل إجراء')+' · '+esc(a.actor||'—')+'</div><div class="meta">الإجراء: '+esc(opsTime(a.at))+' · التصعيد: '+esc(opsTime(a.escalated_at))+'</div></div>').join('')||'<div class="card">لا توجد تنبيهات تأخير مسجلة</div>');
+ box.querySelector('[data-delay-action]').onclick=()=>recordOrderDelay(id);
+}
+async function openShiftSummary(analysis=false){
+ if(!isOwner()&&!canViewManagerBoard())return flash('للإدارة فقط',false);
+ const d=opsPanel(analysis?'تحليل مراحل التأخير المتكررة':'تسليم الوردية','rpt');if(!d)return;
+ const box=d.querySelector('[data-body]');box.innerHTML='<div class="card noprint"><label>تاريخ بداية الوردية</label><input type="date" data-shift-day value="'+cairoDate()+'"><label>الوردية بتوقيت القاهرة</label><select data-shift-kind><option value="full">يوم التشغيل: 7 ص إلى 4 ص اليوم التالي</option><option value="morning">صباحي: 8 ص إلى 6 م</option><option value="evening">مسائي: 6 م إلى 4 ص اليوم التالي</option></select><button data-run>عرض التقرير</button><button data-print>طباعة / حفظ PDF</button><button data-copy>نسخ الملخص</button></div><div data-result></div>';
+ let loaded=null,version=0;
+ function reportText(j){return 'تسليم الوردية '+j.day+' — '+(selectedBranch?branchTitle(selectedBranch):'الفروع المصرح بها')+'\nإجمالي '+j.total+' · مكتملة '+j.delivered+' · ملغية '+j.cancelled+' · متعذرة '+j.failed+' · جارية '+j.active+'\nشكاوى '+j.complaints+'\nتأخير المطبخ '+j.delays.kitchen+' · الإسناد والخروج '+j.delays.dispatch+' · التوصيل '+j.delays.delivery;}
+ async function run(){const token=++version;loaded=null;const target=box.querySelector('[data-result]');target.textContent='جاري إعداد التقرير...';const {data,error}=await safeRpc('dlv_shift_summary',{p_day:box.querySelector('[data-shift-day]').value,p_shift:box.querySelector('[data-shift-kind]').value,p_branch:selectedBranch||null});if(!d.isConnected||token!==version)return;if(error){target.textContent='تعذر تحميل التقرير';return;}loaded=data;
+ const causes=Object.entries(data.delays).sort((a,b)=>b[1]-a[1]);
+ target.innerHTML='<section class="card"><h2>تقرير الوردية — '+esc(data.day)+'</h2><p class="meta">'+esc(selectedBranch?branchTitle(selectedBranch):'الفروع المصرح بها')+' · '+esc(opsTime(data.start_at))+' إلى '+esc(opsTime(data.end_at))+'</p><p class="meta">الطلبات حسب وقت إنشائها؛ الشكاوى حسب وقت تسجيلها. التقرير لا يحتوي أسماء أو هواتف أو عناوين العملاء.</p><div class="grid">'+[['الطلبات',data.total],['تم التسليم',data.delivered],['ملغي',data.cancelled],['تعذر',data.failed],['جاري',data.active],['شكاوى',data.complaints]].map(x=>'<div class="stat"><b>'+Number(x[1])+'</b><span>'+x[0]+'</span></div>').join('')+'</div><h2>أكثر مراحل التأخير تكرارًا</h2><div class="meta">تحليل التوقيتات المسجلة، وليس إثباتًا لسبب التأخير. الطلب قد يتأخر في أكثر من مرحلة. الطلبات التي تنقصها التوقيتات لا يُفترض لها زمن.</div>'+causes.map(([key,count])=>'<div class="ord"><b>'+esc(stageLabel(key))+'</b><span>'+Number(count)+' طلب</span></div>').join('')+'<h2>أداء الطيارين خلال الوردية</h2>'+data.drivers.map(x=>'<div class="ord"><b>'+esc(x.full_name)+'</b><span>مسند '+Number(x.total)+' · مكتمل '+Number(x.delivered)+' · تعذر '+Number(x.failed)+'</span></div>').join('')+'</section>';
+ }
+ box.querySelector('[data-run]').onclick=run;box.querySelector('[data-shift-day]').onchange=run;box.querySelector('[data-shift-kind]').onchange=run;box.querySelector('[data-print]').onclick=()=>{if(loaded)window.print();};box.querySelector('[data-copy]').onclick=async()=>{if(!loaded)return;try{await navigator.clipboard.writeText(reportText(loaded));flash('تم نسخ ملخص الوردية',true);}catch(e){prompt('انسخ الملخص:',reportText(loaded));}};run();
+}
 function newOrderForm() {
   const wf = me?.workflow_role || me?.role;
   if (!me || !['callcenter_followup','manager','admin'].includes(wf)) return flash('إنشاء الطلب متاح لمتابعة الكول سنتر والإدارة فقط', false);
@@ -941,7 +985,7 @@ function failDialog(id) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const id = +b.dataset.id, a = b.dataset.act;
-  if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'cpmsg') copyMsg(id); else if (a === 'wa') waMsg(id); else if (a === 'kfwd') kitchenForward(id); else if(a==='cancelled')cancelOrderDialog(id); else setStatus(id, a);
+  if(a==='dossier')openOrderDossier(id); else if (a === 'failed') failDialog(id); else if (a === 'edit') editOrderForm(id); else if (a === 'note') noteForm(id); else if (a === 'assign') assignOrder(id); else if (a === 'srecv') supervisorReceive(id); else if (a === 'cpmsg') copyMsg(id); else if (a === 'wa') waMsg(id); else if (a === 'kfwd') kitchenForward(id); else if(a==='cancelled')cancelOrderDialog(id); else setStatus(id, a);
 });
 
 /* ---------- واجهة الدليفري ---------- */
@@ -1129,7 +1173,7 @@ async function loadCallcenterOrders() {
  rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
  <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>
  <div class="meta" style="margin:7px 0">المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
- ${stageClockHtml(o)}<div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button>${o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
+ ${stageClockHtml(o)}<div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button><button data-act="dossier" data-id="${o.id}">ملف الطلب</button>${o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
  <details style="margin-top:9px"><summary style="cursor:pointer;padding:7px 0;font-weight:600">تفاصيل وإجراءات إضافية</summary>
  <div class="meta" style="margin:9px 0">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</div>
  <div class="row"><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>
@@ -1474,7 +1518,7 @@ async function loadAll() {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
       const cancel = (isOwner()||me.can_cancel_orders===true) && ['new','received','out'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
       return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
-        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${esc(x.track_code || '')}</td><td><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${esc(x.track_code || '')}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
     }).join('') || '<tr><td colspan="14">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
@@ -2049,7 +2093,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- مسار الطلب: مطبخ ← مشرف ← طيار ---------- */
 function refreshView() { if (!me) return; if (me.role === 'driver') loadMine(); else if (me.workflow_role === 'kitchen') loadKitchen(); else if (me.workflow_role === 'callcenter_followup') { loadCallcenterOrders(); loadCallcenterRatings(); } else if((me.role==='complaints_officer'||me.workflow_role==='complaints_officer')){loadComplaintsInbox();} else { loadAll(); loadPending(); loadCodes(); } }
-const ordCard = (o, btn) => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><span class="badge" style="background:' + (o.workflow_stage === 'new' ? '#868e96' : '#2f9e44') + '">' + (STG[o.workflow_stage] || '') + '</span></div><div class="meta">' + esc(me?.workflow_role==='kitchen'?'الطلب جاهز لإجراءات المطبخ':[o.customer_name, o.phone, o.address].filter(Boolean).join(' · ')) + '</div>' + stageClockHtml(o) + btn + '</div>';
+const ordCard = (o, btn) => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><span class="badge" style="background:' + (o.workflow_stage === 'new' ? '#868e96' : '#2f9e44') + '">' + (STG[o.workflow_stage] || '') + '</span></div><div class="meta">' + esc(me?.workflow_role==='kitchen'?'الطلب جاهز لإجراءات المطبخ':[o.customer_name, o.phone, o.address].filter(Boolean).join(' · ')) + '</div>' + stageClockHtml(o) + ((me?.workflow_role!=='kitchen')?'<button data-act="dossier" data-id="'+o.id+'">ملف الطلب</button>':'') + (['kitchen_ready','supervisor_received'].includes(o.workflow_stage)&&['admin','manager','supervisor'].includes(me?.workflow_role||me?.role)?'<button onclick="suggestOrderDriver('+Number(o.id)+')">اقتراح طيار</button>':'') + btn + '</div>';
 function kitchenView() {
   $('app').innerHTML = shell('<div class="card"><h2>🍳 تجهيز الطلبات</h2><p class="meta">الطلبات الجديدة أولًا. بعد انتهاء التجهيز اضغط «جاهز — حوّل للمشرف».</p></div><div id="kq"></div>');
   bindOut(); loadKitchen();

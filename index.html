@@ -527,42 +527,6 @@ window.addEventListener('offline', () => {
   const app = $('app');
   if (app && me) flash('الاتصال انقطع — البيانات المعروضة قد لا تكون محدثة. سنعيد المزامنة عند عودة الإنترنت.', false);
 });
-async function ownerMfaGate(){
- const listed=await sb.auth.mfa.listFactors();
- if(listed.error){reconnectView('تعذر فحص التحقق الإضافي');return false;}
- const verified=(listed.data?.totp||[]).filter(x=>x.status==='verified');
- const level=await sb.auth.mfa.getAuthenticatorAssuranceLevel();
- if(level.error){reconnectView('تعذر فحص مستوى الجلسة');return false;}
- if(verified.length&&level.data?.currentLevel==='aal2')return true;
- $('app').innerHTML='<div class="card" style="max-width:420px;margin:30px auto;text-align:center"><h2>حماية حساب المالك</h2><p class="meta">التحقق باستخدام تطبيق رموز المصادقة (TOTP)، وليس بصمة الوجه.</p><div id="ownerMfaSetup"></div><div id="ownerMfaErr" class="msg e hide"></div><input id="ownerMfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="رمز من 6 أرقام"><button class="p big" id="ownerMfaSubmit">تحقق وادخل</button><button id="ownerMfaExit">خروج</button></div>';
- $('ownerMfaExit').onclick=async()=>{await appSignOut();};
- const fail=m=>{$('ownerMfaErr').textContent=m;$('ownerMfaErr').className='msg e';};
- let id=verified[0]?.id;
- if(!id){
-  // Discard only incomplete TOTP enrollments so an interrupted setup can restart.
-  // Verified factors are never removed.
-  const pending=(listed.data?.totp||[]).filter(x=>x.status!=='verified');
-  for(const factor of pending){
-   const removed=await sb.auth.mfa.unenroll({factorId:factor.id});
-   if(removed.error){fail('تعذر إعادة إعداد التحقق غير المكتمل. حاول تسجيل الخروج ثم الدخول.');$('ownerMfaSubmit').disabled=true;return false;}
-  }
-  const en=await sb.auth.mfa.enroll({factorType:'totp',friendlyName:'Your Staff Owner'});
-  if(en.error){fail('تعذر إعداد المصادقة: '+en.error.message);$('ownerMfaSubmit').disabled=true;return false;}
-  id=en.data.id;
-  if(en.data.totp?.qr_code?.startsWith('data:image/')){const im=document.createElement('img');im.src=en.data.totp.qr_code;im.alt='QR لتطبيق المصادقة';im.style.cssText='width:180px;display:block;margin:12px auto';$('ownerMfaSetup').appendChild(im);}
-  if(en.data.totp?.secret){const p=document.createElement('p');p.className='meta';p.textContent='مفتاح إعداد سري: '+en.data.totp.secret;$('ownerMfaSetup').appendChild(p);}
- }
- $('ownerMfaSubmit').onclick=async()=>{
-  const v=$('ownerMfaCode').value.trim();
-  if(v.length!==6||!Array.from(v).every(c=>c>='0'&&c<='9'))return fail('أدخل 6 أرقام');
-  $('ownerMfaSubmit').disabled=true;
-  const ch=await sb.auth.mfa.challenge({factorId:id});
-  const result=ch.error?{error:ch.error}:await sb.auth.mfa.verify({factorId:id,challengeId:ch.data.id,code:v});
-  if(result.error){fail('رمز غير صحيح أو منتهي');$('ownerMfaSubmit').disabled=false;return;}
-  await boot();
- };
- return false;
-}
 async function boot() {
   let authResult;
   try { authResult = await sb.auth.getSession(); } catch (e) { return reconnectView(); }
@@ -577,7 +541,7 @@ async function boot() {
   if (!data || !data.active) { return appSignOut('local','الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
   startProfileSync();
-  if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerMfaGate()))return; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
+  if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
   const branchResult=await safeRpc('dlv_my_branches');
   if(branchResult.error)return reconnectView('تعذر التحقق من الفروع المصرح بها حاليًا. أعد المحاولة.');
@@ -625,39 +589,57 @@ async function enterEmployeeDashboard(){
   try{startKitchenDelayMonitor();}catch(e){console.warn('Kitchen monitor unavailable:',e)}
   try{startOrderRealtime();}catch(e){console.warn('Realtime unavailable:',e)}
 }
+function ownerPinValue(value){
+ return String(value||'').replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0)).trim();
+}
 async function ownerPageGate(){
  const r=await safeRpc('dlv_owner_page_status');
  if(r.error)return reconnectView('تعذر التحقق من حماية صفحة المالك');
- if(!r.data?.configured||r.data?.unlocked)return true;
- $('app').innerHTML='<div class="card" style="max-width:420px;margin:35px auto;padding:22px"><h2>قفل صفحة المالك</h2><p>أدخل كلمة مرور الصفحة المستقلة.</p><input type="password" id="ownerPageUnlock" autocomplete="off" placeholder="كلمة مرور الصفحة"><div id="ownerPageError" class="msg e hide"></div><button class="p big" id="ownerPageUnlockBtn">فتح الصفحة</button><button id="ownerPageExit">تسجيل الخروج</button></div>';
+ if(!r.data?.configured){await ownerPagePasswordSettings(true);return false;}
+ if(r.data?.unlocked)return true;
+ const isPin=!!r.data.pin_configured;
+ $('app').innerHTML='<div class="card" style="max-width:420px;margin:35px auto;padding:22px"><h2>قفل صفحة المالك</h2><p>'+(isPin?'أدخل رمز قفل الصفحة المكوّن من 6 أرقام.':'أدخل كلمة مرور قفل الصفحة الحالية. يمكنك تحويلها إلى رمز من 6 أرقام بعد الدخول.')+'</p><input type="password" id="ownerPageUnlock" autocomplete="off" '+(isPin?'inputmode="numeric" maxlength="6" pattern="[0-9٠-٩۰-۹]{6}"':'maxlength="72"')+' placeholder="'+(isPin?'رمز القفل من 6 أرقام':'كلمة مرور قفل الصفحة الحالية')+'"><div id="ownerPageError" class="msg e hide" role="alert"></div><button class="p big" id="ownerPageUnlockBtn">فتح الصفحة</button><button id="ownerPageExit">تسجيل الخروج</button></div>';
  $('ownerPageExit').onclick=async()=>{await appSignOut();};
+ const fail=text=>{$('ownerPageError').className='msg e';$('ownerPageError').textContent=text;};
+ if(r.data?.locked_until&&new Date(r.data.locked_until)>new Date())fail('تم إيقاف المحاولات مؤقتًا. جرّب بعد '+new Date(r.data.locked_until).toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'})+'.');
  $('ownerPageUnlockBtn').onclick=async()=>{
-  const pass=$('ownerPageUnlock').value;$('ownerPageUnlock').value='';
+  const pass=isPin?ownerPinValue($('ownerPageUnlock').value):$('ownerPageUnlock').value;
+  if(isPin&&!/^[0-9]{6}$/.test(pass))return fail('أدخل رمزًا من 6 أرقام فقط');
+  $('ownerPageUnlock').value='';
   $('ownerPageUnlockBtn').disabled=true;
   const result=await safeRpc('dlv_owner_page_unlock',{p_password:pass});
-  if(!result.error&&result.data===true){await boot();return;}
-  $('ownerPageError').className='msg e';$('ownerPageError').textContent='كلمة مرور الصفحة غير صحيحة أو تم تجاوز عدد المحاولات. انتظر 15 دقيقة بعد المحاولات المتكررة.';
+  if(!result.error&&result.data===true){
+   if(!isPin){await ownerPagePasswordSettings(true);return;}
+   await boot();return;
+  }
+  fail('رمز القفل غير صحيح أو تم إيقاف المحاولات مؤقتًا. بعد 5 محاولات خاطئة انتظر 15 دقيقة.');
   $('ownerPageUnlockBtn').disabled=false;
  };
+ $('ownerPageUnlock').onkeydown=e=>{if(e.key==='Enter')$('ownerPageUnlockBtn').click();};
  return false;
 }
-async function ownerPagePasswordSettings(){
+async function ownerPagePasswordSettings(forceSetup=false){
  if(!isOwner())return;
+ const required=forceSetup===true;
  const status=await safeRpc('dlv_owner_page_status');
  if(status.error)return reconnectView('تعذر قراءة إعدادات قفل المالك');
  const configured=!!status.data?.configured;
- $('app').innerHTML='<div class="card" style="max-width:440px;margin:35px auto;padding:20px"><h2>إنشاء / تغيير كلمة مرور صفحة المالك</h2><p class="meta">كلمة مرور مستقلة لا تقل عن 12 حرفًا وتحتوي على حروف كبيرة وصغيرة وأرقام ورموز.</p>'+(configured?'<label>كلمة مرور الصفحة الحالية</label><input id="ownerPageOld" type="password">':'')+'<label>كلمة مرور الصفحة الجديدة</label><input id="ownerPageNew" type="password" autocomplete="new-password"><label>تأكيد كلمة المرور</label><input id="ownerPageConfirm" type="password" autocomplete="new-password"><div id="ownerPageSettingMsg" role="status"></div><button class="p big" id="ownerPageSave">حفظ</button><button id="ownerPageCancel">رجوع</button></div>';
- $('ownerPageCancel').onclick=()=>ownerBranchPicker();
+ const oldIsPin=!!status.data?.pin_configured;
+ $('app').innerHTML='<div class="card" style="max-width:440px;margin:35px auto;padding:20px"><h2>إنشاء / تغيير رمز قفل صفحة المالك</h2><p class="meta">اختر رمزًا سريًا ثابتًا من 6 أرقام فقط. يُطلب بعد تسجيل الدخول بالحساب وكلمة المرور.</p>'+(configured?'<label for="ownerPageOld">'+(oldIsPin?'رمز القفل الحالي':'كلمة مرور قفل الصفحة الحالية')+'</label><input id="ownerPageOld" type="password" autocomplete="off" '+(oldIsPin?'inputmode="numeric" maxlength="6"':'maxlength="72"')+'>':'')+'<label for="ownerPageNew">رمز القفل الجديد — 6 أرقام</label><input id="ownerPageNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9٠-٩۰-۹]{6}"><label for="ownerPageConfirm">تأكيد رمز القفل</label><input id="ownerPageConfirm" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="[0-9٠-٩۰-۹]{6}"><p class="meta">تُوقف المحاولات 15 دقيقة بعد 5 محاولات خاطئة. لا تشارك الرمز مع أحد.</p><div id="ownerPageSettingMsg" role="status"></div><button class="p big" id="ownerPageSave">حفظ الرمز وفتح الصفحة</button><button id="ownerPageCancel">'+(required?'تسجيل الخروج':'رجوع')+'</button></div>';
+ $('ownerPageCancel').onclick=required?async()=>{await appSignOut();}:()=>boot();
  $('ownerPageSave').onclick=async()=>{
-  const pw=$('ownerPageNew').value, confirm=$('ownerPageConfirm').value, old=configured?$('ownerPageOld').value:null;
+  const pw=ownerPinValue($('ownerPageNew').value), confirm=ownerPinValue($('ownerPageConfirm').value);
+  const old=configured?(oldIsPin?ownerPinValue($('ownerPageOld').value):$('ownerPageOld').value):null;
   const msg=$('ownerPageSettingMsg');const fail=t=>{msg.className='msg e';msg.textContent=t;};
-  if(pw!==confirm)return fail('تأكيد كلمة المرور غير مطابق');
-  if(pw.length<12||!/[A-Z]/.test(pw)||!/[a-z]/.test(pw)||!/[0-9]/.test(pw)||!/[^A-Za-z0-9]/.test(pw))return fail('كلمة المرور يجب أن تكون 12 حرفًا على الأقل مع حروف كبيرة وصغيرة ورقم ورمز');
+  if(!/^[0-9]{6}$/.test(pw))return fail('رمز القفل يجب أن يكون 6 أرقام فقط، بدون حروف أو رموز');
+  if(pw!==confirm)return fail('تأكيد الرمز غير مطابق');
+  if(configured&&!old)return fail('أدخل رمز القفل أو كلمة مرور الصفحة الحالية');
   $('ownerPageSave').disabled=true;
   const res=await safeRpc('dlv_owner_page_set_password',{p_new:pw,p_old:old});
+  $('ownerPageNew').value='';$('ownerPageConfirm').value='';if(configured)$('ownerPageOld').value='';
   $('ownerPageSave').disabled=false;
-  if(res.error)return fail('تعذر الحفظ. تأكد من كلمة المرور الحالية.');
-  await ownerPageGate();
+  if(res.error||res.data!==true)return fail('تعذر الحفظ. تأكد من القفل الحالي وانتظر 15 دقيقة إذا تجاوزت 5 محاولات خاطئة.');
+  await boot();
  };
 }
 async function ownerPasswordSettings(){
@@ -724,7 +706,7 @@ async function ownerCompanyPicker(){
  if(!brandResult.error)ownerBrandCache=new Map((brandResult.data||[]).map(x=>[Number(x.company_id),x]));
  if(error)return reconnectView('تعذر تحميل الشركات');
  const companies=data||[];
- $('app').innerHTML=`<div class="card" style="max-width:560px;margin:30px auto;padding:22px;background:#151515;color:#fff;border:1px solid #bc8937"><div class="ys-platform-brand"><img src="yourstaff-icon.svg" alt="شعار Your Staff" width="92" height="92" decoding="async"><h1 style="color:#eebc62;font-size:30px;margin:0">Your Staff</h1><p style="margin:0;color:#f7f0df">إدارة الشركات — حساب مالك المنصة فقط</p></div><div class="ys-partners-title">الشركات المتعاقدة مع Your Staff (${companies.length})</div><div class="grid" style="grid-template-columns:1fr;gap:12px">${companies.map(c=>`<button class="g big" data-company="${c.id}" style="padding:18px;border:1px solid #b98a40;background:#27231c;color:#fff;text-align:right"><span style="display:flex;align-items:center;gap:12px"><img src="${esc(ownerBrandCache.get(Number(c.id))?.logo_url||'yourstaff-icon.svg')}" alt="" loading="lazy" decoding="async" style="width:54px;height:54px;object-fit:contain;border-radius:10px;background:#fff6e9;padding:4px"><strong>${esc(c.name)}</strong></span><small style="display:block;opacity:.75">${!c.active?'⛔ الشركة موقوفة — الاشتراك غير مفعل':c.onboarding_status==='active'?'الشركة مفعلة':'قيد تجهيز العزل الأمني — غير جاهزة للتشغيل'}</small></button><button data-company-toggle="${c.id}" style="padding:10px;border-radius:10px;background:${c.active?'#78342b':'#235a40'};color:white;border:1px solid #b98a40">${c.active?'⛔ إيقاف الشركة':'✅ إعادة تفعيل الشركة'}</button>`).join('')}<button id="ownerAddCompany" class="p big" style="background:#b98a40;color:#111">＋ إضافة شركة جديدة</button></div><button id="ownerBillingHistory" style="margin-top:10px">📋 سجل الاشتراكات والإيقاف</button><button id="ownerBilling" style="margin-top:14px">💳 إدارة الاشتراكات ومواعيد السداد</button><button id="ownerPagePass" style="margin-top:16px">إنشاء / تغيير كلمة مرور صفحة المالك</button><button id="ownerChangePass" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:560px;margin:30px auto;padding:22px;background:#151515;color:#fff;border:1px solid #bc8937"><div class="ys-platform-brand"><img src="yourstaff-icon.svg" alt="شعار Your Staff" width="92" height="92" decoding="async"><h1 style="color:#eebc62;font-size:30px;margin:0">Your Staff</h1><p style="margin:0;color:#f7f0df">إدارة الشركات — حساب مالك المنصة فقط</p></div><div class="ys-partners-title">الشركات المتعاقدة مع Your Staff (${companies.length})</div><div class="grid" style="grid-template-columns:1fr;gap:12px">${companies.map(c=>`<button class="g big" data-company="${c.id}" style="padding:18px;border:1px solid #b98a40;background:#27231c;color:#fff;text-align:right"><span style="display:flex;align-items:center;gap:12px"><img src="${esc(ownerBrandCache.get(Number(c.id))?.logo_url||'yourstaff-icon.svg')}" alt="" loading="lazy" decoding="async" style="width:54px;height:54px;object-fit:contain;border-radius:10px;background:#fff6e9;padding:4px"><strong>${esc(c.name)}</strong></span><small style="display:block;opacity:.75">${!c.active?'⛔ الشركة موقوفة — الاشتراك غير مفعل':c.onboarding_status==='active'?'الشركة مفعلة':'قيد تجهيز العزل الأمني — غير جاهزة للتشغيل'}</small></button><button data-company-toggle="${c.id}" style="padding:10px;border-radius:10px;background:${c.active?'#78342b':'#235a40'};color:white;border:1px solid #b98a40">${c.active?'⛔ إيقاف الشركة':'✅ إعادة تفعيل الشركة'}</button>`).join('')}<button id="ownerAddCompany" class="p big" style="background:#b98a40;color:#111">＋ إضافة شركة جديدة</button></div><button id="ownerBillingHistory" style="margin-top:10px">📋 سجل الاشتراكات والإيقاف</button><button id="ownerBilling" style="margin-top:14px">💳 إدارة الاشتراكات ومواعيد السداد</button><button id="ownerPagePass" style="margin-top:16px">إنشاء / تغيير رمز قفل صفحة المالك</button><button id="ownerChangePass" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
  document.querySelectorAll('[data-company]').forEach(b=>b.onclick=()=>ownerBranchPicker(Number(b.dataset.company)));
  document.querySelectorAll('[data-company-toggle]').forEach(b=>b.onclick=async()=>{
   const id=Number(b.dataset.companyToggle),c=companies.find(x=>Number(x.id)===id);if(!c)return;
@@ -759,7 +741,7 @@ async function ownerCompanyPicker(){
  $('ownerBilling').onclick=ownerBillingSettings;
  $('ownerBillingHistory').onclick=ownerBillingHistory;
  $('ownerChangePass').onclick=ownerPasswordSettings;
- $('ownerPagePass').onclick=ownerPagePasswordSettings;
+ $('ownerPagePass').onclick=()=>ownerPagePasswordSettings();
  $('pickOut').onclick=async()=>{await appSignOut();};
 }
 function ownerPendingBranchPreview(companyId,branch){

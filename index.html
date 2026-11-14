@@ -1485,9 +1485,9 @@ function bikeIcon(bearing=0, live=true, size=90) {
   const height=Math.max(92,Math.round(size*1.55));
   const width=Math.round(height*120/190);
   const angle=Number.isFinite(bearing)?bearing:0;
-  const opacity=live?'1':'.6';
+  const opacity='1'; // Keep brand and motorcycle fully opaque; stale GPS is conveyed in popup/status.
   const html='<div class="ys-motorcycle-icon" style="width:'+width+'px;height:'+height+'px;opacity:'+opacity+';transform:rotate('+angle+'deg);transform-origin:50% 50%;transition:transform .65s ease-out">'+
-    '<img src="rider-topdown-v1.svg?v=20261113" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 3px rgba(0,0,0,.25))">'+
+    '<img src="rider-topdown-v1.svg?v=20261114b" alt="طيار واحة اليمن" draggable="false" style="display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 2px rgba(0,0,0,.65)) drop-shadow(0 0 1px rgba(0,0,0,.7))">'+
     '</div>';
   return L.divIcon({className:'ys-bike-marker ys-motorcycle-marker',html,iconSize:[width,height],iconAnchor:[Math.round(width/2),Math.round(height/2)],popupAnchor:[0,-Math.round(height/2)]});
 }

@@ -2141,6 +2141,7 @@ function openMap() {
 
 /* ---------- إضافة طيار (المدير) ---------- */
 function addDriverForm(fixedBranchId=null,companyBranches=null) {
+  if(!isOwner())return flash('إنشاء حسابات الموظفين متاح لمالك منصة Your Staff فقط',false);
   const pw = generateStrongPassword();
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +

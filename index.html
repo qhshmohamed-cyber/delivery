@@ -589,7 +589,7 @@ function ownerBillingHistory(){
  document.body.appendChild(d);d.querySelector('#billingHistoryClose').onclick=()=>d.remove();
  safeRpc('dlv_owner_billing_history',{p_limit:100}).then(({data,error})=>{
   if(!d.isConnected)return;
-  d.querySelector('#billingHistoryRows').innerHTML=error?'<p>'+esc(error.message)+'</p>':(data||[]).length?(data||[]).map(x=>'<div class="card"><b>'+esc(x.company_name)+'</b><div>'+esc(({billing_updated:'تعديل بيانات الاشتراك',company_suspended:'إيقاف الشركة',company_reactivated:'إعادة التفعيل'})[x.event_type]||x.event_type)+'</div><small>'+esc(new Date(x.event_at).toLocaleString('ar-EG'))+'</small></div>').join(''):'<p>لا توجد تغييرات مسجلة حتى الآن.</p>';
+  d.querySelector('#billingHistoryRows').innerHTML=error?'<p>'+esc(error.message)+'</p>':(data||[]).length?(data||[]).map(x=>'<div class="card"><b>'+esc(x.company_name)+'</b><div>'+esc(({billing_updated:'تعديل بيانات الاشتراك',company_suspended:'إيقاف الشركة',company_reactivated:'إعادة التفعيل'})[x.event_type]||x.event_type)+'</div><small>'+esc(new Date(x.event_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}))+'</small></div>').join(''):'<p>لا توجد تغييرات مسجلة حتى الآن.</p>';
  });
 }
 function ownerBillingSettings(){
@@ -1334,7 +1334,7 @@ function paintComplaintsInbox(){
  const q=($('complaintsSearch')?.value||'').trim().toLowerCase(),status=$('complaintsFilter')?.value||'';
  const rows=complaintsInboxRows.filter(x=>(!status||x.status===status)&&(!q||[x.customer_phone,x.order_no,x.title,x.details,x.followup_action,x.followup_employee,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
  $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
- box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[x.status]||x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG')+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG'):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
+ box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[x.status]||x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
  box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=()=>{
  const x=complaintsInboxRows.find(v=>String(v.id)===b.dataset.complaint);if(x)complaintActionDialog(x);
  });
@@ -1363,7 +1363,7 @@ function openManagementComplaints(){
  safeRpc('dlv_complaint_inbox',{p_branch:isOwner()?null:selectedBranch}).then(({data,error})=>{
   const box=$('complaintsManagementRows');if(!box)return;
   if(error){box.textContent=error.message;return;}
-  box.innerHTML=(data||[]).map(x=>'<div class="card"><b>طلب #'+esc(x.order_no||'—')+' · '+esc(x.title)+'</b><div class="meta">'+new Date(x.created_at).toLocaleString('ar-EG')+' · '+esc(branchTitle(x.branch_id))+' · رقم العميل: '+esc(x.customer_phone||'—')+'</div><p>'+esc(x.details||'')+'</p><div class="meta">الحالة: '+esc(x.status)+' · الإجراء: '+esc(x.followup_action||'لم يتم')+' · الموظف: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+(x.followup_at?' · '+new Date(x.followup_at).toLocaleString('ar-EG'):'')+'</div></div>').join('')||'لا توجد شكاوى';
+  box.innerHTML=(data||[]).map(x=>'<div class="card"><b>طلب #'+esc(x.order_no||'—')+' · '+esc(x.title)+'</b><div class="meta">'+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(branchTitle(x.branch_id))+' · رقم العميل: '+esc(x.customer_phone||'—')+'</div><p>'+esc(x.details||'')+'</p><div class="meta">الحالة: '+esc(x.status)+' · الإجراء: '+esc(x.followup_action||'لم يتم')+' · الموظف: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+(x.followup_at?' · '+new Date(x.followup_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'')+'</div></div>').join('')||'لا توجد شكاوى';
  });
 }
 let followupMapTimer=null;
@@ -1386,7 +1386,7 @@ function openFollowupOrderMap(orderId){
   if(!data||!data.found){$('followupOrderStatus').textContent='الطلب غير متاح';return;}
   const statusText=(ST[data.status]||['غير معروف'])[0];
   const stageText=STG[data.stage]||data.stage||'';
-  const when=data.updated_at?new Date(data.updated_at).toLocaleString('ar-EG'):'لم يرسل موقعًا';
+  const when=data.updated_at?new Date(data.updated_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'لم يرسل موقعًا';
   const fresh=data.updated_at&&(Date.now()-new Date(data.updated_at).getTime()<90000);
   $('followupOrderStatus').innerHTML='<b>الحالة: '+esc(statusText)+'</b><div>المرحلة: '+esc(stageText)+'</div><div>الطيار: '+esc(data.driver_name||(data.assigned?'غير متاح':'لم يتم التعيين'))+'</div><div>الموقع: '+(data.tracking_ended?'انتهت متابعة الموقع بانتهاء الطلب':data.lat==null?'لا توجد إحداثيات متاحة':(fresh?'متصل الآن':'آخر موقع معروف')+' · '+esc(when))+'</div>';
   if(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng))||data.lat===null||data.lng===null){$('followupOrderMap').style.display='none';return;}
@@ -1407,7 +1407,7 @@ async function refreshFollowupPulse(){
  const alerts=Array.isArray(data?.alerts)?data.alerts:[];
  box.innerHTML='<div class="row"><b>📦 نشطة: '+Number(data?.active||0)+'</b><b>✓ مكتملة: '+Number(data?.delivered||0)+'</b><b>⚠️ متأخرة: '+Number(data?.delayed||0)+'</b></div>'+
  (alerts.length?alerts.map(a=>'<div class="card" style="padding:9px"><div class="ord"><b>طلب #'+esc(a.order_no)+'</b><span class="badge">'+esc(a.reason)+'</span></div><div class="row"><button class="g" onclick="openFollowupOrderMap('+Number(a.id)+')">متابعة الطلب</button></div></div>').join(''):'<div class="meta">لا توجد تأخيرات حسب الحدود المحددة للفروع.</div>');
- const stamp=$('cc_pulse_stamp');if(stamp)stamp.textContent='آخر تحديث: '+new Date().toLocaleTimeString('ar-EG');
+ const stamp=$('cc_pulse_stamp');if(stamp)stamp.textContent='آخر تحديث: '+new Date().toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'});
 }
 function startFollowupPulse(){
  clearInterval(followupPulseTimer);
@@ -1429,7 +1429,7 @@ function openFollowupArchive(kind){
   if(!d.isConnected||request!==last)return;
   if(error){box.textContent='تعذر البحث: '+error.message;return;}
   const rows=data?.items||[];$('archiveCount').textContent='إجمالي '+rows.length+' في التاريخ المحدد';
-  box.innerHTML=rows.map(x=>'<div class="card" style="padding:12px"><div class="ord"><b>طلب #'+esc(x.order_no)+'</b><span class="meta">'+esc(branchTitle(x.branch_id))+'</span></div><div class="meta">'+new Date(x.created_at).toLocaleString('ar-EG')+'</div>'+
+  box.innerHTML=rows.map(x=>'<div class="card" style="padding:12px"><div class="ord"><b>طلب #'+esc(x.order_no)+'</b><span class="meta">'+esc(branchTitle(x.branch_id))+'</span></div><div class="meta">'+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+'</div>'+
    (kind==='cancelled'?'<div class="meta">'+esc(x.customer_name||'')+' · '+esc(x.phone||'')+'</div><div>السبب: '+esc(x.failed_reason||'غير مسجل')+'</div>':'<b>'+esc(x.title||'')+'</b><div>'+esc(x.details||'')+'</div><div class="meta">الحالة: '+esc(x.status||'')+' · الإجراء: '+esc(x.followup_action||'لم يسجل')+' · الموظف: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+'</div>')+'</div>').join('')||'<div class="card">لا توجد نتائج في اليوم المحدد</div>';
  }
  $('archiveSearch').onclick=load;$('archiveDay').onchange=load;$('archiveQuery').onkeydown=e=>{if(e.key==='Enter')load();};load();
@@ -1524,13 +1524,13 @@ function openSecurityCommand(){
    if(!d.isConnected||b!==branch())return;
    if(sla.error||inc.error||audit.error)throw(sla.error||inc.error||audit.error);
    $('scKitchen').value=sla.data?.kitchen_minutes??25;$('scDispatch').value=sla.data?.dispatch_minutes??15;$('scDelivery').value=sla.data?.delivery_minutes??45;
-   $('scIncidents').innerHTML=(inc.data||[]).map(x=>'<div class="card"><b>#'+x.id+' · '+esc(x.title)+'</b><div class="meta">'+esc(x.priority)+' · '+esc(x.status)+' · '+new Date(x.created_at).toLocaleString('ar-EG')+'</div><div>'+esc(x.details)+'</div><div class="row"><button data-incident="'+x.id+'" data-next="in_progress">بدء المعالجة</button><button data-incident="'+x.id+'" data-next="resolved">تم الحل</button><button data-incident="'+x.id+'" data-next="open">إعادة فتح</button></div></div>').join('')||'<div class="meta">لا توجد مشكلات مسجلة</div>';
+   $('scIncidents').innerHTML=(inc.data||[]).map(x=>'<div class="card"><b>#'+x.id+' · '+esc(x.title)+'</b><div class="meta">'+esc(x.priority)+' · '+esc(x.status)+' · '+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+'</div><div>'+esc(x.details)+'</div><div class="row"><button data-incident="'+x.id+'" data-next="in_progress">بدء المعالجة</button><button data-incident="'+x.id+'" data-next="resolved">تم الحل</button><button data-incident="'+x.id+'" data-next="open">إعادة فتح</button></div></div>').join('')||'<div class="meta">لا توجد مشكلات مسجلة</div>';
    $('scIncidents').querySelectorAll('button[data-incident]').forEach(btn=>btn.onclick=async()=>{
     const x=(inc.data||[]).find(v=>String(v.id)===btn.dataset.incident);if(!x)return;
     btn.disabled=true;const {error}=await sb.rpc('dlv_manage_incident',{p_id:x.id,p_branch:b,p_title:x.title,p_details:x.details,p_priority:x.priority,p_status:btn.dataset.next});
     if(error){status('فشل تعديل المشكلة: '+error.message);btn.disabled=false;}else reload();
    });
-   $('scAudit').innerHTML=(audit.data||[]).map(x=>'<div class="ord" style="padding:8px 0;border-bottom:1px solid #999"><span>'+esc(x.entity)+' · '+esc(x.action)+' · '+esc(x.entity_id||'')+'</span><small>'+new Date(x.at).toLocaleString('ar-EG')+' · '+esc(String(x.actor||'النظام').slice(0,8))+'</small></div>').join('')||'<div class="meta">لا توجد تغييرات مسجلة بعد تفعيل السجل</div>';
+   $('scAudit').innerHTML=(audit.data||[]).map(x=>'<div class="ord" style="padding:8px 0;border-bottom:1px solid #999"><span>'+esc(x.entity)+' · '+esc(x.action)+' · '+esc(x.entity_id||'')+'</span><small>'+new Date(x.at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(String(x.actor||'النظام').slice(0,8))+'</small></div>').join('')||'<div class="meta">لا توجد تغييرات مسجلة بعد تفعيل السجل</div>';
    status('تم تحميل البيانات بنجاح');
   }catch(e){status('تعذر التحميل: '+e.message);}
  }
@@ -1884,7 +1884,7 @@ async function sendDriverPosition(p, force = false) {
     if (s) s.textContent = error
       ? '⚠ تعذر إرسال الموقع: ' + error.message
       : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
-    if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG')+' · عند قفل الشاشة قد يتوقف GPS حتى إعادة فتح الصفحة';}
+    if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'})+' · عند قفل الشاشة قد يتوقف GPS حتى إعادة فتح الصفحة';}
   } catch(e) {const st=$('locst');if(st)st.textContent='⚠ فشل إرسال GPS: '+String(e?.message||'خطأ اتصال');} finally { locationBusy = false; }
 }
 function attachLocationWatch() {
@@ -2302,7 +2302,7 @@ function openCallcenterEmployeeReport(){
   if(!d.isConnected)return;if(error){box.textContent='تعذر تحميل التقرير: '+error.message;return;}
   if(user){
    box.innerHTML='<button id="ccerBack">← جميع الموظفين</button><h3>طلبات الموظف في '+esc(data.day)+'</h3>'+
-   (data.orders||[]).map(o=>'<div class="card"><div class="ord"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc((ST[o.status]||[o.status])[0])+'</span></div><div class="meta">'+esc(o.employee)+' · '+new Date(o.created_at).toLocaleString('ar-EG')+'</div></div>').join('')||'<div class="card">لا توجد طلبات</div>';
+   (data.orders||[]).map(o=>'<div class="card"><div class="ord"><b>طلب #'+esc(o.order_no)+'</b><span>'+esc((ST[o.status]||[o.status])[0])+'</span></div><div class="meta">'+esc(o.employee)+' · '+new Date(o.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+'</div></div>').join('')||'<div class="card">لا توجد طلبات</div>';
    $('ccerBack').onclick=()=>run();return;
   }
   box.innerHTML='<h3>الموظفون · '+esc(data.day)+'</h3>'+

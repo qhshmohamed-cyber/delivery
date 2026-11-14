@@ -754,11 +754,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
    const roles='متابعة كول سنتر • كنترول المطبخ • مشرف الطيارين • طيار • مدير فرع • مسؤول الشكاوى';
    const enabled=branches.filter(b=>b.active);
    if(!enabled.length)return alert('كل الفروع قيد التجهيز الأمني حاليًا. الوظائف جاهزة كقوالب، لكن إنشاء الحسابات والتشغيل لن يُسمح بهما قبل تفعيل الفرع بعد فحص العزل.\n\nالأدوار: '+roles);
-   const choice=prompt('الأدوار المتاحة لكل فرع:\n'+roles+'\n\nاختر رقم الفرع لإضافة حساب:\n'+enabled.map(b=>b.id+': '+b.name).join('\n'));
-   if(choice===null)return;
-   const branch=enabled.find(b=>Number(b.id)===Number(choice));
-   if(!branch)return alert('اختر رقم فرع مفعل من القائمة.');
-   addDriverForm(Number(branch.id));
+   addDriverForm(null,enabled.map(b=>({id:Number(b.id),name:b.name})));
  };
 
 
@@ -2144,7 +2140,7 @@ function openMap() {
 }
 
 /* ---------- إضافة طيار (المدير) ---------- */
-function addDriverForm(fixedBranchId=null) {
+function addDriverForm(fixedBranchId=null,companyBranches=null) {
   const pw = generateStrongPassword();
   const d = document.createElement('div'); d.className = 'modal';
   d.innerHTML = '<div><h2 style="font-size:16px">إضافة حساب جديد</h2><div id="aerr" class="msg e hide"></div>' +
@@ -2154,11 +2150,17 @@ function addDriverForm(fixedBranchId=null) {
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
   document.body.appendChild(d);
-  $('a_branch').innerHTML=Object.entries(branchNames).map(([id,name])=>'<option value="'+id+'">'+esc(name)+'</option>').join('');
-  if(fixedBranchId)$('a_branch').value=String(fixedBranchId);
-  else if(selectedBranch)$('a_branch').value=String(selectedBranch);
-  if(fixedBranchId)$('a_branch').disabled=true;
-  refreshBranchNames().then(()=>{if(!d.isConnected)return;const current=$('a_branch').value;$('a_branch').innerHTML=Object.entries(branchNames).map(([id,name])=>'<option value="'+id+'">'+esc(name)+'</option>').join('');if(fixedBranchId){$('a_branch').value=String(fixedBranchId);$('a_branch').disabled=true;}else if(current)$('a_branch').value=current;});
+  // Company-scoped owner branch choices, never the global branchNames cache.
+  const branchChoices=Array.isArray(companyBranches)?companyBranches
+    :fixedBranchId?[{id:Number(fixedBranchId),name:branchTitle(fixedBranchId)}]
+    :permittedBranches().map(id=>({id,name:branchTitle(id)}));
+  const validChoices=branchChoices.filter(b=>Number.isInteger(Number(b.id))&&Number(b.id)>0);
+  const branchSelect=$('a_branch');
+  branchSelect.innerHTML='<option value="">اختر الفرع</option>'+validChoices.map(b=>'<option value="'+Number(b.id)+'">'+esc(b.name)+'</option>').join('');
+  if(fixedBranchId)branchSelect.value=String(fixedBranchId);
+  else if(selectedBranch&&validChoices.some(b=>Number(b.id)===Number(selectedBranch)))branchSelect.value=String(selectedBranch);
+  if(fixedBranchId)branchSelect.disabled=true;
+  if(!validChoices.length){branchSelect.disabled=true;$('a_ok').disabled=true;$('aerr').textContent='لا توجد فروع مصرح بها لإنشاء حساب';$('aerr').className='msg e';}
   const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
   $('a_x').onclick = () => d.remove();
@@ -2167,6 +2169,7 @@ function addDriverForm(fixedBranchId=null) {
     const name = $('a_n').value.trim(), code = $('a_c').value.trim(), pass = $('a_p').value, email = mail();
     const er = $('aerr'), fail = t => { er.textContent = t; er.className = 'msg e'; $('a_ok').disabled = false; };
     if (!name || !code) return fail('اكتب الاسم والكود');
+    if(!validChoices.some(b=>Number(b.id)===Number($('a_branch').value)))return fail('اختر فرعًا مصرحًا به من القائمة');
     if(fixedBranchId && Number($('a_branch').value)!==Number(fixedBranchId))return fail('الفرع غير مطابق');
     if (pass.length < 12 || !/[A-Z]/.test(pass) || !/[a-z]/.test(pass) || !/[0-9]/.test(pass) || !/[^A-Za-z0-9]/.test(pass)) return fail('كلمة السر يجب أن تكون 12 حرفًا على الأقل وبها حرف كبير وصغير ورقم ورمز');
     if (!$('a_m').value.includes('@') && !/[a-z0-9]/i.test(code)) return fail('اكتب كود بأرقام أو حروف إنجليزي، أو اكتب الإيميل بنفسك');

@@ -678,8 +678,14 @@ async function ownerBranchPicker(companyId=1){
   const rows=result.data||[];
   const available=rows.filter(x=>x.implemented);
   const menu=rows.map((x,i)=>(i+1)+'. '+x.title_ar+' — '+(!x.implemented?'قيد التطوير':x.enabled?'مفعلة':'جاهزة للتفعيل')).join('\\n');
-  const action=prompt('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+menu+'\\n\\nاكتب رقم الميزة الجاهزة لتفعيلها أو إيقافها، أو اكتب تقرير لعرض نتائج التقييمات:');
+  const action=prompt('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+menu+'\\n\\nاكتب رقم الميزة الجاهزة لتفعيلها أو إيقافها، أو اكتب تقرير لنتائج التقييمات، أو مطبخ لتقرير أداء المطبخ:');
   if(action===null)return;
+  if(action.trim()==='مطبخ'){
+    const report=await safeRpc('dlv_owner_branch_kitchen_summary',{p_branch_id:branchId});
+    if(report.error)return alert('تعذر عرض تقرير المطبخ: '+report.error.message);
+    const x=(report.data||[])[0]||{};
+    return alert('تقرير المطبخ — آخر 30 يوم\\nإجمالي الطلبات: '+Number(x.total_orders||0)+'\\nاستلمها المطبخ: '+Number(x.received_by_kitchen||0)+'\\nتم تجهيزها: '+Number(x.ready_orders||0)+'\\nمتوسط التجهيز بالدقائق: '+(x.avg_prep_minutes??'لا توجد بيانات')+'\\nتجاوزت 30 دقيقة: '+Number(x.over_30_min||0));
+  }
   if(action.trim()==='تقرير'){
     const report=await safeRpc('dlv_owner_branch_rating_summary',{p_branch_id:branchId});
     if(report.error)return alert('تعذر عرض التقرير: '+report.error.message);
@@ -693,7 +699,7 @@ async function ownerBranchPicker(companyId=1){
   if(!confirm((item.enabled?'إيقاف':'تفعيل')+' ميزة '+item.title_ar+' لهذا الفرع فقط؟'))return;
   const change=await safeRpc('dlv_owner_set_branch_addon',{p_branch_id:branchId,p_code:item.code,p_enabled:!item.enabled});
   if(change.error)return alert('تعذر حفظ الميزة: '+change.error.message);
-  alert('تم '+(item.enabled?'إيقاف':'تفعيل')+' '+item.title_ar+' لهذا الفرع. '+(!item.enabled?'استخدم زر الميزات مرة أخرى واكتب تقرير لعرض النتائج.':''));
+  alert('تم '+(item.enabled?'إيقاف':'تفعيل')+' '+item.title_ar+' لهذا الفرع. '+(!item.enabled?'استخدم زر الميزات مرة أخرى واكتب تقرير للتقييمات أو مطبخ لأداء المطبخ.':''));
  };
  $('ownerEditCompanyBrand').onclick=async()=>{
   const current=ownerBrandCache.get(Number(companyId))||{};

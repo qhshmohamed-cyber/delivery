@@ -757,7 +757,7 @@ function newOrderForm() {
     const title=document.createElement('h2');title.textContent='تم تسجيل الطلب #'+orderNo;panel.appendChild(title);
     if(trackingCode){
       const link=location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
-      const msg=(brandConfig?.brand_name||'المطعم')+' — طلب رقم #'+orderNo+'\\nتابع طلبك من هنا: '+link;
+      const msg=(brandConfig?.brand_name||'المطعم')+' — طلب رقم #'+orderNo+'\nتابع طلبك من هنا: '+link;
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
@@ -1958,7 +1958,7 @@ const trackMsg = o => 'أهلًا ' + (o.customer_name || '') + '، تابع ط�
 function copyMsg(id) { const o = ORD[id]; if (!o) return; navigator.clipboard && navigator.clipboard.writeText(trackMsg(o)); flash('اتنسخت رسالة العميل، ابعتها له', true); }
 function waMsg(id) {
   const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);
-  if(!/^20(?:10|11|12|15)\\d{8}$/.test(d))return flash('رقم العميل غير صالح لواتساب',false);
+  if(!/^20(?:10|11|12|15)\d{8}$/.test(d))return flash('رقم العميل غير صالح لواتساب',false);
   const link=document.createElement('a');link.href='https://wa.me/'+d+'?text='+encodeURIComponent(trackMsg(o));link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();
 }
 async function loadCodes() {

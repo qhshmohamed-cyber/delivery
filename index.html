@@ -1317,9 +1317,10 @@ function newOrderForm() {
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
       const open=document.createElement('a');open.href=link;open.target='_blank';open.rel='noopener noreferrer';open.textContent='🔗 فتح متابعة العميل';open.style.cssText='padding:12px;background:#eee0c2;border-radius:9px;color:#4b2814;font-weight:700;text-decoration:none';
       actions.append(copy,open);
-      if(validPhone&&consent){
+      if(validPhone&&consent&&msg){
         const wa=document.createElement('a');wa.href=customerWhatsAppUrl(normalizedPhone,msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 إرسال المتابعة على واتساب';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
       }
+      if(validPhone&&consent&&!msg){const note=document.createElement('div');note.className='meta';note.textContent='تعذر تحميل تحية الشركة، لذلك تم تعطيل إرسال واتساب لحماية هوية العميل. يمكن إعادة المحاولة من صفحة الطلبات.';actions.appendChild(note);}
       if(validPhone&&!consent){const note=document.createElement('div');note.className='meta';note.textContent='فتح واتساب لإرسال رابط المتابعة متاح بعد موافقة العميل فقط.';actions.appendChild(note);}
       panel.appendChild(actions);const preview=document.createElement('pre');preview.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f7f1e6;color:#302014;padding:12px;border-radius:10px;margin-top:12px';preview.textContent=msg;panel.appendChild(preview);
       if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='زر واتساب غير متاح حتى يتم تأكيد موافقة العميل على استلام رسالة المتابعة.';panel.appendChild(note);}
@@ -2744,7 +2745,7 @@ function trackView(code0) {
     if(j.brand&&typeof j.brand==='object'){
       const bn=String(j.brand.name||'المطعم').slice(0,120);
       const logo=String(j.brand.logo_url||'');
-      const logoSafe=/^https:\/\/[^"'<>\\s]+$/i.test(logo)||/^[a-z0-9_./-]+$/i.test(logo)&&!logo.startsWith('//');
+      const logoSafe=/^https:\/\/[^"'<>\s]+$/i.test(logo)||(/^[a-z0-9_./-]+$/i.test(logo)&&!logo.startsWith('//'));
       const color=String(j.brand.brand_color||'');
       const gold=String(j.brand.gold_color||'');
       if(/^#[0-9a-f]{6}$/i.test(color))document.documentElement.style.setProperty('--brand',color);

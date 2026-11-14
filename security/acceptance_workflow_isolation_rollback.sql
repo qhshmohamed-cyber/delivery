@@ -19,7 +19,7 @@ begin
  perform set_config('request.jwt.claim.sub',d::text,true);
  begin perform public.dlv_set_status(oid,'out',null);raise exception 'Illegal transition accepted';exception when raise_exception then if sqlerrm='Illegal transition accepted' then raise;end if;end;
  perform set_config('request.jwt.claim.sub',k::text,true);perform public.dlv_kitchen_forward(oid,null);
- perform set_config('request.jwt.claim.sub',s::text,true);perform public.dlv_supervisor_receive(oid,null);perform public.dlv_assign_driver(oid,d,null);
+ insert into private.dlv_driver_duty(user_id,state) values(d,'available') on conflict(user_id) do update set state='available',updated_at=now();perform set_config('request.jwt.claim.sub',s::text,true);perform public.dlv_supervisor_receive(oid,null);perform public.dlv_assign_driver(oid,d,null);
  perform set_config('request.jwt.claim.sub',d::text,true);perform public.dlv_set_status(oid,'received',null);perform public.dlv_set_status(oid,'out',null);perform public.dlv_set_status(oid,'delivered',null);
  if not exists(select 1 from public.dlv_orders where id=oid and status='delivered' and received_at is not null and out_at is not null and delivered_at is not null) then raise exception 'Workflow failed';end if;
  if (select count(*) from public.dlv_workflow_events where order_id=oid)<6 then raise exception 'Missing workflow history';end if;

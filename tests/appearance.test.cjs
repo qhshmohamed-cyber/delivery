@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const theme=require('../appearance.js');
+assert.deepEqual(theme.normalize({cards:{size:20,color:'#FFFFFF',background:'#211c1b',radius:16}}),{cards:{color:'#ffffff',background:'#211c1b',size:20,radius:16}});
+for(const payload of [null,[],{evil:{color:'#ffffff'}},{cards:{color:'red;display:none',background:'url(https://bad.example)',size:1,padding:99,position:'fixed'}}])assert.deepEqual(theme.normalize(payload),{});
+assert.equal(theme.contrast('#000000','#ffffff'),21);
+assert(theme.contrast(theme.ink('#211c1b'),'#211c1b')>=4.5);
+assert(theme.contrast(theme.ink('#fff8ea'),'#fff8ea')>=4.5);
+const key='path:manager:section:nth-of-type(1)>input:nth-of-type(2)';
+assert(theme.css({[key]:{size:22,color:'#ffffff',background:'#121212'}}).includes('body[data-ys-view="manager"] #app>section:nth-of-type(1)>input:nth-of-type(2)'));
+assert.equal(theme.css({'path:manager:input:nth-of-type(1){display:none}':{size:20}}),'');
+assert.equal(theme.css({'path:manager:input:nth-of-type(0)':{size:20}}),'');
+assert(theme.css({cards:{color:'#ffffff',background:'#211c1b'}}).includes('--ys-on-card:#ffffff;'));
+// Commas inside :is() must remain a selector list, not be split into invalid CSS.
+assert(theme.css({inputs:{size:20}}).includes(':is(body.ys-tenant :is(input:not([type=color]):not([type=checkbox]):not([type=radio]),select,textarea))'));
+const app={},section={tagName:'SECTION',parentElement:app},field={tagName:'INPUT',parentElement:section};app.children=[section];section.children=[field];
+assert.equal(theme.targetFor(field,app,'manager'),'path:manager:section:nth-of-type(1)>input:nth-of-type(1)');
+assert.equal(theme.targetFor(field,app,'manager" onload='),'');
+const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
+assert(!html.includes('body.ys-tenant{--bg:#24180f;--card:#211c1b;'));
+assert(html.includes('YourStaffAppearance.apply(brandConfig.appearance||{})'));
+assert(html.includes(".eq('company_id',companyId).select('*').single()"));
+console.log('PASS appearance: contrast on light/dark palettes, safe CSS values and selectors, per-screen field scope, inherited card contrast, company-scoped persistence');

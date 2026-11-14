@@ -16,6 +16,8 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script>
 <script src="session-actions.js?v=1"></script>
+<script src="appearance.js?v=1"></script>
+<link rel="stylesheet" href="appearance.css?v=1">
 <style>
 :root{--bg:#101114;--card:#1b1d20;--text:#f7f0df;--muted:#d8cbb5;--line:#a77d3e;--brand:#a77d3e;--gold:#c69b53}
 
@@ -87,7 +89,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}
 
 /* Authenticated company theme: consistent contrast on mobile and desktop */
-body.ys-tenant{--bg:#24180f;--card:#211c1b;--text:#fff5e3;--muted:#e6d4b8;--line:#b78b50;background:linear-gradient(160deg,#2c1c12,#4a2e1b 52%,#21170f)!important;color:var(--text)!important}
+body.ys-tenant{--text:var(--ys-on-card);--muted:var(--ys-muted-card);--line:var(--gold);background:var(--bg)!important;color:var(--text)!important}
 body.ys-tenant::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:var(--tenant-wallpaper,none)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;opacity:.13!important}
 body.ys-tenant::after{content:"";display:block!important;position:fixed;inset:0;pointer-events:none;z-index:0;background-image:var(--tenant-logo,none)!important;background-size:min(68vw,340px) auto!important;background-position:center 48%!important;background-repeat:no-repeat!important;opacity:.3!important}
 body.ys-tenant .wrap,body.ys-tenant #app{position:relative;z-index:1}
@@ -406,6 +408,7 @@ function ysThemeColors(config){
 }
 
 function resetPlatformBrand(){
+ YourStaffAppearance.apply({});
  brandConfig={...PLATFORM_BRAND};activeBrandCompanyId=null;
  for(const [key,value] of Object.entries(ysThemeColors(PLATFORM_BRAND)))document.documentElement.style.setProperty(key,value);
  document.body.classList.remove('ys-tenant');document.body.style.removeProperty('--tenant-logo');document.body.style.removeProperty('--tenant-wallpaper');
@@ -423,6 +426,7 @@ function applyBrandConfig(c,ownerPreview=false){
  const root=document.documentElement;
  for(const [key,value] of [['--bg',brandConfig.bg_color],['--card',brandConfig.card_color],['--brand',brandConfig.brand_color],['--gold',brandConfig.gold_color]])root.style.setProperty(key,value||'');
  for(const [key,value] of Object.entries(ysThemeColors(brandConfig)))root.style.setProperty(key,value);
+ YourStaffAppearance.apply(brandConfig.appearance||{});
  document.title='Your Staff — '+(brandConfig.brand_name||'الشركة');
  document.querySelectorAll('[data-brand-logo]').forEach(i=>{i.src=brandConfig.logo_url||'yourstaff-icon.svg'});
  document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'');
@@ -866,7 +870,7 @@ function ownerBillingSettings(){
 async function ownerCompanyPicker(){
  resetPlatformBrand();ownerActiveCompanyId=null;
  document.body.classList.add('ys-platform'); document.title='Your Staff — الشركات';
- const [{data,error},brandResult]=await Promise.all([safeRpc('dlv_owner_list_companies'),sb.from('dlv_company_branding').select('company_id,brand_name,logo_url,background_url,bg_color,card_color,brand_color,gold_color,app_name')]);
+ const [{data,error},brandResult]=await Promise.all([safeRpc('dlv_owner_list_companies'),sb.from('dlv_company_branding').select('*')]);
  if(!brandResult.error)ownerBrandCache=new Map((brandResult.data||[]).map(x=>[Number(x.company_id),x]));
  if(error)return reconnectView('تعذر تحميل الشركات');
  const companies=data||[];
@@ -946,6 +950,7 @@ async function openOwnerBranchNameEditor(companyId,branch){
 }
 
 async function ownerBranchPicker(companyId=ownerActiveCompanyId){
+ document.body.dataset.ysView='company';
  const requestId=++ownerBranchPickerRequestId;
  const stillCurrent=()=>requestId===ownerBranchPickerRequestId&&isOwner()&&Number(ownerActiveCompanyId)===Number(companyId);
  if(!Number.isInteger(Number(companyId))||Number(companyId)<1)return ownerCompanyPicker();
@@ -976,6 +981,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  <button id="ownerShowBranches" class="big" style="min-height:84px">🏢<div>الفروع</div></button>
  <button id="addNewBranch" class="big" style="min-height:84px">➕<div>فرع جديد</div></button>
  <button id="ownerEditCompanyBrand" class="big" style="min-height:84px">🎨<div>الهوية</div></button>
+ <button type="button" class="big" onclick="openCompanyAppearance()" style="min-height:84px">Aa<div>الخط والألوان والخانات</div></button>
  <button id="ownerBranchAddons" class="big" style="min-height:84px">🧩<div>الإضافات</div></button>
  <button id="ownerPreviewAddons" class="big" style="min-height:84px">👁️<div>معاينة</div></button>
  <button id="ownerStaffSetup" class="big" style="min-height:84px">👥<div>تجهيز الفريق</div></button><button id="ownerSetupStatus" class="big" style="min-height:84px">🛡️<div>فحص التجهيز</div></button>
@@ -1196,7 +1202,24 @@ function startKitchenDelayMonitor() {
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); }; }
+function bindOut() { document.body.dataset.ysView=me?.workflow_role||me?.role||'staff';void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); };if(isOwner()&&!$('appearanceSettingsButton')){const button=document.createElement('button');button.id='appearanceSettingsButton';button.textContent='🎨 الخط والألوان';button.onclick=openCompanyAppearance;document.querySelector('.ys-header-actions')?.appendChild(button);} }
+
+async function openCompanyAppearance(){
+ if(!OWNER_ONLY())return;
+ const companyId=Number(ownerActiveCompanyId),epoch=appSessionEpoch;
+ if(!Number.isInteger(companyId)||companyId<1)return flash('اختر الشركة أولًا',false);
+ const {data,error}=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).single();
+ if(epoch!==appSessionEpoch||!isOwner()||Number(ownerActiveCompanyId)!==companyId)return;
+ if(error)return flash('تعذر تحميل إعدادات مظهر الشركة',false);
+ YourStaffAppearance.open({config:data.appearance||{},brand:data,onSave:async appearance=>{
+  if(epoch!==appSessionEpoch||!isOwner()||Number(ownerActiveCompanyId)!==companyId)throw Error('أعد فتح الشركة وقفل المالك قبل الحفظ');
+  const result=await sb.from('dlv_company_branding').update({appearance,updated_at:new Date().toISOString()}).eq('company_id',companyId).select('*').single();
+  if(result.error)throw Error('تعذر الحفظ. تحقق من الاتصال وأن قفل صفحة المالك ما زال مفتوحًا.');
+  if(epoch!==appSessionEpoch||!isOwner()||Number(ownerActiveCompanyId)!==companyId)throw Error('تغيرت الشركة أو انتهت الجلسة؛ افتح إعدادات الشركة مجددًا');
+  ownerBrandCache.set(companyId,result.data);tenantBrandCache.set(companyId,result.data);applyBrandConfig(result.data,true);
+  return result.data.appearance;
+ }});
+}
 
 /* ---------- هوية النظام (مالك النظام فقط) ---------- */
 async function openBrandSettings(){

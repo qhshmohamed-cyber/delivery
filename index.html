@@ -1671,13 +1671,14 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
   if(!allowed.includes(Number(id)))return alert('الفرع المختار لا يتبع الشركة الحالية.');
  }
  if(!Number.isInteger(Number(id))||Number(id)<1)return alert('اختر فرعًا واحدًا أولًا لسحب تقريره.');
- const day=requestedDay||prompt('تاريخ التقرير (YYYY-MM-DD):',reportOperationalDay());
+ const day=isOwner()?(requestedDay||prompt('تاريخ التقرير (YYYY-MM-DD):',reportOperationalDay())):reportOperationalDay();
  if(day===null)return;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day)return alert('تاريخ التقرير غير صحيح.');
  const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(id),p_day:day});
  if(error)return alert('تعذر إنشاء التقرير: '+error.message);
  const h=x=>esc(String(x??''));
  if(!data||typeof data!=='object'||Array.isArray(data)||!data.orders||typeof data.orders!=='object'||!Array.isArray(data.order_details))return alert('الخادم لم يرجع تقريرًا مكتملًا. لن يتم تنزيل ملف ناقص.');
+ if(Number(data.branch_id)!==Number(id)||data.day!==day)return alert('بيانات التقرير لا تطابق الفرع أو التاريخ المطلوب. تم إيقاف التنزيل لحماية البيانات.');
  const orders=data.orders||{}, incidents=data.incidents||{};
  const staff=(Array.isArray(data.staff)?data.staff:[]).map(x=>'<tr><td>'+h(x.employee)+'</td><td>'+h(x.orders)+'</td></tr>').join('');
  const issues=(Array.isArray(incidents.items)?incidents.items:[]).map(x=>'<tr><td>'+h(x.category)+'</td><td>'+h(x.title)+'</td><td>'+h(x.status)+'</td></tr>').join('');

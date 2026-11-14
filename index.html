@@ -501,8 +501,8 @@ let branchPickerRequestId=0;
 async function employeeBranchPicker(permitted){
   const requestId=++branchPickerRequestId;
   const {data,error}=await safeRpc('dlv_my_branches');
-  if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
   if(requestId!==branchPickerRequestId)return;
+  if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
   const branches=(data||[]).filter(b=>permitted.includes(Number(b.id)) && Number.isInteger(Number(b.id)) && Number(b.id)>0);
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div>${selectedBranch&&branches.some(b=>Number(b.id)===Number(selectedBranch))?'<button id="empBack" class="g big" style="margin-top:12px">↩️ الرجوع للفرع الحالي</button>':''}<button id="empOut">تسجيل الخروج</button></div>`;

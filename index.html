@@ -2150,17 +2150,39 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     '<div class="meta" style="margin-top:8px">الإيميل: <b id="a_e" dir="ltr">—</b></div>' +
     '<div class="row" style="margin-top:14px"><button class="p big" id="a_ok" style="flex:1">إنشاء الحساب</button><button class="big" id="a_x" style="flex:0 0 90px">إغلاق</button></div></div>';
   document.body.appendChild(d);
-  // Company-scoped owner branch choices, never the global branchNames cache.
-  const branchChoices=Array.isArray(companyBranches)?companyBranches
-    :fixedBranchId?[{id:Number(fixedBranchId),name:branchTitle(fixedBranchId)}]
-    :permittedBranches().map(id=>({id,name:branchTitle(id)}));
-  const validChoices=branchChoices.filter(b=>Number.isInteger(Number(b.id))&&Number(b.id)>0);
-  const branchSelect=$('a_branch');
-  branchSelect.innerHTML='<option value="">اختر الفرع</option>'+validChoices.map(b=>'<option value="'+Number(b.id)+'">'+esc(b.name)+'</option>').join('');
-  if(fixedBranchId)branchSelect.value=String(fixedBranchId);
-  else if(selectedBranch&&validChoices.some(b=>Number(b.id)===Number(selectedBranch)))branchSelect.value=String(selectedBranch);
-  if(fixedBranchId)branchSelect.disabled=true;
-  if(!validChoices.length){branchSelect.disabled=true;$('a_ok').disabled=true;$('aerr').textContent='لا توجد فروع مصرح بها لإنشاء حساب';$('aerr').className='msg e';}
+  // Resolve the owner company from the server, not from an employee's branch grants.
+  // Never show branches belonging to another company.
+  let validChoices=[];
+  const branchSelect=d.querySelector('#a_branch');
+  const createButton=d.querySelector('#a_ok');
+  const branchError=d.querySelector('#aerr');
+  branchSelect.disabled=true;
+  branchSelect.innerHTML='<option value="">جاري تحميل فروع الشركة...</option>';
+  createButton.disabled=true;
+  async function loadAccountBranches(){
+    const ownerCompany=isOwner()&&Number.isInteger(Number(ownerActiveCompanyId))&&Number(ownerActiveCompanyId)>0
+      ?Number(ownerActiveCompanyId):null;
+    let choices=Array.isArray(companyBranches)?companyBranches:null;
+    if(ownerCompany){
+      const result=await safeRpc('dlv_owner_company_branches',{p_company_id:ownerCompany});
+      if(!d.isConnected)return;
+      if(result.error){branchError.textContent='تعذر تحميل فروع الشركة: '+result.error.message;branchError.className='msg e';branchSelect.innerHTML='<option value="">تعذر تحميل الفروع</option>';return;}
+      choices=(result.data||[]).filter(b=>b.active).map(b=>({id:Number(b.id),name:b.name}));
+    }else if(!choices){
+      choices=fixedBranchId?[{id:Number(fixedBranchId),name:branchTitle(fixedBranchId)}]
+        :permittedBranches().map(id=>({id,name:branchTitle(id)}));
+    }
+    if(!d.isConnected)return;
+    validChoices=(choices||[]).filter(b=>Number.isInteger(Number(b.id))&&Number(b.id)>0);
+    branchSelect.innerHTML='<option value="">-- اختر الفرع --</option>'+validChoices.map(b=>'<option value="'+Number(b.id)+'">'+esc(b.name)+'</option>').join('');
+    if(fixedBranchId&&validChoices.some(b=>Number(b.id)===Number(fixedBranchId)))branchSelect.value=String(fixedBranchId);
+    else if(selectedBranch&&validChoices.some(b=>Number(b.id)===Number(selectedBranch)))branchSelect.value=String(selectedBranch);
+    else if(validChoices.length===1)branchSelect.value=String(validChoices[0].id);
+    branchSelect.disabled=!!fixedBranchId||!validChoices.length;
+    createButton.disabled=!validChoices.length;
+    if(!validChoices.length){branchError.textContent='لا توجد فروع مفعلة ومصرح بها في هذه الشركة';branchError.className='msg e';}
+  }
+  loadAccountBranches().catch(e=>{if(!d.isConnected)return;branchError.textContent='تعذر تحميل الفروع، أعد فتح النافذة';branchError.className='msg e';console.error('Branch selector failed',e)});
   const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
   $('a_x').onclick = () => d.remove();

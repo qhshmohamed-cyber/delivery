@@ -1,0 +1,11 @@
+{
+  "appId": "com.yourstaff.delivery",
+  "appName": "Your Staff Delivery",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -130,9 +130,13 @@ body.ys-platform .meta{color:#d8cbb5}
 @media print{#rpt .card,#rpt .stat{background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important}#rpt .meta,#rpt .stat span,#rpt h2{color:#333!important}#rpt .ord{break-inside:avoid}#rpt .grid{grid-template-columns:repeat(3,1fr)}}
 
 /* Persistent platform clock: shared by all tenants and screens. */
-#ys-live-clock{position:sticky;top:0;z-index:1100;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;min-height:38px;padding:7px 12px;background:#121b2a;color:#f7f2e7;border-bottom:1px solid #b68a47;font:600 13px/1.5 system-ui,sans-serif;direction:rtl;font-variant-numeric:tabular-nums;box-shadow:0 2px 12px #0002}
+#ys-live-clock{position:relative;z-index:1;box-sizing:border-box;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;min-height:38px;padding:7px 12px;background:#121b2a;color:#f7f2e7;border-bottom:1px solid #b68a47;font:600 13px/1.5 system-ui,sans-serif;direction:rtl;font-variant-numeric:tabular-nums;box-shadow:0 2px 12px #0002}
 #ys-live-clock .ys-clock-time{color:#f2cb7c;font-weight:800;font-size:15px;direction:ltr;unicode-bidi:isolate}
 #ys-live-clock .ys-clock-zone{font-size:11px;opacity:.78}
+body.ys-tenant #ys-live-clock{background:var(--card,#1b1d20);border-bottom-color:var(--brand,#a77d3e);color:var(--gold,#c69b53);box-shadow:none}
+body.ys-tenant #ys-live-clock .ys-clock-time{color:var(--gold,#c69b53)}
+body.ys-tenant #ys-live-clock .ys-clock-zone{color:var(--gold,#c69b53);opacity:1}
+
 @media(max-width:480px){#ys-live-clock{gap:6px;font-size:11px;padding:5px 8px}#ys-live-clock .ys-clock-time{font-size:13px}}
 @media print{#ys-live-clock{display:none!important}}
 </style>

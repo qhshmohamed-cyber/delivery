@@ -738,26 +738,42 @@ function newOrderForm() {
     const {data: createdId, error} = await safeRpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
       p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: null, p_callcenter_staff_id:Number($('n_staff').value), p_branch_id: (isOwner() || (me.allowed_branch_ids||[]).length>1) ? Number($('n_branch').value) : null});
     if (error) { $('n_ok').disabled = false; $('n_ok').textContent='تسجيل'; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
-    let codeText = '';
-    if (createdId) {
-      const {data: createdOrder} = await sb.from('dlv_orders').select('track_code').eq('id', createdId).maybeSingle();
-      if (createdOrder && createdOrder.track_code) codeText = ' — كود متابعة العميل: ' + createdOrder.track_code;
+    const orderNo=orderNumber;
+    let trackingCode='';
+    if(createdId){
+      const {data:createdOrder,error:trackError}=await sb.from('dlv_orders').select('track_code').eq('id',createdId).maybeSingle();
+      if(trackError)console.warn('Tracking code lookup:',trackError.message);
+      trackingCode=String(createdOrder?.track_code||'').trim();
     }
-    const consent = $('n_wa_consent')?.checked === true;
-    const customerPhone = String($('n_p')?.value||'').replace(/\D/g,'');
-    const normalizedPhone = customerPhone.startsWith('0') ? '20'+customerPhone.slice(1) : customerPhone;
-    // Until a verified WhatsApp Business sender is configured, never claim automatic delivery.
-    const trackingCode = codeText.match(/[A-HJ-NP-Z2-9]{8}/)?.[0] || '';
+    const consent=$('n_wa_consent')?.checked===true;
+    const rawPhone=String($('n_p')?.value||'').replace(/\D/g,'');
+    const normalizedPhone=rawPhone.startsWith('0')?'20'+rawPhone.slice(1):rawPhone;
+    const validPhone=/^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone);
+    d.remove();
     refreshView();
-    if (consent && /^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone) && trackingCode) {
-      const link = location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
-      const msg = (brandConfig?.brand_name||brandConfig?.app_name||'المطعم')+' — تم تسجيل طلبك رقم '+$('n_no').value+'. تابع طلبك من هنا: '+link;
-      const waLink = 'https://wa.me/'+normalizedPhone+'?text='+encodeURIComponent(msg);
-      const go = document.createElement('a');go.href=waLink;go.target='_blank';go.rel='noopener noreferrer';go.textContent='فتح واتساب لإرسال رابط المتابعة';
-      go.style.cssText='display:block;padding:12px;background:#fff8ea;color:#5a3317;border:1px solid #b9832e;border-radius:10px;margin:12px 0;text-align:center';
-      d.remove();const panel=document.createElement('div');panel.className='card';panel.append('تم حفظ الطلب. لم يتم إرسال واتساب تلقائيًا. اضغط لإرسال الرسالة من واتساب: ',go);$('app')?.prepend(panel);
-    } else { d.remove(); }
-    flash('تم تسجيل الطلب' + codeText, true);
+    const oldPanel=document.getElementById('createdOrderTrackingPanel');if(oldPanel)oldPanel.remove();
+    const panel=document.createElement('section');
+    panel.id='createdOrderTrackingPanel';panel.className='card';
+    const title=document.createElement('h2');title.textContent='تم تسجيل الطلب #'+orderNo;panel.appendChild(title);
+    if(trackingCode){
+      const link=location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
+      const msg=(brandConfig?.brand_name||'المطعم')+' — طلب رقم #'+orderNo+'\\nتابع طلبك من هنا: '+link;
+      const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
+      const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
+      const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
+      const open=document.createElement('a');open.href=link;open.target='_blank';open.rel='noopener noreferrer';open.textContent='🔗 فتح متابعة العميل';open.style.cssText='padding:12px;background:#eee0c2;border-radius:9px;color:#4b2814;font-weight:700;text-decoration:none';
+      actions.append(copy,open);
+      if(validPhone){
+        const wa=document.createElement('a');wa.href='https://wa.me/'+normalizedPhone+'?text='+encodeURIComponent(msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 فتح واتساب العميل';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
+      }
+      panel.appendChild(actions);
+      if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='لم يتم تأكيد موافقة العميل على استلام رسالة واتساب؛ استخدم الرابط وفق سياسة التواصل مع العملاء.';panel.appendChild(note);}
+      if(!validPhone){const note=document.createElement('div');note.className='meta';note.textContent='لإظهار زر واتساب، أضف رقم موبايل مصري صحيح للعميل.';panel.appendChild(note);}
+    }else{
+      const note=document.createElement('div');note.className='msg e';note.textContent='تم حفظ الطلب، لكن لم نتمكن من قراءة كود المتابعة. افتح قائمة أكواد العملاء لإعادة المحاولة.';panel.appendChild(note);
+    }
+    $('app')?.prepend(panel);
+    flash('تم تسجيل الطلب'+(trackingCode?' — كود المتابعة: '+trackingCode:''),true);
   };
 }
 function failDialog(id) {
@@ -1942,7 +1958,8 @@ const trackMsg = o => 'أهلًا ' + (o.customer_name || '') + '، تابع ط�
 function copyMsg(id) { const o = ORD[id]; if (!o) return; navigator.clipboard && navigator.clipboard.writeText(trackMsg(o)); flash('اتنسخت رسالة العميل، ابعتها له', true); }
 function waMsg(id) {
   const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);
-  window.open('https://wa.me/' + d + '?text=' + encodeURIComponent(trackMsg(o)), '_blank');
+  if(!/^20(?:10|11|12|15)\\d{8}$/.test(d))return flash('رقم العميل غير صالح لواتساب',false);
+  const link=document.createElement('a');link.href='https://wa.me/'+d+'?text='+encodeURIComponent(trackMsg(o));link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();
 }
 async function loadCodes() {
   const box = $('codes'); if (!box) return;

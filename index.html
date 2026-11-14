@@ -394,9 +394,11 @@ async function boot() {
   } else {
     drivers = [];
   }
-  me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : me.role==='complaints_officer' ? complaintsOfficerView() : managerView();
-  startKitchenDelayMonitor();
-  startOrderRealtime();
+  try {
+    me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : me.role==='complaints_officer' ? complaintsOfficerView() : managerView();
+    startKitchenDelayMonitor();
+    startOrderRealtime();
+  } catch (e) { console.error('Dashboard initialization failed:',e); reconnectView('تعذر فتح لوحة العمل مؤقتًا. احتفظنا بجلسة الدخول؛ حاول مجددًا.'); }
 }
 async function employeeBranchPicker(permitted){
   const {data,error}=await safeRpc('dlv_my_branches');
@@ -409,8 +411,10 @@ async function employeeBranchPicker(permitted){
 }
 async function enterEmployeeDashboard(){
   if(me.role!=='driver' && ['supervisor','manager','admin'].includes(me.workflow_role||me.role)){const r=await safeRpc('dlv_list_active_drivers');if(r.error){flash('تعذر تحميل قائمة الطيارين: '+r.error.message,false);drivers=[];}else drivers=(r.data||[]).filter(x=>!selectedBranch||x.branch_id===selectedBranch);}
-  me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():me.role==='complaints_officer'?complaintsOfficerView():managerView();
-  startKitchenDelayMonitor();startOrderRealtime();
+  try {
+    me.role==='driver'?driverView():me.workflow_role==='kitchen'?kitchenView():me.workflow_role==='callcenter_followup'?callcenterView():me.role==='complaints_officer'?complaintsOfficerView():managerView();
+    startKitchenDelayMonitor();startOrderRealtime();
+  } catch(e) { console.error('Employee dashboard failed:',e); reconnectView('تعذر فتح لوحة العمل مؤقتًا. جلسة الدخول محفوظة؛ حاول مجددًا.'); }
 }
 async function ownerPageGate(){
  const r=await safeRpc('dlv_owner_page_status');

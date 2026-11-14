@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS dlv_orders_branch_created_at_idx ON public.dlv_orders(branch_id,created_at DESC); CREATE INDEX IF NOT EXISTS dlv_incidents_branch_created_at_idx ON public.dlv_incidents(branch_id,created_at DESC);

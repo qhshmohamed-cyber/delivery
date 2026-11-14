@@ -484,15 +484,19 @@ let profileSyncChannel=null,profileSyncTimer=null,profileSyncBusy=false,profileS
 function profileSignature(p){return JSON.stringify([p?.active,p?.role,p?.workflow_role,p?.branch_id,p?.company_id,p?.full_name,[...(p?.allowed_branch_ids||[])].sort((a,b)=>a-b)]);}
 async function checkProfileUpdates(){
  if(profileSyncBusy||!me||document.visibilityState==='hidden')return;
+ const userId=me.user_id,epoch=appSessionEpoch;
  profileSyncBusy=true;
  try{
   const {data,error}=await sb.from('dlv_profiles').select('*').eq('user_id',me.user_id).maybeSingle();
+  if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
   if(error){console.warn('Profile refresh failed:',error.message);return;}
   const sig=profileSignature(data);
-  if(sig!==profileSyncFingerprint){profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
+  if(sig!==profileSyncFingerprint){appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);if(me.role==='driver')await stopShare(false);profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
   if(!isOwner()){
    const {data:allowed,error:accessError}=await safeRpc('dlv_my_branches');
+   if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
    if(!accessError && !(allowed||[]).length){
+    appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);
     if(me.role==='driver')await stopShare(false);
     stopProfileSync();selectedBranch=null;
     resetPlatformBrand();document.body.classList.add('ys-platform');
@@ -1333,12 +1337,16 @@ function requireOnline(action='تنفيذ العملية') {
   flash(`لا يمكن ${action} بدون اتصال بالإنترنت. لم يتم حفظ أي تغيير؛ أعد المحاولة بعد عودة الاتصال.`, false);
   return false;
 }
+const orderStatusPending=new Set();
 async function setStatus(id, to, note) {
   if (!requireOnline('تغيير حالة الطلب')) return;
-  const {error} = await safeRpc('dlv_set_status', {p_id: id, p_to: to, p_note: note || null});
-  if (error) return flash(error.message, false);
-  flash('تم التحديث', true);
-  refreshView();
+  if(orderStatusPending.has(id))return;
+  orderStatusPending.add(id);
+  try{
+   const {error} = await safeRpc('dlv_set_status', {p_id: id, p_to: to, p_note: note || null});
+   if (error) {flash(error.message, false);refreshView();return;}
+   flash('تم التحديث', true);refreshView();
+  }finally{orderStatusPending.delete(id);}
 }
 async function cancelOrderDialog(id){
  if(!me||!(isOwner()||me.can_cancel_orders===true))return flash('ليس لديك صلاحية إلغاء الطلب',false);
@@ -1474,6 +1482,8 @@ function newOrderForm() {
   if (!me || !['callcenter_followup','manager','admin'].includes(wf)) return flash('إنشاء الطلب متاح لمتابعة الكول سنتر والإدارة فقط', false);
   const isMgr = true;
   const d = document.createElement('div'); d.className = 'modal';
+  const $=id=>d.querySelector('#'+id);
+  let orderSubmitting=false;
   d.innerHTML = `<div><h2 style="font-size:16px">طلب جديد</h2><div id="ferr" class="msg e hide"></div>
     <label>اسم موظف الكول سنتر صاحب الطلب *</label><select id="n_staff"><option value="">اختر الموظف</option></select><div class="meta">مسؤول المتابعة: ${esc(me.full_name||"الحساب الحالي")}</div><label>رقم الطلب *</label><input id="n_no" inputmode="numeric">
     ${(isOwner() || (me.allowed_branch_ids||[]).length>1) ? `<label>الفرع *</label><select id="n_branch" disabled><option value="">جاري تحميل الفروع المصرح بها...</option></select>` : ''}
@@ -1543,8 +1553,9 @@ function newOrderForm() {
   if($('n_p')){$('n_p').addEventListener('change',updateCustomerOrderCount);$('n_p').addEventListener('blur',updateCustomerOrderCount);}
   if($('n_branch'))$('n_branch').onchange=()=>{loadOrderStaff();updateCustomerOrderCount();};
   if($('n_branch'))loadOrderBranches();else loadOrderStaff();
-  $('n_x').onclick = () => d.remove();
+  $('n_x').onclick = () => {if(!orderSubmitting)d.remove();};
   $('n_ok').onclick = async () => {
+    if(orderSubmitting)return;
     if (!requireOnline('إنشاء الطلب')) return;
     if($('n_branch')&&(!orderBranchesReady||!$('n_branch').value)){ $('ferr').textContent='اختر فرعًا مصرحًا به أولاً';$('ferr').className='msg e';return; }
     const activeOrderBranch=Number($('n_branch')?.value||selectedBranch||me.branch_id);
@@ -1557,14 +1568,19 @@ function newOrderForm() {
     if(phone&&!normalizedCustomerPhone){
       const e=$('ferr');e.textContent='رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015، أو بصيغة +20';e.className='msg e';$('n_p')?.focus();return;
     }
-    $('n_ok').disabled = true;$('n_ok').textContent='جارٍ حفظ الطلب...';
+    orderSubmitting=true;
+    const controls=[...d.querySelectorAll('button,input,select,textarea')].map(element=>[element,element.disabled]);
+    controls.forEach(([element])=>{element.disabled=true;});
+    $('n_ok').textContent='جارٍ حفظ الطلب...';
     const {data: createdId, error} = await safeRpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? normalizedCustomerPhone||null : null,
       p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: null, p_callcenter_staff_id:Number($('n_staff').value), p_branch_id: (isOwner() || (me.allowed_branch_ids||[]).length>1) ? Number($('n_branch').value) : null});
-    if (error) { $('n_ok').disabled = false; $('n_ok').textContent='تسجيل'; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
+    if(!d.isConnected)return;
+    if (error) { orderSubmitting=false;controls.forEach(([element,disabled])=>{element.disabled=disabled;});$('n_ok').textContent='تسجيل'; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
     const orderNo=orderNumber;
     let trackingCode='';
     if(createdId){
       const {data:createdCode,error:trackError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(createdId)});
+      if(!d.isConnected)return;
       if(trackError)console.warn('Tracking code lookup:',trackError.message);
       trackingCode=String(createdCode||'').trim();
     }
@@ -1583,10 +1599,12 @@ function newOrderForm() {
       const link=location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
       const branchId=customerBranchId;
       const {data:welcomeTemplate,error:welcomeError}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
+      if(!d.isConnected)return;
       let msg='';
       if(welcomeError){console.warn('Customer welcome template unavailable:',welcomeError.message);}
       else{try{msg=await customerWelcomeMessageForOrder({order_no:orderNo,track_code:trackingCode,branch_id:branchId,customer_name:customerNameForMessage},welcomeTemplate||'');}
       catch(e){console.warn('Customer company brand unavailable:',e.message);}}
+      if(!d.isConnected)return;
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
@@ -1657,14 +1675,20 @@ async function ensureDriverShiftForAssignment(){
     void startShare();
   };
 }
+let driverOrdersRequest=0;
 async function loadMine() {
+  if(!me||me.role!=='driver')return;
+  const request=++driverOrdersRequest,epoch=appSessionEpoch,userId=me.user_id,branch=selectedBranch;
+  const stillCurrent=()=>request===driverOrdersRequest&&epoch===appSessionEpoch&&me?.user_id===userId&&me?.role==='driver'&&selectedBranch===branch&&!!$('ol');
   const {data, error} = await branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
+  if(!stillCurrent())return;
   if (error) return flash(error.message, false);
   const o = data || []; o.forEach(x => ORD[x.id] = x);
   $('s1').textContent = o.length;
   $('s2').textContent = o.filter(x => x.status === 'out').length;
   const todayStart = new Date(cairoDate() + 'T00:00:00+02:00').toISOString();
   const {count: deliveredTodayCount, error: deliveredError} = await branchQuery(sb.from('dlv_orders').select('id',{count:'exact',head:true})).eq('driver_id',me.user_id).eq('status','delivered').gte('delivered_at',todayStart);
+  if(!stillCurrent())return;
   $('s3').textContent = deliveredError ? '—' : (deliveredTodayCount ?? 0);
   $('ol').innerHTML = o.map(x => {
     const s = ST[x.status];
@@ -2540,6 +2564,7 @@ async function loadAll() {
 }
 /* ---------- مشاركة الموقع (الطيار) ---------- */
 let watchId = null, lastSend = 0, wake = null, shareWanted = false, locationBusy = false, gpsPollTimer = null, gpsPollBusy = false;
+let locationGeneration=0,wakePendingGeneration=null;
 function renderShare() {
   const b = $('shr'); if (!b) return;
   const on = shareWanted;
@@ -2547,28 +2572,31 @@ function renderShare() {
   b.style.background = on ? '#e03131' : '';
   b.style.borderColor = on ? '#e03131' : '';
 }
-async function sendDriverPosition(p, force = false) {
-  if (!shareWanted || !navigator.onLine) return;
+async function sendDriverPosition(p, force = false, generation=locationGeneration) {
+  if (generation!==locationGeneration || !me || me.role!=='driver' || !shareWanted || !navigator.onLine) return;
   if (locationBusy) { const el=$('locst'); if(el && force) el.textContent='⏳ جارٍ إرسال موقع سابق؛ سيُعاد تحديث GPS تلقائيًا'; return; }
-  if (p?.timestamp && Date.now()-p.timestamp>30000) {const el=$('locst');if(el)el.textContent='⚠ قراءة GPS قديمة — ننتظر موقعًا أحدث';return;}
+  if (!Number.isFinite(p?.timestamp) || Date.now()-p.timestamp>20000 || p.timestamp>Date.now()+5000) {const el=$('locst');if(el)el.textContent='⚠ قراءة GPS غير حديثة — ننتظر موقعًا أحدث';return;}
   // عند استئناف الصفحة نرسل القراءة الحالية فورًا حتى لو كان آخر إرسال حديثًا.
   if (!force && Date.now() - lastSend < 5000) return;
-  if (!Number.isFinite(p?.coords?.latitude) || !Number.isFinite(p?.coords?.longitude) || !Number.isFinite(p?.coords?.accuracy) || p.coords.accuracy > 150 || Date.now()-p.timestamp>20000) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
+  if (!Number.isFinite(p?.coords?.latitude) || Math.abs(p.coords.latitude)>90 || !Number.isFinite(p?.coords?.longitude) || Math.abs(p.coords.longitude)>180 || !Number.isFinite(p?.coords?.accuracy) || p.coords.accuracy<0 || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
   locationBusy = true;
   try {
     const { error } = await safeRpc('dlv_update_location', {
       p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy
     });
+    if(generation!==locationGeneration||!shareWanted)return;
     const s = $('locst');
     if (s) s.textContent = error
       ? '⚠ تعذر إرسال الموقع: ' + error.message
       : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
     if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'})+' · عند قفل الشاشة قد يتوقف GPS حتى إعادة فتح الصفحة';}
-  } catch(e) {const st=$('locst');if(st)st.textContent='⚠ فشل إرسال GPS: '+String(e?.message||'خطأ اتصال');} finally { locationBusy = false; }
+  } catch(e) {if(generation===locationGeneration&&shareWanted){const st=$('locst');if(st)st.textContent='⚠ فشل إرسال GPS: '+String(e?.message||'خطأ اتصال');}} finally { if(generation===locationGeneration)locationBusy = false; }
 }
 function attachLocationWatch() {
   if (!shareWanted || watchId != null || !navigator.geolocation) return;
-  watchId = navigator.geolocation.watchPosition(sendDriverPosition, e => {
+  const generation=locationGeneration;
+  watchId = navigator.geolocation.watchPosition(p=>sendDriverPosition(p,false,generation), e => {
+    if(generation!==locationGeneration||!shareWanted)return;
     // أخطاء الشبكة/انتهاء المهلة مؤقتة؛ لا توقف مشاركة الطيار تلقائيًا.
     const s = $('locst');
     if (s) s.textContent = e.code === 1
@@ -2580,48 +2608,55 @@ function attachLocationWatch() {
       // إعادة المحاولة المؤقتة فقط إذا كانت الصفحة ظاهرة؛ لا ننشئ حلقات إرسال بالخلفية.
       if (document.visibilityState === 'visible' && shareWanted) {
         setTimeout(() => {
-          if (shareWanted && watchId == null && document.visibilityState === 'visible') attachLocationWatch();
+          if (generation===locationGeneration && shareWanted && watchId == null && document.visibilityState === 'visible') attachLocationWatch();
         }, 5000);
       }
     }
   }, { enableHighAccuracy: true, maximumAge: 0, timeout: 25000 });
 }
 async function acquireWakeLock() {
-  if (!shareWanted || document.visibilityState !== 'visible' || !navigator.wakeLock || wake) return;
+  const generation=locationGeneration;
+  if (!shareWanted || document.visibilityState !== 'visible' || !navigator.wakeLock || wake || wakePendingGeneration===generation) return;
+  wakePendingGeneration=generation;
   try {
-    wake = await navigator.wakeLock.request('screen');
-    wake.addEventListener('release', () => { wake = null; });
+    const lock = await navigator.wakeLock.request('screen');
+    if(generation!==locationGeneration||!shareWanted||document.visibilityState!=='visible'){await lock.release();return;}
+    wake=lock;lock.addEventListener('release', () => { if(wake===lock)wake = null; });
   } catch (e) { /* Wake Lock تحسين اختياري وليس ضمانًا للتتبع بالخلفية */ }
+  finally{if(wakePendingGeneration===generation)wakePendingGeneration=null;}
 }
 async function startShare() {
   if(!me || me.role!=='driver' || shareWanted)return;
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
   if (!navigator.onLine) return flash('شغّل الإنترنت قبل بدء مشاركة الموقع',false);
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
-  shareWanted = true; lastSend = 0;
+  const generation=++locationGeneration;shareWanted = true; lastSend = 0;
   attachLocationWatch();
-  navigator.geolocation.getCurrentPosition(p=>void sendDriverPosition(p,true),e=>{const s=$('locst');if(s)s.textContent=e.code===1?'⚠ تم رفض إذن الموقع — اسمح للموقع بالوصول إلى GPS':'⚠ لم نتمكن من تحديد موقعك؛ اضغط تحديث GPS للمحاولة';}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
+  navigator.geolocation.getCurrentPosition(p=>void sendDriverPosition(p,true,generation),e=>{if(generation!==locationGeneration||!shareWanted)return;const s=$('locst');if(s)s.textContent=e.code===1?'⚠ تم رفض إذن الموقع — اسمح للموقع بالوصول إلى GPS':'⚠ لم نتمكن من تحديد موقعك؛ اضغط تحديث GPS للمحاولة';if(e.code===1)void stopShare(false);}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
   clearInterval(gpsPollTimer);
   gpsPollTimer=setInterval(()=>{
-    if(!shareWanted || document.visibilityState!=='visible' || !navigator.onLine || locationBusy || gpsPollBusy)return;
+    if(generation!==locationGeneration || !shareWanted || document.visibilityState!=='visible' || !navigator.onLine || locationBusy || gpsPollBusy)return;
     gpsPollBusy=true;
     navigator.geolocation.getCurrentPosition(
-      p=>{gpsPollBusy=false;sendDriverPosition(p,true);},
-      e=>{gpsPollBusy=false;const el=$('locst');if(el)el.textContent=e.code===1?'⚠ إذن GPS مرفوض — فعّل صلاحية الموقع من المتصفح':'⚠ تعذر الحصول على موقع جديد — سيحاول النظام تلقائيًا أثناء فتح الصفحة';if(e.code===1)void stopShare(false);},
+      p=>{if(generation!==locationGeneration)return;gpsPollBusy=false;sendDriverPosition(p,true,generation);},
+      e=>{if(generation!==locationGeneration)return;gpsPollBusy=false;const el=$('locst');if(el)el.textContent=e.code===1?'⚠ إذن GPS مرفوض — فعّل صلاحية الموقع من المتصفح':'⚠ تعذر الحصول على موقع جديد — سيحاول النظام تلقائيًا أثناء فتح الصفحة';if(e.code===1)void stopShare(false);},
       {enableHighAccuracy:true,maximumAge:0,timeout:15000}
     );
   },10000);
   await acquireWakeLock();
+  if(generation!==locationGeneration||!shareWanted)return;
   renderShare();
   const s = $('locst');
   if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… التحديث أثناء قفل الشاشة غير مضمون من المتصفح';
 }
 async function stopShare(callServer = true) {
-  shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;gpsPollBusy=false;
+  const generation=++locationGeneration;shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;gpsPollBusy=false;
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  try { if (wake) await wake.release(); } catch (e) {}
-  wake = null; lastSend = 0; locationBusy = false;
+  const lock=wake;wake=null;lastSend=0;locationBusy=false;
+  try { if (lock) await lock.release(); } catch (e) {}
+  if(generation!==locationGeneration)return;
   if (callServer) await safeRpc('dlv_stop_location');
+  if(generation!==locationGeneration)return;
   renderShare();
   const s = $('locst'); if (s) s.textContent = 'مشاركة الموقع متوقفة.';
 }
@@ -2629,20 +2664,23 @@ async function stopShare(callServer = true) {
 let resumeLocationBusy = false;
 async function resumeDriverLocationNow() {
   if (!me || me.role !== 'driver' || !shareWanted || document.visibilityState !== 'visible' || resumeLocationBusy) return;
+  const generation=locationGeneration;
   resumeLocationBusy = true;
   try {
     if (watchId != null) navigator.geolocation.clearWatch(watchId);
     watchId = null;
     attachLocationWatch();
     await acquireWakeLock();
+    if(generation!==locationGeneration||!shareWanted)return;
     const status = $('locst');
     if (status) status.textContent = '📍 بنحدد موقعك الحالي ونحدّث الخريطة…';
     navigator.geolocation.getCurrentPosition(
       position => {
         // إرسال إجباري للقراءة الحالية، دون انتظار مهلة الـ 15 ثانية.
-        sendDriverPosition(position, true);
+        sendDriverPosition(position, true,generation);
       },
       error => {
+        if(generation!==locationGeneration||!shareWanted)return;
         const box = $('locst');
         if (box) box.textContent = error.code === 1
           ? '⚠ صلاحية الموقع مرفوضة — فعّل إذن الموقع للمتصفح'
@@ -2650,9 +2688,9 @@ async function resumeDriverLocationNow() {
         // لا نوقف المشاركة بسبب مهلة أو خطأ GPS عابر.
         if (error.code !== 1 && shareWanted) {
           setTimeout(() => {
-            if (document.visibilityState === 'visible' && shareWanted) resumeDriverLocationNow();
+            if (generation===locationGeneration && document.visibilityState === 'visible' && shareWanted) resumeDriverLocationNow();
           }, 5000);
-        }
+        }else if(error.code===1){void stopShare(false);}
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );

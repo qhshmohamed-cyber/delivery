@@ -862,14 +862,32 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
   alert('تم '+(item.enabled?'إيقاف':'تفعيل')+' '+item.title_ar+' لهذا الفرع. '+(!item.enabled?'استخدم زر الميزات مرة أخرى واكتب تقرير للتقييمات أو مطبخ لأداء المطبخ.':''));
  };
  $('ownerEditCompanyBrand').onclick=async()=>{
-  const current=ownerBrandCache.get(Number(companyId))||{};
-  const logo=prompt('رابط شعار الشركة HTTPS (أو ملف داخل المشروع)',current.logo_url||'yourstaff-icon.svg');if(logo===null)return;
-  const background=logo.trim()||current.logo_url||'';
-  const valid=u=>!u||(/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u))&&!u.startsWith('//');
-  if(!valid(logo.trim())||!valid(background.trim()))return alert('الرابط غير صالح؛ استخدم HTTPS أو ملفًا محليًا');
-  const {data,error}=await sb.from('dlv_company_branding').update({logo_url:logo.trim()||'yourstaff-icon.svg',background_url:background.trim()||logo.trim()||current.logo_url||null,updated_at:new Date().toISOString()}).eq('company_id',companyId).select().single();
-  if(error)return alert('تعذر حفظ الهوية: '+error.message);
-  ownerBrandCache.set(Number(companyId),data);tenantBrandCache.set(Number(companyId),data);applyBrandConfig(data,true);await ownerBranchPicker(companyId);
+  if(!isOwner())return flash('هذه الخاصية لمالك المنصة فقط',false);
+  const fileInput=document.createElement('input');
+  fileInput.type='file';fileInput.accept='image/png,image/jpeg,image/webp';fileInput.style.display='none';
+  document.body.appendChild(fileInput);
+  fileInput.onchange=async()=>{
+   const file=fileInput.files?.[0];fileInput.remove();if(!file)return;
+   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024||file.size===0)return flash('اختار PNG أو JPG أو WEBP بحجم لا يتجاوز 5 ميجابايت',false);
+   const company=Number(companyId),button=$('ownerEditCompanyBrand');
+   if(button){button.disabled=true;button.textContent='⏳ جاري رفع شعار الشركة...';}
+   try{
+    const ext=file.type==='image/jpeg'?'jpg':file.type.split('/')[1];
+    const path='companies/'+company+'/logo-'+crypto.randomUUID()+'.'+ext;
+    const uploaded=await sb.storage.from('brand-assets').upload(path,file,{upsert:false,contentType:file.type,cacheControl:'3600'});
+    if(uploaded.error)throw uploaded.error;
+    const url=sb.storage.from('brand-assets').getPublicUrl(path).data.publicUrl;
+    const {data,error}=await sb.from('dlv_company_branding').update({logo_url:url,background_url:url,updated_at:new Date().toISOString()}).eq('company_id',company).select().single();
+    if(error)throw error;
+    ownerBrandCache.set(company,data);tenantBrandCache.set(company,data);
+    applyBrandConfig(data,true);
+    flash('تم حفظ الشعار وتطبيقه على الشركاء وخلفيات فروع الشركة',true);
+    await ownerBranchPicker(company);
+   }catch(e){flash('تعذر رفع شعار الشركة: '+(e.message||'خطأ غير معروف'),false);}
+   finally{if(button&&button.isConnected){button.disabled=false;button.textContent='🎨 الهوية';}}
+  };
+  fileInput.oncancel=()=>fileInput.remove();
+  fileInput.click();
  };
  document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{if(b.dataset.branch==='all'){selectedBranch=null;return enterOwnerDashboard();}const branch=branches.find(x=>Number(x.id)===Number(b.dataset.branch));if(!branch)return;if(!active||!branch.active)return ownerPendingBranchPreview(companyId,branch);selectedBranch=Number(branch.id);await enterOwnerDashboard();});
  $('addNewBranch').onclick=async()=>{

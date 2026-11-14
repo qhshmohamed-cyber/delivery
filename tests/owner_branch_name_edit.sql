@@ -1,0 +1,43 @@
+BEGIN;
+CREATE TEMP TABLE branch_rename_result(test text,passed boolean);
+DO $test$
+DECLARE own uuid; employee uuid; sid uuid:=gen_random_uuid(); esid uuid:=gen_random_uuid(); b record; duplicate text; answer jsonb; before_profiles bigint; before_orders bigint;
+BEGIN
+ SELECT user_id INTO STRICT own FROM public.dlv_profiles WHERE active AND role='admin' AND workflow_role='admin';
+ SELECT * INTO STRICT b FROM public.dlv_branches ORDER BY id LIMIT 1;
+ SELECT count(*) INTO before_profiles FROM public.dlv_profiles;SELECT count(*) INTO before_orders FROM public.dlv_orders;
+ INSERT INTO auth.sessions(id,user_id,created_at,updated_at) VALUES(sid,own,now(),now());
+ PERFORM set_config('request.jwt.claim.sub',own::text,true);
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',own,'session_id',sid,'exp',extract(epoch from now()+interval '1 hour')::bigint,'aal','aal1')::text,true);
+ EXECUTE 'SET LOCAL ROLE authenticated';
+ BEGIN PERFORM public.dlv_owner_rename_company_branch(b.company_id,b.id,'اختبار الفرع');RAISE EXCEPTION 'Locked owner renamed branch';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ EXECUTE 'RESET ROLE';
+ INSERT INTO public.dlv_owner_page_unlocks(user_id,session_id,expires_at) VALUES(own,sid::text,now()+interval '10 minutes');
+ EXECUTE 'SET LOCAL ROLE authenticated';
+ answer:=public.dlv_owner_rename_company_branch(b.company_id,b.id,'اختبار   تنسيق الفرع');
+ IF answer->>'name'<>'اختبار تنسيق الفرع' OR (answer->>'id')::int<>b.id OR (answer->>'company_id')::bigint<>b.company_id THEN RAISE EXCEPTION 'Rename return invalid';END IF;
+ BEGIN PERFORM public.dlv_owner_rename_company_branch(b.company_id,-1,'فرع غير مطابق');RAISE EXCEPTION 'Branch company mismatch accepted';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ BEGIN PERFORM public.dlv_owner_rename_company_branch(b.company_id,b.id,'أ');RAISE EXCEPTION 'Invalid name accepted';EXCEPTION WHEN invalid_parameter_value THEN NULL;END;
+ EXECUTE 'RESET ROLE';
+ SELECT name INTO duplicate FROM public.dlv_branches WHERE company_id=b.company_id AND id<>b.id LIMIT 1;
+ IF duplicate IS NOT NULL THEN
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  BEGIN PERFORM public.dlv_owner_rename_company_branch(b.company_id,b.id,duplicate);RAISE EXCEPTION 'Duplicate name accepted';EXCEPTION WHEN unique_violation THEN NULL;END;
+  EXECUTE 'RESET ROLE';
+ END IF;
+ IF EXISTS(SELECT 1 FROM public.dlv_branches WHERE id=b.id AND (company_id<>b.company_id OR active IS DISTINCT FROM b.active)) OR before_profiles<>(SELECT count(*) FROM public.dlv_profiles) OR before_orders<>(SELECT count(*) FROM public.dlv_orders) THEN RAISE EXCEPTION 'Rename changed branch associations';END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.dlv_security_audit WHERE branch_id=b.id AND changes->>'new_name'='اختبار تنسيق الفرع') THEN RAISE EXCEPTION 'Audit missing';END IF;
+ SELECT user_id INTO STRICT employee FROM public.dlv_profiles WHERE active AND role<>'admin' LIMIT 1;
+ INSERT INTO auth.sessions(id,user_id,created_at,updated_at) VALUES(esid,employee,now(),now());
+ PERFORM set_config('request.jwt.claim.sub',employee::text,true);
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',employee,'session_id',esid,'exp',extract(epoch from now()+interval '1 hour')::bigint,'aal','aal1')::text,true);
+ EXECUTE 'SET LOCAL ROLE authenticated';
+ BEGIN PERFORM public.dlv_owner_rename_company_branch(b.company_id,b.id,'تعديل غير مصرح');RAISE EXCEPTION 'Employee renamed branch';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ EXECUTE 'RESET ROLE';
+ EXECUTE 'SET LOCAL ROLE anon';
+ BEGIN PERFORM public.dlv_owner_rename_company_branch(b.company_id,b.id,'تعديل غير مصرح');RAISE EXCEPTION 'Anonymous renamed branch';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ EXECUTE 'RESET ROLE';
+ INSERT INTO branch_rename_result VALUES('owner_only_and_unlocked_session',true),('normalized_name_and_stable_branch_company_ids',true),('invalid_and_duplicate_names_denied',true),('employee_and_anon_denied',true),('accounts_orders_and_branch_active_unchanged',true),('audit_record_written',true);
+END $test$;
+SELECT * FROM branch_rename_result;
+ROLLBACK;

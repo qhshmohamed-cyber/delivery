@@ -744,7 +744,11 @@ function newOrderForm() {
     const orderNumber=String($('n_no')?.value||'').trim();
     if(!orderNumber){const e=$('ferr');e.textContent='اكتب رقم الطلب أولاً';e.className='msg e';$('n_no')?.focus();return;}
     const phone=String($('n_p')?.value||'').trim();
-    if(phone&&!/^(?:\\+?20|0)?1[0125]\\d{8}$/.test(phone.replace(/[\\s-]/g,''))){const e=$('ferr');e.textContent='راجع رقم هاتف العميل أو اتركه فارغًا';e.className='msg e';$('n_p')?.focus();return;}
+    const phoneDigits=phone.replace(/\D/g,'');
+    const normalizedCustomerPhone=phoneDigits.startsWith('0')?'20'+phoneDigits.slice(1):phoneDigits;
+    if(phone&&!/^20(?:10|11|12|15)\d{8}$/.test(normalizedCustomerPhone)){
+      const e=$('ferr');e.textContent='رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015، أو بصيغة +20';e.className='msg e';$('n_p')?.focus();return;
+    }
     $('n_ok').disabled = true;$('n_ok').textContent='جارٍ حفظ الطلب...';
     const {data: createdId, error} = await safeRpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
       p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: null, p_callcenter_staff_id:Number($('n_staff').value), p_branch_id: (isOwner() || (me.allowed_branch_ids||[]).length>1) ? Number($('n_branch').value) : null});

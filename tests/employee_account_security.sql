@@ -1,4 +1,4 @@
--- Database authorization simulation only, not a real password/MFA login.
+-- Database authorization simulation only, not a real password/PIN login.
 -- All fixtures, credential changes and audit writes are rolled back.
 BEGIN;
 CREATE TEMP TABLE security_test_users AS
@@ -48,14 +48,15 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'Owner fixture missing'; END IF;
  PERFORM set_config('request.jwt.claim.sub',u.user_id::text,true);
  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',u.user_id,'session_id',u.sid,'exp',extract(epoch from now()+interval '1 hour')::bigint,'aal','aal1')::text,true);
- INSERT INTO public.dlv_owner_page_unlocks(user_id,session_id,expires_at) VALUES(u.user_id,u.sid::text,now()+interval '10 minutes');
+ DELETE FROM public.dlv_owner_page_unlocks WHERE user_id=u.user_id;
  EXECUTE 'SET LOCAL ROLE authenticated';
- IF public.dlv_owner_page_check() THEN RAISE EXCEPTION 'Owner AAL1 bypass'; END IF;
+ IF public.dlv_owner_page_check() THEN RAISE EXCEPTION 'Locked owner bypass'; END IF;
  BEGIN
-  PERFORM public.dlv_list_pilots(); RAISE EXCEPTION 'AAL1 can list staff';
+  PERFORM public.dlv_list_pilots(); RAISE EXCEPTION 'Locked owner can list staff';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  EXECUTE 'RESET ROLE';
  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',u.user_id,'session_id',u.sid,'exp',extract(epoch from now()+interval '1 hour')::bigint,'aal','aal2')::text,true);
+ INSERT INTO public.dlv_owner_page_unlocks(user_id,session_id,expires_at) VALUES(u.user_id,u.sid::text,now()+interval '10 minutes');
  SELECT b.id INTO branch FROM public.dlv_branches b JOIN public.dlv_companies c ON c.id=b.company_id WHERE b.active AND c.active AND c.onboarding_status='active' LIMIT 1;
  EXECUTE 'SET LOCAL ROLE authenticated';
  IF NOT public.dlv_owner_page_check() THEN RAISE EXCEPTION 'Verified owner blocked'; END IF;
@@ -81,7 +82,7 @@ BEGIN
  END LOOP;
  EXECUTE 'RESET ROLE';
  IF NOT EXISTS(SELECT 1 FROM private.dlv_owner_unlock_attempts WHERE user_id=u.user_id AND attempts>=6) THEN RAISE EXCEPTION 'Unlock rate limit missing'; END IF;
- INSERT INTO security_test_results VALUES('owner_mfa_required_and_verified_owner_accepted',true,2),('credential_resets_revoke_sessions_preserve_account',true,2),('owner_unlock_attempt_limit',true,6);
+ INSERT INTO security_test_results VALUES('owner_page_pin_required_and_unlocked_owner_accepted',true,2),('credential_resets_revoke_sessions_preserve_account',true,2),('owner_unlock_attempt_limit',true,6);
 END $owner_tests$;
 SELECT * FROM security_test_results;
 ROLLBACK;

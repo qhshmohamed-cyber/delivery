@@ -1308,10 +1308,10 @@ function newOrderForm() {
       const link=location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
       const branchId=customerBranchId;
       const {data:welcomeTemplate,error:welcomeError}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
-      if(welcomeError)console.warn('Welcome template:',welcomeError.message);
-      let msg;
-      try{msg=await customerWelcomeMessageForOrder({order_no:orderNo,track_code:trackingCode,branch_id:branchId,customer_name:customerNameForMessage},welcomeTemplate||'');}
-      catch(e){msg='';console.warn('Customer company brand unavailable:',e.message);}
+      let msg='';
+      if(welcomeError){console.warn('Customer welcome template unavailable:',welcomeError.message);}
+      else{try{msg=await customerWelcomeMessageForOrder({order_no:orderNo,track_code:trackingCode,branch_id:branchId,customer_name:customerNameForMessage},welcomeTemplate||'');}
+      catch(e){console.warn('Customer company brand unavailable:',e.message);}}
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};

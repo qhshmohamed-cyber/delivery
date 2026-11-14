@@ -1,10 +1,9 @@
 
 const CACHE_PREFIX = 'yourstaff-static-';
 const LEGACY_CACHE_PREFIX = 'wahat-delivery-static-';
-const CACHE_NAME = CACHE_PREFIX + 'v3';
+const CACHE_NAME = CACHE_PREFIX + 'v4';
 const STATIC_FILES = [
   './',
-  './index.html',
   './manifest.webmanifest',
   './yourstaff-icon.svg'
 ];

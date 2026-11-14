@@ -349,7 +349,7 @@ function roleWorkGuide(){
 }
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});
-const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> — <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
+const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> — <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}${(isOwner()||['manager','callcenter_followup','complaints_officer'].includes(me?.workflow_role))?'<button onclick="openRatingsActions()">⭐ تقييمات وشكاوى</button>':''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
@@ -1406,6 +1406,33 @@ function complaintsOfficerView(){
  $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث بالعميل أو الطلب أو الشكوى أو موظف المتابعة" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');
  bindOut();$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
  loadComplaintsInbox();
+}
+
+async function openRatingsActions(){
+ if(!me||!(isOwner()||['manager','callcenter_followup','complaints_officer'].includes(me.workflow_role)))return flash('غير مصرح',false);
+ if(document.getElementById('ratingsActionsOverlay'))return;
+ const d=document.createElement('div');d.id='ratingsActionsOverlay';d.style.cssText='position:fixed;inset:0;z-index:80;background:var(--bg);overflow:auto;padding:14px';
+ d.innerHTML='<div class="card"><div class="ord"><h2>⭐ تقييمات العملاء وإجراءات الشكاوى</h2><button id="ratingsActionsClose">إغلاق</button></div><p class="meta">تظهر التقييمات الخاصة بالفرع المصرح به، وآخر إجراء محفوظ باسم مسؤول الشكاوى.</p><div id="ratingsActionsRows">جاري تحميل التقييمات...</div></div>';
+ document.body.appendChild(d);d.querySelector('#ratingsActionsClose').onclick=()=>d.remove();
+ const box=d.querySelector('#ratingsActionsRows');
+ const ids=isOwner()?(selectedBranch?[Number(selectedBranch)]:(await safeRpc('dlv_owner_company_branches',{p_company_id:ownerActiveCompanyId})).data||[]).map?.(b=>Number(b.id))||[]):[Number(selectedBranch||me.branch_id)];
+ if(!ids.length){box.textContent='اختر شركة وفرعًا أولًا';return;}
+ const results=await Promise.all(ids.map(id=>safeRpc('dlv_rating_review_list',{p_branch:id})));
+ if(!d.isConnected)return;
+ const error=results.find(r=>r.error);
+ if(error){box.textContent='تعذر عرض التقييمات: '+error.error.message;return;}
+ const rows=results.flatMap(r=>r.data||[]).sort((a,b)=>new Date(b.rated_at)-new Date(a.rated_at));
+ const labels={in_review:'قيد المراجعة',contacted:'تم التواصل',resolved:'تم الحل',escalated:'تم التصعيد',closed:'مغلقة'};
+ box.innerHTML=rows.map(r=>'<section class="card"><b>طلب #'+esc(r.order_no)+' · '+esc(branchTitle(r.branch_id))+'</b><div class="meta">تاريخ التقييم: '+esc(new Date(r.rated_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}))+'</div><p>الطيار: '+Number(r.delivery_rating)+'/5 ⭐ · المطعم: '+Number(r.restaurant_rating)+'/5 ⭐ · المتابعة: '+Number(r.callcenter_rating)+'/5 ⭐</p><p>تعليق العميل: '+esc(r.customer_comment||'لا يوجد تعليق')+'</p><div class="meta">آخر إجراء: '+esc(labels[r.action_status]||'لم يسجل إجراء')+' · '+esc(r.action_note||'—')+'</div><div class="meta">المسؤول: '+esc(r.action_officer||'—')+(r.action_at?' · '+esc(new Date(r.action_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})):'')+'</div>'+(isOwner()||me.workflow_role==='complaints_officer'?'<button data-rating-action="'+Number(r.rating_id)+'">تسجيل إجراء</button>':'')+'</section>').join('')||'<div class="card">لا توجد تقييمات لهذا الفرع</div>';
+ box.querySelectorAll('[data-rating-action]').forEach(btn=>btn.onclick=async()=>{
+  const rating=Number(btn.dataset.ratingAction);
+  const state=prompt('حالة الإجراء: in_review أو contacted أو resolved أو escalated أو closed','in_review');if(state===null)return;
+  const note=prompt('اكتب الإجراء المتخذ (3 أحرف على الأقل)');if(note===null)return;
+  if(!['in_review','contacted','resolved','escalated','closed'].includes(state)||note.trim().length<3)return flash('الحالة أو الإجراء غير صالح',false);
+  btn.disabled=true;const {error}=await safeRpc('dlv_record_complaint_action',{p_rating:rating,p_status:state,p_note:note.trim()});
+  if(error){btn.disabled=false;return flash('تعذر حفظ الإجراء: '+error.message,false);}
+  d.remove();flash('تم تسجيل الإجراء وحفظ اسم المسؤول',true);openRatingsActions();
+ });
 }
 let complaintsInboxRows=[];
 async function loadComplaintsInbox(){

@@ -279,7 +279,7 @@ function flash(t, ok) {
   m.className = 'msg ' + (ok ? 'o' : 'e'); m.textContent = t;
   setTimeout(() => { if (m) m.className = 'hide'; }, 4000);
 }
-const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير',complaints_officer:'مسؤول الشكاوى'}[u.workflow_role] || u.job_title || 'مدير') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
+const roleLabel = u => u.role === 'manager' ? ({callcenter_followup:'متابعة كول سنتر',supervisor:'مشرف',kitchen:'كنترول المطبخ',manager:'مدير فرع',complaints_officer:'مسؤول الشكاوى'}[u.workflow_role] || u.job_title || 'مدير فرع') : ({ driver: 'طيار', admin: 'مالك النظام' }[u.role] || '');
 const stageSlaCache=new Map();
 function stageClockState(o,sla={},now=Date.now()){
  if(!['new','received','out'].includes(o.status))return null;
@@ -1565,17 +1565,24 @@ function managerView() {
   const ownerTools = owner ? '<button id="ad">＋ إنشاء حساب موظف</button><button id="cancelPermissionsBtn">🔐 صلاحيات إلغاء الطلبات</button><button id="customerMessagesBtn">✉️ رسائل العملاء</button>' : '';
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
-    <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
-      <div class="ord"><div><b style="font-size:18px">مركز قيادة ${esc(brandConfig?.brand_name||brandConfig?.app_name||"الشركة")}</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">مركز التحكم التشغيلي · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
-      <div class="meta" id="managerUpdatedAt" style="color:#f1dfc3">جاري تحديث البيانات...</div>
+    <section class="card" style="background:linear-gradient(135deg,#202e36,#355568);color:#fff;border:0;padding:16px">
+      <div class="ord"><div><b style="font-size:19px">لوحة مدير الفرع</b><div style="opacity:.85;font-size:12px;margin-top:5px">${esc(brandConfig?.brand_name||brandConfig?.app_name||"الشركة")} · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#23875b">● متابعة مباشرة</span></div>
+      <div class="meta" id="managerUpdatedAt" style="color:#e2e8f0">جاري تحديث البيانات...</div>
     </section>
+    <div class="grid" id="managerLiveKpi" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:9px"></div>
     <div id="delayNotices"></div>
-    <div class="grid" id="managerLiveKpi"></div>
-    <section class="card"><div class="ord"><h2>⏳ الطلبات المنتظرة</h2><span class="badge" style="background:#b9832e">قيد التنفيذ</span></div><div id="managerOpsPending"></div></section>
-    <section class="card"><div class="ord"><h2>🚨 تأخير المطبخ</h2><span class="badge" style="background:#e8590c">أكثر من 25 دقيقة</span></div><div id="managerDelayed"></div></section>
-    <section class="card"><div class="ord"><h2>⭐ تقييمات العملاء</h2><span class="meta">أحدث 5 تقييمات</span></div><div id="managerRatings"></div></section>
-    <section class="card"><h2>🔎 البحث عن طلب</h2><div class="row"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></section>
-    <div class="row"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 المشاكل والشكاوى</button></div><div class="row"><button class="p" id="operationsBtn">🚦 غرفة العمليات</button><button class="p" id="mp">🗺️ خريطة الطيارين</button><button class="g" id="nw">＋ طلب جديد</button></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;align-items:start">
+      <section class="card" style="margin:0"><div class="ord"><h2 style="font-size:16px">⏳ الطلبات قيد التنفيذ</h2><span class="badge">مباشر</span></div><div id="managerOpsPending" style="max-height:280px;overflow:auto"></div></section>
+      <section class="card" style="margin:0"><div class="ord"><h2 style="font-size:16px">🚨 التأخيرات والتنبيهات</h2><span class="badge" style="background:#b94c35">تحتاج متابعة</span></div><div id="managerDelayed" style="max-height:280px;overflow:auto"></div></section>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+      <button class="p" id="operationsBtn" style="min-height:64px">🚦<div>العمليات</div></button>
+      <button class="p" id="mp" style="min-height:64px">🗺️<div>الطيارون</div></button>
+      <button class="g" id="nw" style="min-height:64px">➕<div>طلب جديد</div></button>
+    </div>
+    <details class="card"><summary style="cursor:pointer;font-weight:700">⭐ تقييمات العملاء</summary><div id="managerRatings" style="margin-top:10px"></div></details>
+    <details class="card"><summary style="cursor:pointer;font-weight:700">🔎 البحث عن طلب</summary><div class="row" style="margin-top:12px"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></details>
+    <details class="card"><summary style="cursor:pointer;font-weight:700">📂 السجلات والمتابعة</summary><div class="row" style="margin-top:12px"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">الطلبات الملغاة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">المشاكل والشكاوى</button></div></details>
   ` : `
     ${ownerQuickPanel()}
     <div class="f"><input type="date" id="f_from" value="${t}"><input type="date" id="f_to" value="${t}">

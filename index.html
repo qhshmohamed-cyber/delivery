@@ -664,8 +664,10 @@ function ownerPendingBranchPreview(companyId,branch){
  $('app').innerHTML='<div class="card" style="max-width:780px;margin:20px auto;padding:20px"><h2>'+esc(companyName)+' — '+esc(branch.name)+'</h2><p class="msg e">معاينة هيكل التشغيل فقط: الفرع لم يجتز التجهيز الأمني بعد، ولا توجد حسابات موظفين مفعلة. هذه البطاقات ليست شاشات تشغيل حية.</p><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">'+areas.map(([icon,title,detail])=>'<div class="card" style="padding:18px;text-align:center"><h3>'+icon+' '+esc(title)+'</h3><p class="meta">'+esc(detail)+'</p><span class="meta">بانتظار التفعيل</span></div>').join('')+'</div><button class="p big" id="pendingBranchBack">↩️ رجوع إلى إدارة الشركة</button></div>';
  $('pendingBranchBack').onclick=()=>ownerBranchPicker(companyId);
 }
-async function ownerBranchPicker(companyId=1){
+async function ownerBranchPicker(companyId=ownerActiveCompanyId){
+ if(!Number.isInteger(Number(companyId))||Number(companyId)<1)return ownerCompanyPicker();
  ownerActiveCompanyId=Number(companyId);
+ selectedBranch=null;
  document.body.classList.remove('ys-platform');
  const ownerBrand=ownerBrandCache.get(Number(companyId));
  if(ownerBrand)applyBrandConfig(ownerBrand,true);
@@ -892,7 +894,7 @@ function startKitchenDelayMonitor() {
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut();stopProfileSync(); if (chan) sb.removeChannel(chan); loginView(); }; }
+function bindOut() { void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut();stopProfileSync(); if (chan) sb.removeChannel(chan); loginView(); }; }
 
 /* ---------- هوية النظام (مالك النظام فقط) ---------- */
 async function openBrandSettings(){

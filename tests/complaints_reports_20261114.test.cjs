@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync(process.argv[2]||'index.html','utf8');
+for(const match of src.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))if(match[1].trim())new vm.Script(match[1]);
+const extract=n=>src.match(new RegExp('(?:async )?function '+n+'\\([^]*?\\n\\}'))[0];
+const ctx={};vm.createContext(ctx);vm.runInContext(extract('complaintDailyReportHtml'),ctx);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const x={id:42,order_no:'123',title:'<script>alert(1)</script>',details:'تفاصيل خاصة',status:'resolved',action:'تم التواصل مع العميل واستبدال الطلب',officer:'مسؤول الاختبار',followup_at:'2026-11-14T20:00:00Z'};
+const html=ctx.complaintDailyReportHtml({items:[x],actions:[{...x,complaint_id:42,at:x.followup_at}],as_of:x.followup_at},esc);
+assert(!html.includes('<script>'));assert(html.includes('&lt;script&gt;'));assert(html.includes(x.action));assert(html.includes(x.officer));assert(html.includes('تم الحل'));assert(html.includes('يشمل إجراءات اليوم على الشكاوى القديمة والجديدة'));
+assert(ctx.complaintDailyReportHtml({items:[],actions:[]},esc).includes('لا توجد شكاوى جديدة خلال اليوم'));
+const report=extract('downloadBranchDailyReport');assert(report.includes('dlv_daily_complaint_summary'));assert(report.includes('Number(summary.branch_id)!==Number(id)'));assert(report.includes('summary.day!==day'));assert(report.includes('complaintDailyReportHtml(summary,h)'));
+const dialog=extract('openRegisterComplaint');assert(dialog.includes('crypto.randomUUID()'));assert(dialog.includes("p_branch:branch,p_day:val('day')"));assert(dialog.includes("replace(/[٠-٩]/g"));assert(dialog.includes("if(busy||!requireOnline"));assert(dialog.includes('p_action'));assert(dialog.includes("result.data?.success"));
+const owner=extract('ownerPasswordSettings');assert(owner.includes('dlv_owner_change_login_password'));assert(!owner.includes('auth.updateUser'));assert(!owner.includes('auth.signInWithPassword'));
+console.log('PASS: JavaScript syntax, report resolution and action history, HTML escaping, report branch/day checks, empty states, Arabic order digits, idempotent request wiring, owner guarded password route.');

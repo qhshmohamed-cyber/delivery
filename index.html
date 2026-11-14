@@ -1659,7 +1659,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
   if(branchError)return alert('تعذر تحميل فروع الشركة: '+branchError.message);
   const allowed=(companyBranches||[]).map(b=>Number(b.id));
   if(branchId===null){
-   const chosen=prompt('اختر رقم الفرع للتقرير:\\n'+(companyBranches||[]).map(b=>b.id+' - '+b.name).join('\\n'),allowed.includes(Number(selectedBranch))?String(selectedBranch):String(allowed[0]||''));
+   const chosen=prompt('اختر رقم الفرع للتقرير:\n'+(companyBranches||[]).map(b=>b.id+' - '+b.name).join('\n'),allowed.includes(Number(selectedBranch))?String(selectedBranch):String(allowed[0]||''));
    if(chosen===null)return;
    id=Number(chosen);
   }

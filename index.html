@@ -208,7 +208,7 @@ function applyBrandConfig(c,ownerPreview=false){
  document.documentElement.classList.remove('ys-public');document.body.classList.remove('ys-platform');document.body.classList.add('ys-tenant');
  const safeAsset=v=>{const url=String(v||'');return (/^https:\/\/[^\\\"'<>\s]+$/i.test(url)||/^[a-z0-9_./-]+$/i.test(url))&&!url.startsWith('//')?'url('+JSON.stringify(url)+')':'none'};
  document.body.style.setProperty('--tenant-logo',safeAsset(brandConfig.logo_url));
- document.body.style.setProperty('--tenant-wallpaper',safeAsset(brandConfig.background_url));
+ document.body.style.setProperty('--tenant-wallpaper',safeAsset(brandConfig.background_url||brandConfig.logo_url));
  const root=document.documentElement;
  for(const [key,value] of [['--bg',brandConfig.bg_color],['--card',brandConfig.card_color],['--brand',brandConfig.brand_color],['--gold',brandConfig.gold_color]])root.style.setProperty(key,value||'');
  document.title='Your Staff — '+(brandConfig.brand_name||'الشركة');
@@ -867,9 +867,9 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
   const background=prompt('رابط صورة الخلفية HTTPS (اختياري)',current.background_url||'');if(background===null)return;
   const valid=u=>!u||(/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u))&&!u.startsWith('//');
   if(!valid(logo.trim())||!valid(background.trim()))return alert('الرابط غير صالح؛ استخدم HTTPS أو ملفًا محليًا');
-  const {data,error}=await sb.from('dlv_company_branding').update({logo_url:logo.trim()||'yourstaff-icon.svg',background_url:background.trim()||null,updated_at:new Date().toISOString()}).eq('company_id',companyId).select().single();
+  const {data,error}=await sb.from('dlv_company_branding').update({logo_url:logo.trim()||'yourstaff-icon.svg',background_url:background.trim()||logo.trim()||current.logo_url||null,updated_at:new Date().toISOString()}).eq('company_id',companyId).select().single();
   if(error)return alert('تعذر حفظ الهوية: '+error.message);
-  ownerBrandCache.set(Number(companyId),data);applyBrandConfig(data,true);await ownerBranchPicker(companyId);
+  ownerBrandCache.set(Number(companyId),data);tenantBrandCache.set(Number(companyId),data);applyBrandConfig(data,true);await ownerBranchPicker(companyId);
  };
  document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{if(b.dataset.branch==='all'){selectedBranch=null;return enterOwnerDashboard();}const branch=branches.find(x=>Number(x.id)===Number(b.dataset.branch));if(!branch)return;if(!active||!branch.active)return ownerPendingBranchPreview(companyId,branch);selectedBranch=Number(branch.id);await enterOwnerDashboard();});
  $('addNewBranch').onclick=async()=>{

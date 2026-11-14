@@ -1257,11 +1257,11 @@ function newOrderForm() {
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
       const open=document.createElement('a');open.href=link;open.target='_blank';open.rel='noopener noreferrer';open.textContent='🔗 فتح متابعة العميل';open.style.cssText='padding:12px;background:#eee0c2;border-radius:9px;color:#4b2814;font-weight:700;text-decoration:none';
       actions.append(copy,open);
-      if(validPhone){
+      if(validPhone&&consent){
         const wa=document.createElement('a');wa.href=customerWhatsAppUrl(normalizedPhone,msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 إرسال المتابعة على واتساب';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
       }
       panel.appendChild(actions);const preview=document.createElement('pre');preview.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f7f1e6;color:#302014;padding:12px;border-radius:10px;margin-top:12px';preview.textContent=msg;panel.appendChild(preview);
-      if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='لم يتم تأكيد موافقة العميل على استلام رسالة واتساب؛ استخدم الرابط وفق سياسة التواصل مع العملاء.';panel.appendChild(note);}
+      if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='زر واتساب غير متاح حتى يتم تأكيد موافقة العميل على استلام رسالة المتابعة.';panel.appendChild(note);}
       if(!validPhone){const note=document.createElement('div');note.className='meta';note.textContent='لإظهار زر واتساب، أضف رقم موبايل مصري صحيح للعميل.';panel.appendChild(note);}
     }else{
       const note=document.createElement('div');note.className='msg e';note.textContent='تم حفظ الطلب، لكن لم نتمكن من قراءة كود المتابعة. افتح قائمة أكواد العملاء لإعادة المحاولة.';panel.appendChild(note);
@@ -2163,7 +2163,8 @@ function openMap() {
 /* ---------- إضافة طيار (المدير) ---------- */
 function addDriverForm(fixedBranchId=null,companyBranches=null) {
   // DOM click handlers pass a PointerEvent as the first argument; it is not a branch ID.
-  if(fixedBranchId!==null && (!Number.isInteger(Number(fixedBranchId)) || Number(fixedBranchId)<1)) fixedBranchId=null;
+  if(isOwner()) fixedBranchId=null; // Platform owner may choose any active branch in the selected company.
+  else if(fixedBranchId!==null && (!Number.isInteger(Number(fixedBranchId)) || Number(fixedBranchId)<1)) fixedBranchId=null;
   if(!isOwner())return flash('إنشاء حسابات الموظفين متاح لمالك منصة Your Staff فقط',false);
   const pw = generateStrongPassword();
   const d = document.createElement('div'); d.className = 'modal';

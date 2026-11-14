@@ -511,8 +511,12 @@ async function boot() {
   branchNames={...branchNames,...Object.fromEntries((branchResult.data||[]).map(b=>[Number(b.id),b.name]))};
   me.allowed_branch_ids=permitted;
   if (!permitted.length) return reconnectView('الشركة موقوفة مؤقتًا أو لا توجد فروع مصرح بها. تواصل مع إدارة المنصة.');
-  if (permitted.length > 1 && !permitted.includes(Number(selectedBranch))) { resetPlatformBrand(); await employeeBranchPicker(permitted); return; }
-  selectedBranch = permitted.includes(Number(selectedBranch)) ? Number(selectedBranch) : permitted[0];
+  // Prevent stale tenant branding from the previous session while loading this account.
+  resetPlatformBrand();
+  // New accounts open directly on their assigned home branch, regardless of any
+  // previous user's branch selection. Other authorized branches remain switchable.
+  const homeBranch=Number(me.branch_id);
+  selectedBranch=permitted.includes(homeBranch)?homeBranch:permitted[0];
   try{await loadBrandConfig();subscribeBrandConfig();}catch(e){console.warn('تعذر تحميل مظهر الشركة، جاري فتح لوحة العمل بالتصميم الافتراضي:',e);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
     const r = await safeRpc('dlv_list_branch_drivers',{p_branch_id:selectedBranch});

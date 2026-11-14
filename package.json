@@ -1,0 +1,19 @@
+{
+  "name": "your-staff-delivery-android",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Android wrapper for Your Staff Delivery",
+  "scripts": {
+    "build:web": "node scripts/build-android-web.mjs",
+    "android:init": "npm run build:web && npx cap add android",
+    "android:sync": "npm run build:web && npx cap sync android",
+    "android:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/android": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}

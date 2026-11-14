@@ -864,7 +864,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  $('ownerEditCompanyBrand').onclick=async()=>{
   const current=ownerBrandCache.get(Number(companyId))||{};
   const logo=prompt('رابط شعار الشركة HTTPS (أو ملف داخل المشروع)',current.logo_url||'yourstaff-icon.svg');if(logo===null)return;
-  const background=prompt('رابط صورة الخلفية HTTPS (اختياري)',current.background_url||'');if(background===null)return;
+  const background=logo.trim()||current.logo_url||'';
   const valid=u=>!u||(/^https:\/\/[^\\\"'<>\\s]+$/i.test(u)||/^[a-z0-9_./-]+$/i.test(u))&&!u.startsWith('//');
   if(!valid(logo.trim())||!valid(background.trim()))return alert('الرابط غير صالح؛ استخدم HTTPS أو ملفًا محليًا');
   const {data,error}=await sb.from('dlv_company_branding').update({logo_url:logo.trim()||'yourstaff-icon.svg',background_url:background.trim()||logo.trim()||current.logo_url||null,updated_at:new Date().toISOString()}).eq('company_id',companyId).select().single();

@@ -673,7 +673,10 @@ function ownerPendingBranchPreview(companyId,branch){
  $('app').innerHTML='<div class="card" style="max-width:780px;margin:20px auto;padding:20px"><h2>'+esc(companyName)+' — '+esc(branch.name)+'</h2><p class="msg e">معاينة هيكل التشغيل فقط: الفرع لم يجتز التجهيز الأمني بعد، ولا توجد حسابات موظفين مفعلة. هذه البطاقات ليست شاشات تشغيل حية.</p><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">'+areas.map(([icon,title,detail])=>'<div class="card" style="padding:18px;text-align:center"><h3>'+icon+' '+esc(title)+'</h3><p class="meta">'+esc(detail)+'</p><span class="meta">بانتظار التفعيل</span></div>').join('')+'</div><button class="p big" id="pendingBranchBack">↩️ رجوع إلى إدارة الشركة</button></div>';
  $('pendingBranchBack').onclick=()=>ownerBranchPicker(companyId);
 }
+let ownerBranchPickerRequestId=0;
 async function ownerBranchPicker(companyId=ownerActiveCompanyId){
+ const requestId=++ownerBranchPickerRequestId;
+ const stillCurrent=()=>requestId===ownerBranchPickerRequestId&&isOwner()&&Number(ownerActiveCompanyId)===Number(companyId);
  if(!Number.isInteger(Number(companyId))||Number(companyId)<1)return ownerCompanyPicker();
  ownerActiveCompanyId=Number(companyId);
  selectedBranch=null;
@@ -681,12 +684,14 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  document.body.classList.remove('ys-platform');
  const ownerBrand=ownerBrandCache.get(Number(companyId));
  if(ownerBrand)applyBrandConfig(ownerBrand,true);
- else { const {data,error}=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();if(error||!data)return reconnectView('تعذر تحميل هوية الشركة؛ لن نعرض هوية شركة أخرى.');ownerBrandCache.set(Number(companyId),data);applyBrandConfig(data,true); }
+ else { const {data,error}=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();if(!stillCurrent())return;if(error||!data)return reconnectView('تعذر تحميل هوية الشركة؛ لن نعرض هوية شركة أخرى.');ownerBrandCache.set(Number(companyId),data);applyBrandConfig(data,true); }
  const companies=await safeRpc('dlv_owner_list_companies');
+ if(!stillCurrent())return;
  if(companies.error)return reconnectView('تعذر التحقق من الشركة');
  const company=(companies.data||[]).find(c=>Number(c.id)===Number(companyId));
  if(!company)return ownerCompanyPicker();
  const {data,error}=await safeRpc('dlv_owner_company_branches',{p_company_id:companyId});
+ if(!stillCurrent())return;
  if(error)return reconnectView('تعذر تحميل فروع الشركة');
  const branches=data||[];
  branchNames={...branchNames,...Object.fromEntries(branches.map(b=>[b.id,b.name]))};

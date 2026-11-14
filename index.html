@@ -73,7 +73,8 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .leaflet-popup-content-wrapper{border-radius:14px!important;border:1px solid #d8b76e;box-shadow:0 8px 24px #24140f33!important}
 .leaflet-popup-content{margin:12px 15px!important;line-height:1.8!important}
 .leaflet-control-zoom a{color:#6b1717!important}
-\n.rateRow{display:flex;gap:8px;margin:6px 0 14px;direction:ltr}.rateStar{font-size:30px;color:#b8862b;background:#fff8e8;border:1px solid #d9b36a;border-radius:10px;padding:2px 9px;min-width:42px}.rateRow .rateStar:focus{outline:2px solid #7b1717}
+
+.rateRow{display:flex;gap:8px;margin:6px 0 14px;direction:ltr}.rateStar{font-size:30px;color:#b8862b;background:#fff8e8;border:1px solid #d9b36a;border-radius:10px;padding:2px 9px;min-width:42px}.rateRow .rateStar:focus{outline:2px solid #7b1717}
 
 .pilot-contact-card{border:1px solid #dcc49a;background:linear-gradient(135deg,#fff8ea,#f5e5c9)}
 .pilot-contact-actions{display:flex;gap:10px;margin-top:12px;direction:rtl}
@@ -82,7 +83,9 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white
 .pilot-wa{background:#b9832e;color:#fff}
 .pilot-disabled{background:#eee5d7;color:#8d806f;border-color:#d8cbb6;opacity:.8}
  .ys-rider-photo{overflow:hidden;background:#f9d49b;border:3px solid #6b3514;display:grid;place-items:center}.ys-rider-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}.ys-bike-pin{isolation:isolate}
-\n.ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}\n
+
+.ys-motorcycle-marker,.ys-motorcycle-icon{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}.ys-motorcycle-icon img{border:0!important;border-radius:0!important;background:transparent!important}
+
 /* Authenticated company theme: consistent contrast on mobile and desktop */
 body.ys-tenant{--bg:#24180f;--card:#211c1b;--text:#fff5e3;--muted:#e6d4b8;--line:#b78b50;background:linear-gradient(160deg,#2c1c12,#4a2e1b 52%,#21170f)!important;color:var(--text)!important}
 body.ys-tenant::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:var(--tenant-wallpaper,none)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;opacity:.13!important}
@@ -152,6 +155,110 @@ body.ys-tenant #ys-live-clock .ys-clock-zone{color:var(--gold,#c69b53);opacity:1
 .ys-guide-highlight{outline:3px solid var(--gold)!important;outline-offset:4px;box-shadow:0 0 0 7px rgba(198,155,83,.16)!important}
 .ys-role-guide button{min-height:44px}
 @media(max-width:520px){.ys-role-guide .row button{width:100%}}
+
+/* Responsive operational layout, shared by all roles. */
+:root{--ys-on-card:#f7f0df;--ys-muted-card:#d8cbb5;--ys-header-bg:#4e2c12;--ys-on-header:#fff5e3;--ys-on-brand:#fff;--ys-on-gold:#17130c}
+body{line-height:1.65;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.wrap{max-width:1180px;padding-block:16px}
+#app{min-width:0}
+#app :is(h1,h2,h3,p,small,label,strong,b,span,div){overflow-wrap:anywhere;word-break:normal}
+#app :is(h1,h2,h3){line-height:1.5;text-wrap:pretty}
+#app h1{font-size:clamp(21px,3vw,28px)}
+#app h2{font-size:17px;margin:0 0 12px}
+#app h3{font-size:16px;margin:0 0 10px}
+#app p{margin:8px 0 14px}
+#app .card{padding:18px;margin-bottom:16px;min-width:0;box-shadow:0 4px 16px #00000012}
+#app .card>.card:last-child{margin-bottom:0}
+#app button{min-height:46px;max-width:100%;line-height:1.55;white-space:normal;word-break:normal;overflow-wrap:anywhere;padding:10px 16px}
+#app button.big{padding:14px 18px}
+#app :is(input,select,textarea){min-height:46px;min-width:0;max-width:100%;font-size:16px;line-height:1.5;padding:11px 12px}
+#app :is(input[type=checkbox],input[type=radio]){min-height:20px;min-width:20px;width:20px;accent-color:var(--brand);flex:0 0 20px}
+#app label{display:block;line-height:1.6;font-size:14px;font-weight:600;margin:12px 0 6px}
+#app .meta{font-size:13px;line-height:1.85}
+#app .f{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:14px;margin-bottom:16px}
+#app :is(.grid,.f)>*{min-width:0;max-width:100%}
+#app .grid{gap:12px;margin-bottom:16px}
+#app .row{gap:10px;min-width:0;align-items:center}
+#app .row>:is(input,select){flex:1 1 180px}
+#app .row>button{flex:0 1 auto}
+#app .ord{gap:12px;flex-wrap:wrap;align-items:flex-start}
+#app .ord>:first-child{min-width:0;flex:1 1 160px}
+#app .ord>.badge{flex:0 1 auto}
+#app .badge{display:inline-flex;align-items:center;justify-content:center;max-width:100%;width:fit-content;line-height:1.65;white-space:normal;padding:5px 10px;font-size:12px;vertical-align:middle;background-color:#454e5a}
+#app .acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr));gap:10px}
+#app .acts button{min-width:0}
+#app .stat{padding:16px 12px;min-width:0}
+#app .stat b{font-size:28px;font-variant-numeric:tabular-nums;line-height:1.4}
+#app .stat span{display:block;font-size:13px;line-height:1.65;margin-top:6px}
+#app .msg{padding:12px 14px;line-height:1.85;overflow-wrap:anywhere}
+#app details>summary{font-size:15px;line-height:1.7;cursor:pointer;padding-block:4px}
+#app .tw{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
+#app table{line-height:1.7}
+#app th,#app td{padding:12px 10px}
+#app .ys-app-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding:20px;border-radius:16px;margin-bottom:16px}
+.ys-header-identity{display:flex;gap:14px;align-items:center;min-width:0}
+.ys-header-logo{width:60px;height:60px;flex:0 0 60px;object-fit:contain;border-radius:12px;background:#ffffff12;padding:4px}
+.ys-header-copy{flex:1 1 auto;min-width:0}
+.ys-header-brand{font-size:12px;line-height:1.75;opacity:.9}
+#app .ys-header-copy #hname{font-size:21px;line-height:1.5;margin:3px 0;font-weight:750}
+#app .ys-header-copy #hmeta{font-size:12px;line-height:1.8;color:inherit}
+.ys-header-branch{font-size:13px;line-height:1.8;margin-top:5px;font-weight:600}
+.ys-header-actions{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;max-width:440px}
+#app .ys-header-actions button{flex:1 0 auto;padding:10px 14px;font-size:13px}
+.ys-app-header button{background:#ffffff12;color:inherit;border-color:currentColor}
+#app #out{background:#0000001f}
+#app .ys-operations-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;padding:14px 16px;margin-bottom:16px}
+#app .ys-operations-bar button{width:auto;margin:0;grid-column:2;grid-row:1/3}
+#app .ys-operations-bar small{grid-column:1;width:auto;line-height:1.7}
+#app .ys-connection{font-size:13px;line-height:1.7}
+#app .ys-role-guide{padding:16px 18px;margin-bottom:16px}
+#app #dailyReportBtn{margin-bottom:16px}
+#app .ys-branch-choice{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch;padding:8px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+#app .ys-branch-choice>[data-branch]{text-align:start;margin:0;display:flex;align-items:center;justify-content:space-between;gap:12px}
+#app .ys-branch-choice>[data-branch] small{display:block;font-weight:400;font-size:12px}
+#app .ys-branch-edit{display:flex;align-items:center;justify-content:center;gap:6px;min-width:70px}
+#app .ys-branch-editor{margin-top:16px;text-align:start}
+body.ys-tenant{color:var(--ys-on-card)!important;background:var(--bg)!important}
+body.ys-tenant .card,body.ys-tenant .stat,body.ys-tenant .modal>div{background:var(--card)!important;color:var(--ys-on-card)!important;border-color:var(--line)!important}
+body.ys-tenant :is(.meta,.stat span,th){color:var(--ys-muted-card)!important}
+body.ys-tenant :is(h1,h2,h3,.ord,.stat b){color:var(--ys-on-card)!important}
+body.ys-tenant header{background:var(--ys-header-bg)!important;color:var(--ys-on-header)!important;border-color:var(--brand)!important}
+body.ys-tenant header :is(h1,h2,h3,small,.ys-header-branch){color:inherit!important}
+body.ys-tenant :is(button,input,select,textarea){color:var(--ys-on-card);background:var(--card);border-color:var(--line)}
+body.ys-tenant button.p{background:var(--brand);color:var(--ys-on-brand);border-color:var(--brand)}
+body.ys-tenant button.g{background:var(--gold);color:var(--ys-on-gold);border-color:var(--gold)}
+body.ys-tenant .pilot-call{background:var(--brand);color:var(--ys-on-brand)}
+body.ys-tenant .pilot-wa{background:var(--gold);color:var(--ys-on-gold)}
+body.ys-tenant .ys-connection.online,body.ys-tenant .ys-operations-bar small{color:var(--ys-muted-card)}
+body.ys-tenant .ys-app-header button{background:#ffffff16;color:inherit;border-color:currentColor}
+body.ys-tenant #ys-live-clock{background:var(--card);color:var(--ys-on-card);border-color:var(--line)}
+body.ys-tenant #ys-live-clock :is(.ys-clock-time,.ys-clock-zone){color:var(--ys-on-card);opacity:1}
+#ys-live-clock{margin-bottom:16px;border-radius:12px;border:1px solid var(--line);padding:10px 14px;gap:8px 14px}
+.modal>div{padding:22px;max-height:90dvh;overscroll-behavior:contain}
+@media(min-width:761px){.modal{align-items:center}.modal>div{border-radius:18px}}
+@media(max-width:760px){
+ body{padding-inline:12px}
+ .wrap{padding-block:12px}
+ #app .ys-app-header{grid-template-columns:minmax(0,1fr);gap:16px;padding:16px}
+ .ys-header-actions{max-width:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr))}
+ #app .ys-header-actions button{width:100%;font-size:14px}
+ #app .ys-app-header .ys-header-copy #hname{font-size:21px}
+ #app .grid[style*="minmax(280px"]{grid-template-columns:minmax(0,1fr)!important}
+ #app .grid[style*="minmax(240px"]{grid-template-columns:minmax(0,1fr)!important}
+ #app .card{padding:16px}
+ #app .f{grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr))}
+}
+@media(max-width:400px){
+ .ys-header-logo{width:50px;height:50px;flex-basis:50px}
+ .ys-header-identity{gap:10px}
+ #app .ys-operations-bar{grid-template-columns:minmax(0,1fr)}
+ #app .ys-operations-bar button{grid-column:1;grid-row:auto;width:100%}
+ #app .ys-operations-bar small{grid-row:2}
+ #app .ys-branch-edit{min-width:54px;padding-inline:10px}
+ #app .ys-branch-edit span{display:none}
+}
+@media print{#app .ys-app-header{display:none}#app .card{box-shadow:none}}
+
 </style>
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
@@ -239,8 +346,23 @@ function deliveryTrackingTiles(map){
   primary.on('tileerror',()=>{if(!switched){switched=true;map.removeLayer(primary);fallback.addTo(map);}});
   primary.addTo(map);
 }
+
+function ysThemeColors(config){
+ const color=(value,fallback)=>/^#[0-9a-f]{6}$/i.test(String(value||''))?value:fallback;
+ const rgb=hex=>[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
+ const hex=parts=>'#'+parts.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+ const mix=(a,b,t)=>hex(rgb(a).map((v,i)=>v*(1-t)+rgb(b)[i]*t));
+ const luminance=h=>rgb(h).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
+ const contrast=(a,b)=>(Math.max(luminance(a),luminance(b))+.05)/(Math.min(luminance(a),luminance(b))+.05);
+ const ink=bg=>contrast(bg,'#000000')>=contrast(bg,'#ffffff')?'#000000':'#ffffff';
+ const card=color(config.card_color,'#1b1d20'),brand=color(config.brand_color,'#a77d3e'),gold=color(config.gold_color,'#c69b53');
+ const header=mix(card,brand,.18),text=ink(card);let muted=mix(card,text,.78);if(contrast(card,muted)<4.5)muted=text;
+ return {'--ys-on-card':text,'--ys-muted-card':muted,'--ys-header-bg':header,'--ys-on-header':ink(header),'--ys-on-brand':ink(brand),'--ys-on-gold':ink(gold)};
+}
+
 function resetPlatformBrand(){
  brandConfig={...PLATFORM_BRAND};activeBrandCompanyId=null;
+ for(const [key,value] of Object.entries(ysThemeColors(PLATFORM_BRAND)))document.documentElement.style.setProperty(key,value);
  document.body.classList.remove('ys-tenant');document.body.style.removeProperty('--tenant-logo');document.body.style.removeProperty('--tenant-wallpaper');
  document.documentElement.style.removeProperty('--bg');document.documentElement.style.removeProperty('--card');
  document.documentElement.style.removeProperty('--brand');document.documentElement.style.removeProperty('--gold');
@@ -255,6 +377,7 @@ function applyBrandConfig(c,ownerPreview=false){
  document.body.style.setProperty('--tenant-wallpaper',safeAsset(brandConfig.background_url||brandConfig.logo_url));
  const root=document.documentElement;
  for(const [key,value] of [['--bg',brandConfig.bg_color],['--card',brandConfig.card_color],['--brand',brandConfig.brand_color],['--gold',brandConfig.gold_color]])root.style.setProperty(key,value||'');
+ for(const [key,value] of Object.entries(ysThemeColors(brandConfig)))root.style.setProperty(key,value);
  document.title='Your Staff — '+(brandConfig.brand_name||'الشركة');
  document.querySelectorAll('[data-brand-logo]').forEach(i=>{i.src=brandConfig.logo_url||'yourstaff-icon.svg'});
  document.querySelectorAll('[data-brand-title]').forEach(e=>e.textContent=brandConfig.brand_name||'');
@@ -423,7 +546,7 @@ function ysRefreshNow(){
 window.addEventListener('online',()=>{ysConnectionStatus();if(me)flash('عاد الاتصال بالإنترنت؛ اضغط تحديث البيانات لعرض الأحدث',true);});
 window.addEventListener('offline',ysConnectionStatus);
 new MutationObserver(()=>ysConnectionStatus()).observe(document.getElementById('app'),{childList:true});
-const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> — <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}${(isOwner()||['manager','callcenter_followup','complaints_officer'].includes(me?.workflow_role))?'<button onclick="openRatingsActions()">⭐ تقييمات وشكاوى</button>':''}<button id="out">خروج</button></header><div class="ys-operations-bar"><span id="ysConnectionStatus" class="ys-connection" role="status" aria-live="polite"></span><button type="button" id="ysRefreshButton" onclick="ysRefreshNow()" aria-label="تحديث بيانات التشغيل">↻ تحديث البيانات</button><small id="ysRefreshTime">التحديث اليدوي متاح</small></div><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
+const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header class="ys-app-header"><div class="ys-header-identity"><img class="ys-header-logo" data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة"><div class="ys-header-copy"><div class="ys-header-brand"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> · <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></div><h1 id="hname">${esc(me.full_name)}</h1><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div class="ys-header-branch">الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div></div><nav class="ys-header-actions" aria-label="إجراءات الحساب">${canSwitch ? '<button id="branchSwitch">تغيير الفرع</button>' : ''}${(isOwner()||['manager','callcenter_followup','complaints_officer'].includes(me?.workflow_role))?'<button onclick="openRatingsActions()">تقييمات وشكاوى</button>':''}<button id="out">تسجيل الخروج</button></nav></header><div class="ys-operations-bar"><span id="ysConnectionStatus" class="ys-connection" role="status" aria-live="polite"></span><button type="button" id="ysRefreshButton" onclick="ysRefreshNow()" aria-label="تحديث بيانات التشغيل">↻ تحديث البيانات</button><small id="ysRefreshTime">التحديث اليدوي متاح</small></div><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
@@ -759,6 +882,28 @@ function ownerPendingBranchPreview(companyId,branch){
  $('pendingBranchBack').onclick=()=>ownerBranchPicker(companyId);
 }
 let ownerBranchPickerRequestId=0;
+async function openOwnerBranchNameEditor(companyId,branch){
+ if(!isOwner()||Number(ownerActiveCompanyId)!==Number(companyId))return;
+ const overlay=document.createElement('div');overlay.className='modal';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','renameBranchHeading');
+ overlay.innerHTML='<div class="ys-branch-editor"><form id="renameBranchForm"><h2 id="renameBranchHeading">تعديل اسم الفرع</h2><p class="meta">سيظهر الاسم الجديد في اختيار الفروع والتقارير. حسابات الموظفين والطلبات تظل مرتبطة بالفرع نفسه.</p><label for="renameBranchInput">اسم الفرع</label><input id="renameBranchInput" value="'+esc(branch.name)+'" minlength="3" maxlength="100" required autocomplete="off"><div id="renameBranchError" class="msg e hide" role="alert"></div><div class="acts"><button type="submit" class="p" id="renameBranchSave">حفظ اسم الفرع</button><button type="button" id="renameBranchCancel">إلغاء</button></div></form></div>';
+ $('app').appendChild(overlay);
+ const input=overlay.querySelector('#renameBranchInput'),cancel=overlay.querySelector('#renameBranchCancel'),save=overlay.querySelector('#renameBranchSave'),error=overlay.querySelector('#renameBranchError');
+ const close=()=>{overlay.remove();document.querySelector('[data-rename-branch="'+Number(branch.id)+'"]')?.focus();};
+ cancel.onclick=close;input.focus();input.select();
+ overlay.onkeydown=e=>{if(e.key==='Escape'&&!save.disabled)close();};
+ overlay.querySelector('form').onsubmit=async e=>{
+  e.preventDefault();if(!isOwner())return close();
+  const name=input.value.trim().replace(/\s+/g,' ');
+  if(name.length<3||name.length>100){error.className='msg e';error.textContent='اسم الفرع يجب أن يكون من 3 إلى 100 حرف';return;}
+  save.disabled=true;cancel.disabled=true;error.className='msg e hide';
+  const result=await safeRpc('dlv_owner_rename_company_branch',{p_company_id:Number(companyId),p_branch_id:Number(branch.id),p_name:name});
+  if(result.error){save.disabled=false;cancel.disabled=false;error.className='msg e';error.textContent=result.error.code==='23505'?'يوجد فرع آخر بالاسم نفسه داخل الشركة':result.error.code==='42501'?'انتهت صلاحية فتح صفحة المالك أو الفرع غير مطابق للشركة. أعد فتح قفل الصفحة.':'تعذر حفظ اسم الفرع. حاول مرة أخرى.';return;}
+  branchNames[Number(branch.id)]=result.data.name;overlay.remove();
+  await ownerBranchPicker(Number(companyId));
+  if($('ownerBranchPanel'))$('ownerBranchPanel').hidden=false;
+ };
+}
+
 async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  const requestId=++ownerBranchPickerRequestId;
  const stillCurrent=()=>requestId===ownerBranchPickerRequestId&&isOwner()&&Number(ownerActiveCompanyId)===Number(companyId);
@@ -782,7 +927,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  branchNames={...branchNames,...Object.fromEntries(branches.map(b=>[b.id,b.name]))};
  const active=company.onboarding_status==='active';
  const setupPending=!active;
- const branchButtons=branches.map(b=>'<button class="p big" data-branch="'+Number(b.id)+'">'+esc(b.name)+(active&&b.active?'':' · معاينة الأقسام قبل التفعيل')+'</button>').join('');
+ const branchButtons=branches.map(b=>'<div class="ys-branch-choice"><button class="p big" data-branch="'+Number(b.id)+'"><span>'+esc(b.name)+(active&&b.active?'':'<small>معاينة الأقسام قبل التفعيل</small>')+'</span><span aria-hidden="true">←</span></button><button type="button" class="ys-branch-edit" data-rename-branch="'+Number(b.id)+'" aria-label="تعديل اسم '+esc(b.name)+'" title="تعديل اسم الفرع">✎ <span>تعديل</span></button></div>').join('');
  $('app').innerHTML=`<div class="card" style="max-width:680px;margin:18px auto;text-align:center;padding:20px">
  <img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:76px;height:76px;object-fit:contain;margin:auto">
  <h1 style="margin:8px 0">${esc(company.name)}</h1><p class="meta">لوحة إدارة الشركة</p>
@@ -800,6 +945,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  <div id="ownerBranchPanel" hidden><h3>فروع الشركة</h3><div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:12px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div></div>
  </div>`;
  $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
+ $('app').querySelectorAll('[data-rename-branch]').forEach(button=>button.onclick=()=>{const branch=branches.find(b=>Number(b.id)===Number(button.dataset.renameBranch));if(branch)openOwnerBranchNameEditor(Number(companyId),branch);});
  $('app').querySelectorAll('[data-report-branch]').forEach(b=>b.onclick=()=>downloadBranchDailyReport(Number(b.dataset.reportBranch),$('ownerReportDay').value));
  $('ownerSetupStatus').onclick=async()=>{
    const b=$('ownerSetupStatus');b.disabled=true;
@@ -1955,7 +2101,7 @@ function managerView() {
       <div class="meta" id="managerUpdatedAt" style="color:#e2e8f0">جاري تحديث البيانات...</div>
     </section>
     <div class="grid" id="managerLiveKpi" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:9px"></div>
-    <div id="delayNotices"></div>
+    
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;align-items:start">
       <section class="card" style="margin:0"><div class="ord"><h2 style="font-size:16px">⏳ الطلبات قيد التنفيذ</h2><span class="badge">مباشر</span></div><div id="managerOpsPending" style="max-height:280px;overflow:auto"></div></section>
       <section class="card" style="margin:0"><div class="ord"><h2 style="font-size:16px">🚨 التأخيرات والتنبيهات</h2><span class="badge" style="background:#b94c35">تحتاج متابعة</span></div><div id="managerDelayed" style="max-height:280px;overflow:auto"></div></section>
@@ -1975,7 +2121,7 @@ function managerView() {
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
     <div class="row" style="margin-bottom:10px">${board?'<button class="p" id="operationsBtn">🚦 غرفة العمليات</button>':''}<button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${ownerTools}</div>
-    ${board ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 تأخيرات المطبخ والإسناد والتوصيل</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
+    ${board ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 تأخيرات المطبخ والإسناد والتوصيل</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
     <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div><h2>الطلبات</h2><div class="card tw" id="tbl"></div><div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>
   `);
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;

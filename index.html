@@ -2169,8 +2169,18 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
       if(result.error){branchError.textContent='تعذر تحميل فروع الشركة: '+result.error.message;branchError.className='msg e';branchSelect.innerHTML='<option value="">تعذر تحميل الفروع</option>';return;}
       choices=(result.data||[]).filter(b=>b.active).map(b=>({id:Number(b.id),name:b.name}));
     }else if(!choices){
-      choices=fixedBranchId?[{id:Number(fixedBranchId),name:branchTitle(fixedBranchId)}]
-        :permittedBranches().map(id=>({id,name:branchTitle(id)}));
+      // A manager's branch permissions are resolved by the server, not guessed
+      // from a possibly incomplete/stale local profile.
+      const result=await safeRpc('dlv_my_branches');
+      if(!d.isConnected)return;
+      if(result.error){
+        branchError.textContent='تعذر التحقق من فروع حسابك: '+result.error.message;
+        branchError.className='msg e';
+        branchSelect.innerHTML='<option value="">تعذر تحميل الفروع</option>';
+        return;
+      }
+      choices=(result.data||[]).map(b=>({id:Number(b.id),name:b.name}));
+      if(fixedBranchId)choices=choices.filter(b=>Number(b.id)===Number(fixedBranchId));
     }
     if(!d.isConnected)return;
     validChoices=(choices||[]).filter(b=>Number.isInteger(Number(b.id))&&Number(b.id)>0);
@@ -2180,7 +2190,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     else if(validChoices.length===1)branchSelect.value=String(validChoices[0].id);
     branchSelect.disabled=!!fixedBranchId||!validChoices.length;
     createButton.disabled=!validChoices.length;
-    if(!validChoices.length){branchError.textContent='لا توجد فروع مفعلة ومصرح بها في هذه الشركة';branchError.className='msg e';}
+    if(!validChoices.length){branchError.textContent='لا توجد فروع مفعلة ومصرح بها لهذا الحساب. يلزم منح صلاحية الفرع من إدارة الشركة، أو فتح إنشاء الحساب من لوحة مالك المنصة.';branchError.className='msg e';}
   }
   loadAccountBranches().catch(e=>{if(!d.isConnected)return;branchError.textContent='تعذر تحميل الفروع، أعد فتح النافذة';branchError.className='msg e';console.error('Branch selector failed',e)});
   const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };

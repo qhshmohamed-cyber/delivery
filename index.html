@@ -495,7 +495,7 @@ async function checkProfileUpdates(){
   if(!isOwner()){
    const {data:allowed,error:accessError}=await safeRpc('dlv_my_branches');
    if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
-   if(!accessError && !(allowed||[]).length){
+   if(accessError?.code==='42501'||(!accessError && !(allowed||[]).length)){
     appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);
     if(me.role==='driver')await stopShare(false);
     stopProfileSync();selectedBranch=null;

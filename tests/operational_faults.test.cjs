@@ -88,6 +88,18 @@ async function run(){
   const first=ctx.submitOrder();await ctx.submitOrder();assert.equal(calls,1);assert(Object.values(fields).every(x=>x.disabled));
   dialog.isConnected=false;ctx.$=()=>{throw Error('Old save accessed replacement form');};hold.resolve({data:100,error:null});await first;
  });
+ await test('confirmed suspension denial clears stale screen while transport errors retain it',async()=>{
+  for(const code of ['42501','NETWORK']){
+   let cleared=0;const elements={app:{innerHTML:'previous data'},suspendedRetry:{},suspendedOut:{}};
+   const ctx={profileSyncBusy:false,profileSyncFingerprint:'same',appSessionEpoch:0,me:{user_id:'fixture-user',role:'manager'},ORD:{1:{}},
+    document:{visibilityState:'visible',body:{classList:{add(){}}}},console,profileSignature:()=> 'same',isOwner:()=>false,
+    clearPrivateSessionDialogs:()=>{cleared++;},stopProfileSync(){},resetPlatformBrand(){},$:id=>elements[id],
+    safeRpc:async()=>({data:null,error:{code}}),sb:{from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{},error:null})})})})}};
+   vm.createContext(ctx);vm.runInContext(extract('checkProfileUpdates'),ctx);await ctx.checkProfileUpdates();
+   assert.equal(cleared,code==='42501'?1:0);assert.equal(Object.keys(ctx.ORD).length,code==='42501'?0:1);
+   assert.equal(elements.app.innerHTML==='previous data',code!=='42501');
+  }
+ });
  for(const result of reports)console.log((result.pass?'PASS':'FAIL')+': '+result.name+(result.error?' — '+result.error:''));
  assert(reports.every(r=>r.pass),'Operational fault scenarios failed');
 }

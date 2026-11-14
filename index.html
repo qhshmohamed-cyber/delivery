@@ -160,6 +160,15 @@ const isOwner = () => !!me && me.role === 'admin' && me.workflow_role === 'admin
 const PLATFORM_BRAND={brand_name:'Your Staff',app_name:'إدارة الشركات',logo_url:'yourstaff-icon.svg',background_url:'',rider_icon_url:'',bg_color:'#101114',card_color:'#1b1d20',brand_color:'#a77d3e',gold_color:'#c69b53'};
 let brandConfig={...PLATFORM_BRAND},brandChannel=null,activeBrandCompanyId=null,ownerBrandCache=new Map(),ownerActiveCompanyId=null;
 const OWNER_ONLY=()=>isOwner();
+function deliveryTrackingTiles(map){
+  // Use the existing satellite provider rather than the blocked public OSM tile endpoint.
+  // A contracted tile provider is recommended for sustained production traffic.
+  const primary=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Tiles © Esri, Maxar, Earthstar Geographics and contributors'});
+  const fallback=L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors © CARTO'});
+  let switched=false;
+  primary.on('tileerror',()=>{if(!switched){switched=true;map.removeLayer(primary);fallback.addTo(map);}});
+  primary.addTo(map);
+}
 function resetPlatformBrand(){
  brandConfig={...PLATFORM_BRAND};activeBrandCompanyId=null;
  document.body.classList.remove('ys-tenant');document.body.style.removeProperty('--tenant-logo');document.body.style.removeProperty('--tenant-wallpaper');
@@ -1133,7 +1142,7 @@ function openFollowupOrderMap(orderId){
   $('followupOrderStatus').innerHTML='<b>الحالة: '+esc(statusText)+'</b><div>المرحلة: '+esc(stageText)+'</div><div>الطيار: '+esc(data.driver_name||(data.assigned?'غير متاح':'لم يتم التعيين'))+'</div><div>الموقع: '+(data.tracking_ended?'انتهت متابعة الموقع بانتهاء الطلب':data.lat==null?'لا توجد إحداثيات متاحة':(fresh?'متصل الآن':'آخر موقع معروف')+' · '+esc(when))+'</div>';
   if(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng))||data.lat===null||data.lng===null){$('followupOrderMap').style.display='none';return;}
   $('followupOrderMap').style.display='block';
-  if(!localMap){localMap=L.map('followupOrderMap').setView([data.lat,data.lng],16);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(localMap);setTimeout(()=>{if(d.isConnected)localMap.invalidateSize()},100);}
+  if(!localMap){localMap=L.map('followupOrderMap').setView([data.lat,data.lng],16);deliveryTrackingTiles(localMap);setTimeout(()=>{if(d.isConnected)localMap.invalidateSize()},100);}
   if(!localMarker){localMarker=L.marker([data.lat,data.lng],{icon:bikeIcon(0,!!fresh,90)}).addTo(localMap);}
   else{localMarker.setLatLng([data.lat,data.lng]);localMarker.setIcon(bikeIcon(0,!!fresh,90));}
  }
@@ -2246,13 +2255,13 @@ function trackView(code0) {
       const waAction = hasPilotPhone
         ? '<a href="https://wa.me/' + pilotDigits + '" target="_blank" rel="noopener noreferrer" class="pilot-contact-btn pilot-wa" dir="rtl"><span aria-hidden="true">◉</span> واتساب</a>'
         : '<button type="button" class="pilot-contact-btn pilot-disabled" disabled title="أضف رقم الطيار من إدارة الحسابات">◉ واتساب</button>';
-      h += '<div class="card pilot-contact-card"><div class="meta">الطيار</div><b style="font-size:20px">' + esc(j.pilot_name) + '</b><div class="pilot-contact-actions">' + callAction + waAction + '</div>' + (!hasPilotPhone ? '<div class="meta">أزرار التواصل جاهزة؛ ستعمل بعد إضافة رقم الطيار في إدارة الحسابات.</div>' : '<div class="meta" dir="ltr" style="text-align:right">' + esc(rawPilotPhone) + '</div>') + '</div>';
+      h += '<div class="card pilot-contact-card"><div class="meta">الطيار</div><b style="font-size:20px">' + esc(j.pilot_name) + '</b><div class="pilot-contact-actions">' + callAction + waAction + '</div>' + (!hasPilotPhone ? '<div class="meta">رقم الطيار غير متاح للتواصل. يُرجى التأكد من تسجيل رقم صحيح في إدارة الحسابات، ولا تُعرض بيانات الاتصال إلا للعميل المصرّح له.</div>' : '<div class="meta" dir="ltr" style="text-align:right">' + esc(rawPilotPhone) + '</div>') + '</div>';
     }
     box.innerHTML = h;
     const m = $('tmap');
     if (j.lat != null && Number.isFinite(Number(j.lat)) && Number.isFinite(Number(j.lng))) {
       m.style.display = 'block';
-      if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapT); mk = L.marker([j.lat, j.lng], { icon: bikeIcon(0, true, 90), keyboard: false }).addTo(mapT); lastTrackPos = {lat:j.lat,lng:j.lng}; }
+      if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); deliveryTrackingTiles(mapT); mk = L.marker([j.lat, j.lng], { icon: bikeIcon(0, true, 90), keyboard: false }).addTo(mapT); lastTrackPos = {lat:j.lat,lng:j.lng}; }
       else { const nextPos = {lat:j.lat,lng:j.lng}; const moved=lastTrackPos&&L.latLng(lastTrackPos).distanceTo(L.latLng(nextPos))>5; const bearing = moved?bikeBearing(lastTrackPos, nextPos):0; if(moved)animateRiderMarker(mk,j.lat,j.lng,4200); else mk.setLatLng([j.lat,j.lng]); mk.setIcon(bikeIcon(bearing, true, 90)); if(moved)mapT.panTo([j.lat, j.lng],{animate:true,duration:1}); lastTrackPos = nextPos; }
     } else m.style.display = 'none';
     if (j.status === 'delivered') {

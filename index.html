@@ -1501,7 +1501,17 @@ function openMap() {
   document.body.appendChild(d);
   if(typeof L==='undefined'){ $('lmap').textContent='تعذر تحميل خدمة الخرائط. تحقق من الاتصال ثم افتح الخريطة مجددًا.'; $('mclose').onclick=()=>d.remove(); return; }
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors', crossOrigin: true }).addTo(map);
+  const streetTiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
+  const satelliteTiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Tiles © Esri, Maxar, Earthstar Geographics and contributors'});
+  let activeTiles=satelliteTiles.addTo(map);
+  const layerSelect=document.createElement('select');
+  layerSelect.id='mapLayerChoice';
+  layerSelect.setAttribute('aria-label','نوع الخريطة');
+  layerSelect.style.cssText='border:1px solid #d8c59c;border-radius:10px;background:#fffdf8;color:#49301e;padding:10px;font-weight:700;min-width:125px';
+  layerSelect.innerHTML='<option value="satellite">🛰️ قمر صناعي</option><option value="streets">🗺️ شوارع</option>';
+  $('msel').parentElement.appendChild(layerSelect);
+  layerSelect.onchange=()=>{map.removeLayer(activeTiles);activeTiles=layerSelect.value==='streets'?streetTiles:satelliteTiles;activeTiles.addTo(map)};
+  satelliteTiles.on('tileerror',()=>{if(activeTiles!==satelliteTiles)return;map.removeLayer(satelliteTiles);activeTiles=streetTiles;streetTiles.addTo(map);layerSelect.value='streets';const c=$('mcount');if(c)c.textContent='تعذر تحميل القمر الصناعي؛ تم عرض الشوارع'});
   markers = {}; const prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
   async function refresh() {
     if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine || !document.getElementById('lmap')) return;

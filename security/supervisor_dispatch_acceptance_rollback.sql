@@ -1,0 +1,31 @@
+begin;
+create temporary table dispatch_results(test text,passed boolean) on commit drop;
+do $$
+declare f uuid;k uuid;s uuid;m uuid;d uuid;staff bigint;b integer;oid bigint;n integer;
+begin
+ select user_id,branch_id into f,b from public.dlv_profiles where active and workflow_role='callcenter_followup' limit 1;
+ select user_id into k from public.dlv_profiles where active and branch_id=b and workflow_role='kitchen' limit 1;
+ select user_id into s from public.dlv_profiles where active and branch_id=b and workflow_role='supervisor' limit 1;
+ select user_id into m from public.dlv_profiles where active and branch_id=b and workflow_role='manager' limit 1;
+ select user_id into d from public.dlv_profiles where active and branch_id=b and workflow_role='driver' limit 1;
+ select id into staff from public.dlv_callcenter_staff where active and branch_id=b limit 1;
+ perform set_config('request.jwt.claim.sub',f::text,true);oid:=public.dlv_create_order('QA-DISPATCH-'||substr(gen_random_uuid()::text,1,8),null,null,null,null,null,b,staff);
+ perform set_config('request.jwt.claim.sub',k::text,true);perform public.dlv_kitchen_forward(oid,null);
+ perform set_config('request.jwt.claim.sub',s::text,true);perform public.dlv_supervisor_receive(oid,null);
+ perform set_config('request.jwt.claim.sub',d::text,true);
+ begin perform public.dlv_assign_driver(oid,d,null);raise exception 'Driver self assigned';exception when raise_exception then if sqlerrm<>'إسناد الطلب للمشرف فقط، مع صلاحية تدخل مالك النظام' then raise;end if;end;
+ execute 'set local role authenticated';select count(*) into n from public.dlv_orders where id=oid;execute 'reset role';if n<>0 then raise exception 'Driver saw unassigned order';end if;
+ perform set_config('request.jwt.claim.sub',m::text,true);
+ begin perform public.dlv_assign_driver(oid,d,null);raise exception 'Manager dispatched';exception when raise_exception then if sqlerrm<>'إسناد الطلب للمشرف فقط، مع صلاحية تدخل مالك النظام' then raise;end if;end;
+ insert into private.dlv_driver_duty(user_id,state) values(d,'off_shift') on conflict(user_id) do update set state='off_shift',updated_at=now();
+ perform set_config('request.jwt.claim.sub',s::text,true);
+ begin perform public.dlv_assign_driver(oid,d,null);raise exception 'Off shift assignment accepted';exception when raise_exception then if sqlerrm<>'يجب أن يبدأ الطيار شفته ويحدد متاح أو في توصيل أولًا' then raise;end if;end;
+ insert into private.dlv_driver_duty(user_id,state) values(d,'available') on conflict(user_id) do update set state='available',updated_at=now();
+ perform public.dlv_assign_driver(oid,d,null);
+ if not exists(select 1 from public.dlv_orders where id=oid and driver_id=d) then raise exception 'Supervisor assignment failed';end if;
+ perform set_config('request.jwt.claim.sub',d::text,true);execute 'set local role authenticated';select count(*) into n from public.dlv_orders where id=oid;execute 'reset role';if n<>1 then raise exception 'Assigned order missing for driver';end if;
+ perform public.dlv_set_status(oid,'received',null);
+ insert into dispatch_results values('driver_cannot_self_assign_or_read_unassigned_order',true),('manager_cannot_dispatch',true),('driver_must_start_shift',true),('supervisor_assigns_then_driver_receives',true);
+end $$;
+select * from dispatch_results;
+rollback;

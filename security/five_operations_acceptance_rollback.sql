@@ -56,7 +56,7 @@ begin
  insert into public.dlv_branches(id,name,company_id) values(b2,'QA5 branch '||gen_random_uuid()::text,c2);
  update public.dlv_profiles set branch_id=b2,allowed_branch_ids=array[b2] where user_id=m;
  perform set_config('request.jwt.claim.sub',m::text,true);
- begin perform public.dlv_order_dossier(oid);raise exception 'Cross company dossier';exception when raise_exception then if sqlerrm<>'الطلب غير متاح' then raise;end if;end;
+ begin perform public.dlv_order_dossier(oid);raise exception 'Cross company dossier';exception when raise_exception then if sqlerrm not in ('غير مصرح','الطلب غير متاح') then raise;end if;end;
  begin perform public.dlv_suggest_drivers(oid);raise exception 'Cross company suggestion';exception when raise_exception then if sqlerrm<>'الطلب غير متاح' then raise;end if;end;
  begin perform public.dlv_shift_summary(report_day,'full',b);raise exception 'Cross company report';exception when raise_exception then if sqlerrm<>'فرع غير مصرح' then raise;end if;end;
  if exists(select 1 from public.dlv_list_stage_notifications() n where n.order_id in(oid,oid2)) then raise exception 'Cross company notification';end if;

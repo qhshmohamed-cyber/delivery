@@ -860,10 +860,10 @@ async function enterOwnerDashboard(){
   if(!Number.isInteger(Number(ownerActiveCompanyId))||Number(ownerActiveCompanyId)<1)return ownerCompanyPicker();
   const branchQuery=await safeRpc('dlv_owner_company_branches',{p_company_id:Number(ownerActiveCompanyId)});
   if(branchQuery.error)return reconnectView('تعذر التحقق من فروع الشركة الحالية.');
-  const scopedIds=(branchQuery.data||[]).map(b=>Number(b.id)).filter(Number.isInteger);
-  if(selectedBranch&&!scopedIds.includes(Number(selectedBranch))){selectedBranch=null;return ownerBranchPicker(Number(ownerActiveCompanyId));}
+  const scopedIds=[...new Set((branchQuery.data||[]).map(b=>Number(b.id)).filter(x=>Number.isInteger(x)&&x>0))];
   if(selectedBranch && !scopedIds.includes(Number(selectedBranch))){selectedBranch=null;return ownerBranchPicker(Number(ownerActiveCompanyId));}
-  if(!scopedIds.length)drivers=[];
+  if(!scopedIds.length){drivers=[];if(selectedBranch){selectedBranch=null;return ownerBranchPicker(Number(ownerActiveCompanyId));}}
+
   else {
    const r=await sb.from('dlv_profiles').select('user_id,full_name,employee_code,branch_id').eq('role','driver').eq('active',true).in('branch_id',selectedBranch?[Number(selectedBranch)]:scopedIds).order('full_name');
    if(r.error){console.warn('تعذر تحميل الطيارين:',r.error.message);drivers=[];}
@@ -1657,7 +1657,8 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
   if(!Number.isInteger(companyId)||companyId<1)return ownerCompanyPicker();
   const {data:companyBranches,error:branchError}=await safeRpc('dlv_owner_company_branches',{p_company_id:companyId});
   if(branchError)return alert('تعذر تحميل فروع الشركة: '+branchError.message);
-  const allowed=(companyBranches||[]).map(b=>Number(b.id));
+  const allowed=(companyBranches||[]).map(b=>Number(b.id)).filter(x=>Number.isInteger(x)&&x>0);
+  if(!allowed.length)return alert('لا توجد فروع تابعة للشركة الحالية لإنشاء التقرير.');
   if(branchId===null){
    const chosen=prompt('اختر رقم الفرع للتقرير:\n'+(companyBranches||[]).map(b=>b.id+' - '+b.name).join('\n'),allowed.includes(Number(selectedBranch))?String(selectedBranch):String(allowed[0]||''));
    if(chosen===null)return;

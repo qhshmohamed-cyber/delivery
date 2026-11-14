@@ -386,7 +386,7 @@ async function boot() {
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
   if (permitted.length > 1) { resetPlatformBrand(); await employeeBranchPicker(permitted); return; }
   selectedBranch = permitted[0];
-  try{await loadBrandConfig();subscribeBrandConfig();}catch(e){return reconnectView(e.message);}
+  try{await loadBrandConfig();subscribeBrandConfig();}catch(e){console.warn('تعذر تحميل مظهر الشركة، جاري فتح لوحة العمل بالتصميم الافتراضي:',e);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
     const r = await safeRpc('dlv_list_active_drivers');
     if (r.error) { drivers = []; console.error('تعذر تحميل الطيارين:', r.error.message); }
@@ -404,7 +404,7 @@ async function employeeBranchPicker(permitted){
   const branches=(data||[]).filter(b=>permitted.includes(b.id));
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
-  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;try{await loadBrandConfig();subscribeBrandConfig();await enterEmployeeDashboard();}catch(e){reconnectView(e.message)}});
+  document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
   $('empOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
 async function enterEmployeeDashboard(){

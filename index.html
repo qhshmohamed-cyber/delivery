@@ -666,7 +666,22 @@ async function ownerBranchPicker(companyId=1){
  const active=company.onboarding_status==='active';
  const setupPending=!active;
  const branchButtons=branches.map(b=>'<button class="p big" data-branch="'+Number(b.id)+'" '+(active&&b.active?'':'disabled')+'>'+esc(b.name)+(b.active?'':' · قيد التجهيز')+'</button>').join('');
- $('app').innerHTML=`<div class="card" style="max-width:600px;margin:24px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:95px;height:95px;object-fit:contain;margin:auto"><h1>${esc(company.name)}</h1><p class="meta">إدارة فروع المطعم</p><button id="addNewBranch" class="p big" style="margin:12px 0">＋ إضافة فرع آخر</button><button id="ownerEditCompanyBrand">تعديل شعار وخلفية الشركة</button><button id="ownerBranchAddons" style="margin-top:10px">🧩 الميزات الإضافية للفروع</button><button id="ownerPreviewAddons" class="p big" style="margin-top:10px">👁 معاينة جميع الميزات للعميل قبل التفعيل</button>${setupPending?'<p class="msg e">الفروع الجديدة تُنشأ تلقائيًا في وضع التجهيز. التشغيل الفعلي بعد مراجعة العزل الأمني.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:14px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div><button id="backCompanies" style="margin-top:18px">العودة إلى الشركات</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:680px;margin:18px auto;text-align:center;padding:20px">
+ <img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:76px;height:76px;object-fit:contain;margin:auto">
+ <h1 style="margin:8px 0">${esc(company.name)}</h1><p class="meta">لوحة إدارة الشركة</p>
+ <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0">
+ <button id="ownerShowBranches" class="big" style="min-height:84px">🏢<div>الفروع</div></button>
+ <button id="addNewBranch" class="big" style="min-height:84px">➕<div>فرع جديد</div></button>
+ <button id="ownerEditCompanyBrand" class="big" style="min-height:84px">🎨<div>الهوية</div></button>
+ <button id="ownerBranchAddons" class="big" style="min-height:84px">🧩<div>الإضافات</div></button>
+ <button id="ownerPreviewAddons" class="big" style="min-height:84px">👁️<div>معاينة</div></button>
+ <button id="backCompanies" class="big" style="min-height:84px">↩️<div>الشركات</div></button>
+ </div>
+ ${setupPending?'<p class="msg e">الشركة قيد التجهيز؛ لا تُفتح فروعها للتشغيل قبل التحقق الأمني.</p>':''}
+ <div id="ownerBranchPanel" hidden><h3>فروع الشركة</h3><div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:12px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div></div>
+ </div>`;
+ $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
+
  $('ownerPreviewAddons').onclick=async()=>{
    if(!branches.length)return alert('أضف فرعًا أولًا.');
    const selection=prompt('اختر رقم الفرع للمعاينة:\\n'+branches.map(b=>Number(b.id)+': '+b.name).join('\\n'));

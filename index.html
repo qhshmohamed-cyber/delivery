@@ -1288,9 +1288,9 @@ function newOrderForm() {
     const orderNo=orderNumber;
     let trackingCode='';
     if(createdId){
-      const {data:createdOrder,error:trackError}=await sb.from('dlv_orders').select('track_code').eq('id',createdId).maybeSingle();
+      const {data:createdCode,error:trackError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(createdId)});
       if(trackError)console.warn('Tracking code lookup:',trackError.message);
-      trackingCode=String(createdOrder?.track_code||'').trim();
+      trackingCode=String(createdCode||'').trim();
     }
     const customerBranchId=Number($('n_branch')?.value||selectedBranch||me.branch_id);
     const customerNameForMessage=$('n_c')?.value||'';
@@ -1383,7 +1383,7 @@ async function ensureDriverShiftForAssignment(){
   };
 }
 async function loadMine() {
-  const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
+  const {data, error} = await branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
   if (error) return flash(error.message, false);
   const o = data || []; o.forEach(x => ORD[x.id] = x);
   $('s1').textContent = o.length;
@@ -1587,7 +1587,7 @@ async function loadCallcenterOrders() {
  const box=$('cc_orders');if(!box)return;
  const q=($('cc_q')?.value||'').trim().replace(/[,()%*]/g,' ');
  const requestId=String(Date.now())+'-'+Math.random();box.dataset.requestId=requestId;
- let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,track_code,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
+ let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
  if(q)req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
  else req=req.in('status',['new','received','out']);
  const {data,error}=await req;
@@ -1974,7 +1974,7 @@ async function loadOwnerRatingsPage() {
 async function loadAll() {
   const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
   const q = $('f_q').value.replace(/[,()%*]/g, ' ').trim();
-  let qb = branchQuery(sb.from('dlv_orders').select('*, driver:driver_id(full_name)', {count:'exact'})).gte('order_date', from).lte('order_date', to)
+  let qb = branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id, driver:driver_id(full_name)', {count:'exact'})).gte('order_date', from).lte('order_date', to)
     .order('created_at', {ascending:false}).range(page * PAGE, page * PAGE + PAGE - 1);
   if (st) qb = qb.eq('status', st); if (dr) qb = qb.eq('driver_id', dr);
   if (q) qb = qb.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
@@ -2545,7 +2545,7 @@ function openReport() {
     $('rbody').innerHTML='<div class="meta">جاري تجهيز تقرير '+esc(day)+'...</div>';
     let rows = [], from = 0;
     for (;;) {
-      let query=sb.from('dlv_orders').select('*, driver:driver_id(full_name)').eq('order_date',day).order('created_at').range(from,from+999);
+      let query=sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id, driver:driver_id(full_name)').eq('order_date',day).order('created_at').range(from,from+999);
       if(branch!=='all') query=query.eq('branch_id',Number(branch));
       else if(!isOwner()) query=query.in('branch_id',allowed);
       const {data,error}=await query;
@@ -2647,7 +2647,7 @@ async function loadKitchen() {
 }
 async function loadPending() {
   const box = $('pend'); if (!box) return;
-  let pendingQuery=branchQuery(sb.from('dlv_orders').select('*')).eq('status','new').order('created_at').limit(200);
+  let pendingQuery=branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id')).eq('status','new').order('created_at').limit(200);
   if(!isOwner())pendingQuery=pendingQuery.is('driver_id',null);
   const { data, error } = await pendingQuery;
   if (error) return;

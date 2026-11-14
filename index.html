@@ -2215,7 +2215,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     if(!validChoices.length){branchError.textContent='لا توجد فروع مفعلة ومصرح بها لهذا الحساب. يلزم منح صلاحية الفرع من إدارة الشركة، أو فتح إنشاء الحساب من لوحة مالك المنصة.';branchError.className='msg e';}
   }
   loadAccountBranches().catch(e=>{if(!d.isConnected)return;branchError.textContent='تعذر تحميل الفروع، أعد فتح النافذة';branchError.className='msg e';console.error('Branch selector failed',e)});
-  const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@yourstaff.invalid'; };
+  const mail = () => { const m = $('a_m').value.trim().toLowerCase(); return m.includes('@') ? m : 'd' + $('a_c').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '@waha.com'; };
   const show = () => { $('a_e').textContent = ($('a_c').value.trim() || $('a_m').value.trim()) ? mail() : '—'; }; $('a_c').oninput = show; $('a_m').oninput = show;
   $('a_x').onclick = () => d.remove();
   $('a_ok').onclick = async () => {

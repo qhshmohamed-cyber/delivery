@@ -666,7 +666,18 @@ async function ownerBranchPicker(companyId=1){
  const active=company.onboarding_status==='active';
  const setupPending=!active;
  const branchButtons=branches.map(b=>'<button class="p big" data-branch="'+Number(b.id)+'" '+(active&&b.active?'':'disabled')+'>'+esc(b.name)+(b.active?'':' · قيد التجهيز')+'</button>').join('');
- $('app').innerHTML=`<div class="card" style="max-width:600px;margin:24px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:95px;height:95px;object-fit:contain;margin:auto"><h1>${esc(company.name)}</h1><p class="meta">إدارة فروع المطعم</p><button id="addNewBranch" class="p big" style="margin:12px 0">＋ إضافة فرع آخر</button><button id="ownerEditCompanyBrand">تعديل شعار وخلفية الشركة</button>${setupPending?'<p class="msg e">الفروع الجديدة تُنشأ تلقائيًا في وضع التجهيز. التشغيل الفعلي بعد مراجعة العزل الأمني.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:14px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div><button id="backCompanies" style="margin-top:18px">العودة إلى الشركات</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:600px;margin:24px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:95px;height:95px;object-fit:contain;margin:auto"><h1>${esc(company.name)}</h1><p class="meta">إدارة فروع المطعم</p><button id="addNewBranch" class="p big" style="margin:12px 0">＋ إضافة فرع آخر</button><button id="ownerEditCompanyBrand">تعديل شعار وخلفية الشركة</button><button id="ownerBranchAddons" style="margin-top:10px">🧩 الميزات الإضافية للفروع</button>${setupPending?'<p class="msg e">الفروع الجديدة تُنشأ تلقائيًا في وضع التجهيز. التشغيل الفعلي بعد مراجعة العزل الأمني.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:14px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div><button id="backCompanies" style="margin-top:18px">العودة إلى الشركات</button></div>`;
+ $('ownerBranchAddons').onclick=async()=>{
+  const options=branches.map(b=>Number(b.id)+': '+b.name).join('\\n');
+  if(!branches.length)return alert('أضف فرعًا أولًا حتى تتمكن من إدارة ميزاته.');
+  const choice=prompt('اختر رقم الفرع لإدارة ميزاته الإضافية:\\n'+options);if(choice===null)return;
+  const branchId=Number(choice);
+  if(!branches.some(b=>Number(b.id)===branchId))return alert('رقم الفرع غير صحيح.');
+  const result=await safeRpc('dlv_owner_list_branch_addons',{p_branch_id:branchId});
+  if(result.error)return alert('تعذر تحميل الميزات: '+result.error.message);
+  const rows=result.data||[];
+  alert('الميزات الإضافية لفرع '+(branches.find(b=>Number(b.id)===branchId)?.name||'')+'\\n\\n'+rows.map(x=>(x.implemented?(x.enabled?'✅ ':'⬜ '):'🔒 ')+x.title_ar+(x.implemented?'':' — قيد التطوير')).join('\\n')+'\\n\\nلا يمكن تفعيل أي ميزة قبل اكتمال تنفيذها واختبارها.');
+ };
  $('ownerEditCompanyBrand').onclick=async()=>{
   const current=ownerBrandCache.get(Number(companyId))||{};
   const logo=prompt('رابط شعار الشركة HTTPS (أو ملف داخل المشروع)',current.logo_url||'yourstaff-icon.svg');if(logo===null)return;

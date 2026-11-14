@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 190" role="img" aria-label="موتوسيكل دليفري من الأعلى يتجه للأمام">
 <defs><linearGradient id="body" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#e9b65a"/><stop offset=".48" stop-color="#8a261e"/><stop offset="1" stop-color="#3d1014"/></linearGradient><linearGradient id="box" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3cf83"/><stop offset="1" stop-color="#ac712c"/></linearGradient><filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".35"/></filter></defs>
 <g filter="url(#shadow)">
-<ellipse cx="60" cy="104" rx="42" ry="76" fill="#34211b" opacity=".18"/>
+<ellipse cx="60" cy="104" rx="42" ry="76" fill="#34211b" opacity=".08"/>
 <rect x="49" y="4" width="22" height="35" rx="10" fill="#17191c" stroke="#9f9f9f" stroke-width="3"/>
 <rect x="49" y="151" width="22" height="34" rx="10" fill="#17191c" stroke="#9f9f9f" stroke-width="3"/>
 <path d="M29 46H91" stroke="#252627" stroke-width="9" stroke-linecap="round"/><circle cx="28" cy="46" r="6" fill="#c49a4a"/><circle cx="92" cy="46" r="6" fill="#c49a4a"/>
@@ -11,8 +11,8 @@
 <path d="M35 76Q23 80 22 95L30 104L45 91" fill="#681c1c" stroke="#321716" stroke-width="3"/><path d="M85 76Q97 80 98 95L90 104L75 91" fill="#681c1c" stroke="#321716" stroke-width="3"/>
 <circle cx="60" cy="79" r="18" fill="#6d171c" stroke="#e8b65d" stroke-width="4"/><path d="M47 79Q60 64 73 79" fill="none" stroke="#ffda85" stroke-width="5"/>
 <rect x="25" y="111" width="70" height="52" rx="7" fill="url(#box)" stroke="#512a18" stroke-width="5"/>
-<rect x="31" y="117" width="58" height="40" rx="3" fill="#fff2d4" stroke="#7d4524" stroke-width="2"/>
+<rect x="31" y="117" width="58" height="40" rx="3" fill="#fffdf2" stroke="#402016" stroke-width="3"/>
 <path d="M60 120L46 140H74Z" fill="#5d301c"/><path d="M60 124L55 138H65Z" fill="#fff8e5"/>
-<text x="60" y="151" font-size="9" font-weight="bold" text-anchor="middle" fill="#542d19">واحة اليمن</text>
+<rect x="34" y="139" width="52" height="16" rx="2" fill="#fffdf5"/><text x="60" y="151" font-size="11.5" font-weight="900" text-anchor="middle" fill="#35140e" stroke="#35140e" stroke-width=".22" paint-order="stroke" font-family="Tahoma,Arial,sans-serif">واحة اليمن</text>
 <path d="M39 104L30 112M81 104L90 112" stroke="#1f1f21" stroke-width="6" stroke-linecap="round"/>
 </g></svg>

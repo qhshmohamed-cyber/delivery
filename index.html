@@ -164,7 +164,7 @@ function deliveryTrackingTiles(map){
   // Use the existing satellite provider rather than the blocked public OSM tile endpoint.
   // A contracted tile provider is recommended for sustained production traffic.
   const primary=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Tiles © Esri, Maxar, Earthstar Geographics and contributors'});
-  const fallback=L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors © CARTO'});
+  const fallback=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
   let switched=false;
   primary.on('tileerror',()=>{if(!switched){switched=true;map.removeLayer(primary);fallback.addTo(map);}});
   primary.addTo(map);
@@ -1748,7 +1748,7 @@ function openMap() {
   document.body.appendChild(d);
   if(typeof L==='undefined'){ $('lmap').textContent='تعذر تحميل خدمة الخرائط. تحقق من الاتصال ثم افتح الخريطة مجددًا.'; $('mclose').onclick=()=>d.remove(); return; }
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
-  const streetTiles=L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors © CARTO'});
+  const streetTiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
   const satelliteTiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Tiles © Esri, Maxar, Earthstar Geographics and contributors'});
   let activeTiles=satelliteTiles.addTo(map);
   const layerSelect=document.createElement('select');
@@ -1793,8 +1793,8 @@ function openMap() {
       prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 72);
       const m = markers[r.driver_id];
-      if (m) { if(moved&&live)animateRiderMarker(m,r.lat,r.lng,4200); else m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); }
-      else markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic }).addTo(map).bindPopup(html);
+      if (m) { if(moved&&live)animateRiderMarker(m,r.lat,r.lng,4200); else m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); m.setOpacity(live?1:0.55); }
+      else { markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic, opacity:live?1:0.55 }).addTo(map).bindPopup(html); }
     });
     Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
     $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+validLocations.filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';

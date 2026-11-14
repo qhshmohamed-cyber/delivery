@@ -650,6 +650,20 @@ async function ownerCompanyPicker(){
  $('ownerPagePass').onclick=ownerPagePasswordSettings;
  $('pickOut').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
 }
+function ownerPendingBranchPreview(companyId,branch){
+ if(!isOwner())return;
+ const companyName=ownerBrandCache.get(Number(companyId))?.brand_name||'الشركة';
+ const areas=[
+ ['☎️','متابعة الكول سنتر','تسجيل الطلبات ومتابعة الحالات'],
+ ['🍳','كنترول المطبخ','استلام وتجهيز الطلبات'],
+ ['🛵','مشرف الطيارين','توزيع الطلبات على الطيارين'],
+ ['📍','الطيار','استلام الطلبات وتحديث التوصيل'],
+ ['📊','مدير الفرع','المتابعة والتقارير'],
+ ['📝','الشكاوى والمشاكل','تسجيل الحالات ومتابعتها']
+ ];
+ $('app').innerHTML='<div class="card" style="max-width:780px;margin:20px auto;padding:20px"><h2>'+esc(companyName)+' — '+esc(branch.name)+'</h2><p class="msg e">معاينة هيكل التشغيل فقط: الفرع لم يجتز التجهيز الأمني بعد، ولا توجد حسابات موظفين مفعلة. هذه البطاقات ليست شاشات تشغيل حية.</p><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">'+areas.map(([icon,title,detail])=>'<div class="card" style="padding:18px;text-align:center"><h3>'+icon+' '+esc(title)+'</h3><p class="meta">'+esc(detail)+'</p><span class="meta">بانتظار التفعيل</span></div>').join('')+'</div><button class="p big" id="pendingBranchBack">↩️ رجوع إلى إدارة الشركة</button></div>';
+ $('pendingBranchBack').onclick=()=>ownerBranchPicker(companyId);
+}
 async function ownerBranchPicker(companyId=1){
  ownerActiveCompanyId=Number(companyId);
  document.body.classList.remove('ys-platform');
@@ -666,7 +680,7 @@ async function ownerBranchPicker(companyId=1){
  branchNames={...branchNames,...Object.fromEntries(branches.map(b=>[b.id,b.name]))};
  const active=company.onboarding_status==='active';
  const setupPending=!active;
- const branchButtons=branches.map(b=>'<button class="p big" data-branch="'+Number(b.id)+'" '+(active&&b.active?'':'disabled')+'>'+esc(b.name)+(b.active?'':' · قيد التجهيز')+'</button>').join('');
+ const branchButtons=branches.map(b=>'<button class="p big" data-branch="'+Number(b.id)+'">'+esc(b.name)+(active&&b.active?'':' · معاينة الأقسام قبل التفعيل')+'</button>').join('');
  $('app').innerHTML=`<div class="card" style="max-width:680px;margin:18px auto;text-align:center;padding:20px">
  <img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:76px;height:76px;object-fit:contain;margin:auto">
  <h1 style="margin:8px 0">${esc(company.name)}</h1><p class="meta">لوحة إدارة الشركة</p>
@@ -815,7 +829,7 @@ async function ownerBranchPicker(companyId=1){
   if(error)return alert('تعذر حفظ الهوية: '+error.message);
   ownerBrandCache.set(Number(companyId),data);applyBrandConfig(data,true);await ownerBranchPicker(companyId);
  };
- document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{selectedBranch=b.dataset.branch==='all'?null:Number(b.dataset.branch);await enterOwnerDashboard();});
+ document.querySelectorAll('[data-branch]').forEach(b=>b.onclick=async()=>{if(b.dataset.branch==='all'){selectedBranch=null;return enterOwnerDashboard();}const branch=branches.find(x=>Number(x.id)===Number(b.dataset.branch));if(!branch)return;if(!active||!branch.active)return ownerPendingBranchPreview(companyId,branch);selectedBranch=Number(branch.id);await enterOwnerDashboard();});
  $('addNewBranch').onclick=async()=>{
   const name=prompt('اسم الفرع الجديد داخل '+company.name);if(name===null)return;
   if(!confirm('إضافة '+name.trim()+' داخل '+company.name+'؟'))return;

@@ -1627,8 +1627,8 @@ async function startShare() {
     gpsPollBusy=true;
     navigator.geolocation.getCurrentPosition(
       p=>{gpsPollBusy=false;sendDriverPosition(p,true);},
-      e=>{gpsPollBusy=false;const el=$('locst');if(el&&e.code!==1)el.textContent='⚠ تعذر تحديث GPS — تأكد من تفعيل الموقع';},
-      {enableHighAccuracy:true,maximumAge:0,timeout:8000}
+      e=>{gpsPollBusy=false;const el=$('locst');if(el)el.textContent=e.code===1?'⚠ إذن GPS مرفوض — فعّل صلاحية الموقع من المتصفح':'⚠ تعذر الحصول على موقع جديد — سيحاول النظام تلقائيًا أثناء فتح الصفحة';if(e.code===1)void stopShare(false);},
+      {enableHighAccuracy:true,maximumAge:0,timeout:15000}
     );
   },10000);
   await acquireWakeLock();

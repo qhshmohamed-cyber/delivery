@@ -1307,6 +1307,18 @@ async function openBrandSettings(){
 }
 
 /* ---------- العمليات ---------- */
+function deliveryDigits(value){
+ return String(value??'').replace(/[٠-٩۰-۹]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.includes(c)?'٠١٢٣٤٥٦٧٨٩'.indexOf(c):'۰۱۲۳۴۵۶۷۸۹'.indexOf(c)));
+}
+function deliveryMobile(value){
+ const raw=deliveryDigits(value).trim();if(!raw)return '';
+ const digits=raw.replace(/\D/g,'');
+ const phone=digits.startsWith('0')?'20'+digits.slice(1):digits;
+ return /^20(?:10|11|12|15)\d{8}$/.test(phone)?phone:null;
+}
+function orderSearchTerm(value){
+ return deliveryDigits(value).normalize('NFKC').replace(/[^\p{L}\p{N}\s-]/gu,'').trim().slice(0,60);
+}
 async function safeRpc(name, args) {
   try {
     const result = await sb.rpc(name, args);
@@ -1518,12 +1530,11 @@ function newOrderForm() {
     if(!label)return;
     const request=++customerCountRequest;
     if(!phone){label.textContent='رقم الهاتف اختياري — يمكن تسجيل الطلب بدونه.';return;}
-    const digits=phone.replace(/\\D/g,'');
-    const normalized=digits.startsWith('20')&&digits.length===12?'0'+digits.slice(2):digits;
-    if(!/^01[0125]\\d{8}$/.test(normalized)){label.textContent='أدخل رقم موبايل صحيحًا لعرض عدد الطلبات.';return;}
+    const normalized=deliveryMobile(phone);
+    if(!normalized){label.textContent='أدخل رقم موبايل صحيحًا لعرض عدد الطلبات.';return;}
     label.textContent='جارٍ حساب طلبات العميل...';
     const branch=Number($('n_branch')?.value||selectedBranch||me.branch_id);
-    const response=await safeRpc('dlv_customer_order_count',{p_branch_id:branch,p_phone:phone});
+    const response=await safeRpc('dlv_customer_order_count',{p_branch_id:branch,p_phone:normalized});
     if(request!==customerCountRequest||!label.isConnected)return;
     if(response.error){label.textContent='تعذر عرض عدد الطلبات حاليًا.';return;}
     const count=Number(response.data||0);
@@ -1542,13 +1553,12 @@ function newOrderForm() {
     const orderNumber=String($('n_no')?.value||'').trim();
     if(!orderNumber){const e=$('ferr');e.textContent='اكتب رقم الطلب أولاً';e.className='msg e';$('n_no')?.focus();return;}
     const phone=String($('n_p')?.value||'').trim();
-    const phoneDigits=phone.replace(/\D/g,'');
-    const normalizedCustomerPhone=phoneDigits.startsWith('0')?'20'+phoneDigits.slice(1):phoneDigits;
-    if(phone&&!/^20(?:10|11|12|15)\d{8}$/.test(normalizedCustomerPhone)){
+    const normalizedCustomerPhone=deliveryMobile(phone);
+    if(phone&&!normalizedCustomerPhone){
       const e=$('ferr');e.textContent='رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015، أو بصيغة +20';e.className='msg e';$('n_p')?.focus();return;
     }
     $('n_ok').disabled = true;$('n_ok').textContent='جارٍ حفظ الطلب...';
-    const {data: createdId, error} = await safeRpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? $('n_p').value : null,
+    const {data: createdId, error} = await safeRpc('dlv_create_order', {p_order_no: $('n_no').value, p_customer: isMgr ? $('n_c').value : null, p_phone: isMgr ? normalizedCustomerPhone||null : null,
       p_address: isMgr ? $('n_a').value : null, p_notes: isMgr ? $('n_n').value : null, p_driver: null, p_callcenter_staff_id:Number($('n_staff').value), p_branch_id: (isOwner() || (me.allowed_branch_ids||[]).length>1) ? Number($('n_branch').value) : null});
     if (error) { $('n_ok').disabled = false; $('n_ok').textContent='تسجيل'; const e = $('ferr'); e.textContent = error.message; e.className = 'msg e'; return; }
     const orderNo=orderNumber;
@@ -1561,8 +1571,7 @@ function newOrderForm() {
     const customerBranchId=Number($('n_branch')?.value||selectedBranch||me.branch_id);
     const customerNameForMessage=$('n_c')?.value||'';
     const consent=$('n_wa_consent')?.checked===true;
-    const rawPhone=String($('n_p')?.value||'').replace(/\D/g,'');
-    const normalizedPhone=rawPhone.startsWith('0')?'20'+rawPhone.slice(1):rawPhone;
+    const normalizedPhone=deliveryMobile($('n_p')?.value)||'';
     const validPhone=/^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone);
     refreshView();
     d.querySelector('div').innerHTML='';
@@ -2408,7 +2417,7 @@ function managerView() {
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;
   if ($('ad')) $('ad').onclick = () => addDriverForm(); if($('cancelPermissionsBtn'))$('cancelPermissionsBtn').onclick=openCancelPermissions;if($('customerMessagesBtn'))$('customerMessagesBtn').onclick=customerMessageSettings; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
-    $('managerSearch').onclick = async () => { const q=$('f_q').value.trim().replace(/[^\\p{L}\\p{N}\\s-]/gu,'').slice(0,60); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    $('managerSearch').onclick = async () => { const q=orderSearchTerm($('f_q').value); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
     return;
   }

@@ -17,3 +17,8 @@ jobs:
           node-version: '22'
       - name: Static HTML and JavaScript smoke tests
         run: python3 tests/release_smoke.py
+      - name: Operational and privacy regression tests
+        run: |
+          for test in tests/*.test.js tests/*.test.cjs; do
+            node "$test" || exit 1
+          done

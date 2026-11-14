@@ -259,6 +259,39 @@ body.ys-tenant #ys-live-clock :is(.ys-clock-time,.ys-clock-zone){color:var(--ys-
 }
 @media print{#app .ys-app-header{display:none}#app .card{box-shadow:none}}
 
+
+.oa-overlay{position:fixed;inset:0;z-index:85;background:var(--bg,#101827);color:var(--ys-on-card,var(--text));overflow:auto;padding:16px;overscroll-behavior:contain}
+.oa-wrap{max-width:1040px;margin:0 auto}
+.oa-head{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px;margin-bottom:18px;background:var(--card);color:var(--ys-on-card);border:1px solid var(--line)}
+.oa-head h1{font-size:25px;margin:0}.oa-head p{font-size:13px;margin:6px 0 0}
+.oa-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(250px,.8fr);gap:18px}
+.oa-grid>*{min-width:0}.oa-overlay .card{padding:20px;margin-bottom:18px}
+.oa-overlay label{display:block;font-size:14px;font-weight:650;margin:14px 0 7px}
+.oa-overlay :is(input,select,textarea){width:100%;max-width:100%;min-width:0;font-size:16px;min-height:46px}
+.oa-overlay button{min-height:44px;line-height:1.6;white-space:normal}
+.oa-overlay button.p{background:var(--brand);color:var(--ys-on-brand,#ffffff)!important}
+.oa-overlay button.g{background:var(--gold);color:var(--ys-on-gold,#000000)!important}
+.oa-overlay h2{font-size:19px;margin:0 0 12px}
+.oa-overlay .meta{line-height:1.9;font-size:13px}
+.oa-overlay .msg{margin-top:14px;line-height:1.9;overflow-wrap:anywhere}
+.oa-chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.oa-chips button{font-size:12px;padding:7px 10px}
+.oa-review{padding:16px;border:1px solid var(--gold);border-radius:12px;margin-top:16px;background:var(--card)}
+.oa-review p{font-size:14px;line-height:1.9;margin:7px 0;overflow-wrap:anywhere}
+.oa-review h3{margin-top:0;font-size:16px}
+.oa-history{padding:12px 0;border-top:1px solid var(--line)}.oa-history p{font-size:13px;line-height:1.8;margin:0 0 6px;overflow-wrap:anywhere}.oa-history small{font-size:11px;color:var(--ys-muted-card,var(--muted))}
+.oa-logo-preview{width:110px;height:110px;object-fit:contain;background:white;border:1px solid var(--line);border-radius:14px;padding:8px;margin-top:12px}
+#oaResult button{display:block;margin-top:12px}
+@media(max-width:760px){.oa-grid{grid-template-columns:minmax(0,1fr)}.oa-overlay{padding:12px}.oa-head{align-items:flex-start;flex-wrap:wrap;padding:16px}.oa-head h1{font-size:23px}.oa-overlay .card{padding:16px}}
+
+
+/* Consistent readable controls for platform and company palettes. */
+body.ys-platform button.p,html.ys-public button.p{color:var(--ys-on-brand,#ffffff)!important}
+body.ys-platform button.g,html.ys-public button.g{color:var(--ys-on-gold,#000000)!important}
+body.ys-tenant button.r,body.ys-tenant .late{color:var(--ys-danger)!important}
+body.ys-tenant button.r{border-color:var(--ys-danger)!important}
+body.ys-tenant .ys-connection.online{color:var(--ys-success)!important}
+body.ys-tenant input::placeholder,body.ys-tenant textarea::placeholder{color:var(--ys-muted-card);opacity:1}
+
 </style>
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
@@ -357,7 +390,7 @@ function ysThemeColors(config){
  const ink=bg=>contrast(bg,'#000000')>=contrast(bg,'#ffffff')?'#000000':'#ffffff';
  const card=color(config.card_color,'#1b1d20'),brand=color(config.brand_color,'#a77d3e'),gold=color(config.gold_color,'#c69b53');
  const header=mix(card,brand,.18),text=ink(card);let muted=mix(card,text,.78);if(contrast(card,muted)<4.5)muted=text;
- return {'--ys-on-card':text,'--ys-muted-card':muted,'--ys-header-bg':header,'--ys-on-header':ink(header),'--ys-on-brand':ink(brand),'--ys-on-gold':ink(gold)};
+ return {'--ys-on-card':text,'--ys-muted-card':muted,'--ys-header-bg':header,'--ys-on-header':ink(header),'--ys-on-brand':ink(brand),'--ys-on-gold':ink(gold),'--ys-danger':text==='#000000'?'#a11524':'#ffb4b4','--ys-success':text==='#000000'?'#145c34':'#a8ebbc'};
 }
 
 function resetPlatformBrand(){
@@ -829,7 +862,7 @@ async function ownerCompanyPicker(){
  if(!brandResult.error)ownerBrandCache=new Map((brandResult.data||[]).map(x=>[Number(x.company_id),x]));
  if(error)return reconnectView('تعذر تحميل الشركات');
  const companies=data||[];
- $('app').innerHTML=`<div class="card" style="max-width:560px;margin:30px auto;padding:22px;background:#151515;color:#fff;border:1px solid #bc8937"><div class="ys-platform-brand"><img src="yourstaff-icon.svg" alt="شعار Your Staff" width="92" height="92" decoding="async"><h1 style="color:#eebc62;font-size:30px;margin:0">Your Staff</h1><p style="margin:0;color:#f7f0df">إدارة الشركات — حساب مالك المنصة فقط</p></div><div class="ys-partners-title">الشركات المتعاقدة مع Your Staff (${companies.length})</div><div class="grid" style="grid-template-columns:1fr;gap:12px">${companies.map(c=>`<button class="g big" data-company="${c.id}" style="padding:18px;border:1px solid #b98a40;background:#27231c;color:#fff;text-align:right"><span style="display:flex;align-items:center;gap:12px"><img src="${esc(ownerBrandCache.get(Number(c.id))?.logo_url||'yourstaff-icon.svg')}" alt="" loading="lazy" decoding="async" style="width:54px;height:54px;object-fit:contain;border-radius:10px;background:#fff6e9;padding:4px"><strong>${esc(c.name)}</strong></span><small style="display:block;opacity:.75">${!c.active?'⛔ الشركة موقوفة — الاشتراك غير مفعل':c.onboarding_status==='active'?'الشركة مفعلة':'قيد تجهيز العزل الأمني — غير جاهزة للتشغيل'}</small></button><button data-company-toggle="${c.id}" style="padding:10px;border-radius:10px;background:${c.active?'#78342b':'#235a40'};color:white;border:1px solid #b98a40">${c.active?'⛔ إيقاف الشركة':'✅ إعادة تفعيل الشركة'}</button>`).join('')}<button id="ownerAddCompany" class="p big" style="background:#b98a40;color:#111">＋ إضافة شركة جديدة</button></div><button id="ownerBillingHistory" style="margin-top:10px">📋 سجل الاشتراكات والإيقاف</button><button id="ownerBilling" style="margin-top:14px">💳 إدارة الاشتراكات ومواعيد السداد</button><button id="ownerPagePass" style="margin-top:16px">إنشاء / تغيير رمز قفل صفحة المالك</button><button id="ownerChangePass" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:560px;margin:30px auto;padding:22px;background:#151515;color:#fff;border:1px solid #bc8937"><div class="ys-platform-brand"><img src="yourstaff-icon.svg" alt="شعار Your Staff" width="92" height="92" decoding="async"><h1 style="color:#eebc62;font-size:30px;margin:0">Your Staff</h1><p style="margin:0;color:#f7f0df">إدارة الشركات — حساب مالك المنصة فقط</p></div><div class="ys-partners-title">الشركات المتعاقدة مع Your Staff (${companies.length})</div><div class="grid" style="grid-template-columns:1fr;gap:12px">${companies.map(c=>`<button class="g big" data-company="${c.id}" style="padding:18px;border:1px solid #b98a40;background:#27231c;color:#fff;text-align:right"><span style="display:flex;align-items:center;gap:12px"><img src="${esc(ownerBrandCache.get(Number(c.id))?.logo_url||'yourstaff-icon.svg')}" alt="" loading="lazy" decoding="async" style="width:54px;height:54px;object-fit:contain;border-radius:10px;background:#fff6e9;padding:4px"><strong>${esc(c.name)}</strong></span><small style="display:block;opacity:.75">${!c.active?'⛔ الشركة موقوفة — الاشتراك غير مفعل':c.onboarding_status==='active'?'الشركة مفعلة':'قيد تجهيز العزل الأمني — غير جاهزة للتشغيل'}</small></button><button data-company-toggle="${c.id}" style="padding:10px;border-radius:10px;background:${c.active?'#78342b':'#235a40'};color:white;border:1px solid #b98a40">${c.active?'⛔ إيقاف الشركة':'✅ إعادة تفعيل الشركة'}</button>`).join('')}<button type="button" class="p big" onclick="openOwnerAssistant()" style="margin-bottom:12px">✦ مساعد المالك — اكتب طلبك</button><button id="ownerAddCompany" class="p big" style="background:#b98a40;color:#111">＋ إضافة شركة جديدة</button></div><button id="ownerBillingHistory" style="margin-top:10px">📋 سجل الاشتراكات والإيقاف</button><button id="ownerBilling" style="margin-top:14px">💳 إدارة الاشتراكات ومواعيد السداد</button><button id="ownerPagePass" style="margin-top:16px">إنشاء / تغيير رمز قفل صفحة المالك</button><button id="ownerChangePass" style="margin-top:10px">تغيير كلمة مرور المالك</button><button id="pickOut" style="margin-top:10px">تسجيل الخروج</button></div>`;
  document.querySelectorAll('[data-company]').forEach(b=>b.onclick=()=>ownerBranchPicker(Number(b.dataset.company)));
  document.querySelectorAll('[data-company-toggle]').forEach(b=>b.onclick=async()=>{
   const id=Number(b.dataset.companyToggle),c=companies.find(x=>Number(x.id)===id);if(!c)return;
@@ -930,7 +963,7 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  const branchButtons=branches.map(b=>'<div class="ys-branch-choice"><button class="p big" data-branch="'+Number(b.id)+'"><span>'+esc(b.name)+(active&&b.active?'':'<small>معاينة الأقسام قبل التفعيل</small>')+'</span><span aria-hidden="true">←</span></button><button type="button" class="ys-branch-edit" data-rename-branch="'+Number(b.id)+'" aria-label="تعديل اسم '+esc(b.name)+'" title="تعديل اسم الفرع">✎ <span>تعديل</span></button></div>').join('');
  $('app').innerHTML=`<div class="card" style="max-width:680px;margin:18px auto;text-align:center;padding:20px">
  <img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:76px;height:76px;object-fit:contain;margin:auto">
- <h1 style="margin:8px 0">${esc(company.name)}</h1><p class="meta">لوحة إدارة الشركة</p>
+ <h1 style="margin:8px 0">${esc(company.name)}</h1><p class="meta">لوحة إدارة الشركة</p><button type="button" class="p big" onclick="openOwnerAssistant()" style="margin-top:12px">✦ مساعد المالك — إدارة الشركة بالأوامر</button>
  <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0">
  <button id="ownerShowBranches" class="big" style="min-height:84px">🏢<div>الفروع</div></button>
  <button id="addNewBranch" class="big" style="min-height:84px">➕<div>فرع جديد</div></button>
@@ -2029,15 +2062,186 @@ function openOperationsRoom(){
  roomChannel=sb.channel('owner:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'*',schema:'public',table:'dlv_orders'},scheduledRoomRefresh).on('postgres_changes',{event:'*',schema:'public',table:'dlv_locations'},scheduledRoomRefresh).subscribe(status=>{roomRealtimeState=status==='SUBSCRIBED'?'متصل':status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'انقطع الاتصال':status;paint();});
  scheduledRoomRefresh();refreshTimer=setInterval(scheduledRoomRefresh,30000);
 }
+
+
+function ysBadgeInk(red,green,blue){
+ const values=[red,green,blue].map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});
+ const l=values[0]*.2126+values[1]*.7152+values[2]*.0722;
+ return (l+.05)/.05>=1.05/(l+.05)?'#000000':'#ffffff';
+}
+let ysBadgeFrame=0;
+function ysRefreshBadgeContrast(){
+ if(ysBadgeFrame)return;
+ ysBadgeFrame=requestAnimationFrame(()=>{
+  ysBadgeFrame=0;
+  document.querySelectorAll('#app .badge,.oa-overlay .badge').forEach(el=>{
+   const rgb=getComputedStyle(el).backgroundColor.match(/^rgba?\((\d+)[, ]+\s*(\d+)[, ]+\s*(\d+)(?:[, /]+([\d.]+))?\)/);
+   if(!rgb||(rgb[4]!==undefined&&Number(rgb[4])<1))return;
+   const ink=ysBadgeInk(Number(rgb[1]),Number(rgb[2]),Number(rgb[3]));
+   if(el.style.getPropertyValue('color')!==ink)el.style.setProperty('color',ink,'important');
+  });
+ });
+}
+new MutationObserver(ysRefreshBadgeContrast).observe(document.getElementById('app'),{childList:true,subtree:true});
+
+function ownerAssistantNormalize(value){
+ return String(value||'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[\u064B-\u065F\u0670ـ]/g,'').replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0)).replace(/\s+/g,' ').trim().toLowerCase();
+}
+function ownerAssistantIntent(raw){
+ const text=ownerAssistantNormalize(raw),result={action:'',name:'',phone:'',code:''};
+ if(/باسورد|كلمه (?:ال)?مرور|كلمه (?:ال)?سر|رمز (?:ال)?قفل|password/.test(text))return {...result,sensitive:true};
+ const create=/انش|اعمل|اضف|ضيف|جديد/.test(text);
+ if(create&&/شركه/.test(text)){
+  result.action='create_company';result.name=(String(raw).match(/(?:شركة|شركه)\s*(?:جديدة|جديده)?\s*(?:باسم|اسمها)?\s*(.+)/)?.[1]||'').trim();
+ }else if(/(?:عدل|غير|تغيير|تعديل)/.test(text)&&/اسم.*فرع|فرع.*اسم/.test(text)){
+  result.action='rename_branch';result.name=(String(raw).match(/(?:إلى|الى|ليكون|لـ)\s+(.+)$/)?.[1]||'').trim();
+ }else if(create&&/فرع/.test(text)){
+  result.action='add_branch';result.name=(String(raw).match(/فرع\s*(?:جديد)?\s*(?:باسم)?\s*(.+)/)?.[1]||'').split(/\s+(?:في|داخل)\s+(?:شركة|شركه)/)[0].trim();
+ }else if(/حساب|موظف|موبايل|هاتف|تليفون|كود/.test(text)){
+  result.action='update_employee';
+  result.code=ownerAssistantNormalize(String(raw).match(/(?:كود|الكود)\s*[:：]?\s*([A-Za-z0-9٠-٩۰-۹-]+)/)?.[1]||'');
+  result.phone=ownerAssistantNormalize(String(raw).match(/(?:موبايل|هاتف|تليفون|رقم)\s*(?:الموظف)?\s*(?:إلى|الى|:)?\s*([+0-9٠-٩۰-۹ ()-]{7,25})/)?.[1]||'');
+ }
+ return result;
+}
+async function openOwnerAssistant(){
+ if(!isOwner())return flash('المساعد متاح لمالك النظام فقط',false);
+ if($('ownerAssistantOverlay'))return;
+ const [companiesResult,historyResult]=await Promise.all([safeRpc('dlv_owner_list_companies'),safeRpc('dlv_owner_assistant_history')]);
+ if(companiesResult.error||historyResult.error)return flash('تعذر فتح المساعد. تأكد من فتح قفل صفحة المالك واتصال الإنترنت.',false);
+ const companies=companiesResult.data||[];
+ const overlay=document.createElement('div');overlay.id='ownerAssistantOverlay';overlay.className='oa-overlay';
+ overlay.innerHTML='<div class="oa-wrap"><header class="oa-head"><div><h1>✦ مساعد المالك</h1><p>أوامر إدارة بالعربي · نطاق واضح · سجل تنفيذ</p></div><button type="button" id="oaClose">إغلاق المساعد</button></header><div class="oa-grid"><main><section class="card"><h2>ماذا تريد أن تنفّذ؟</h2><p class="meta">يدعم إنشاء شركة باللوجو، إضافة فرع، تغيير اسم فرع، وتعديل اسم الموظف وكوده وموبايله. اكتب الأمر أو اختر المهمة من القائمة.</p><label for="oaCommand">طلبك</label><textarea id="oaCommand" rows="3" maxlength="600" placeholder="مثال: أنشئ شركة باسم مطاعم النخبة"></textarea><div class="oa-chips"><button type="button" data-oa-example="أنشئ شركة باسم ">إنشاء شركة</button><button type="button" data-oa-example="ضيف فرع جديد باسم ">إضافة فرع</button><button type="button" data-oa-example="غير اسم الفرع إلى ">تعديل فرع</button><button type="button" data-oa-example="عدل بيانات الموظف كود ">تعديل حساب</button></div><button class="p big" id="oaUnderstand">تجهيز الطلب ←</button><div id="oaReply" class="msg" role="status">اكتب طلبك، ثم راجع البيانات قبل التنفيذ. لا تكتب كلمات مرور هنا.</div></section><section class="card"><h2>بيانات العملية</h2><label for="oaAction">المهمة</label><select id="oaAction"><option value="">اختر المهمة</option><option value="create_company">إنشاء شركة ولوجو وفرع أول</option><option value="add_branch">إضافة فرع لشركة</option><option value="rename_branch">تعديل اسم فرع</option><option value="update_employee">تعديل بيانات حساب موظف</option></select><div id="oaScope"><label for="oaCompany">الشركة</label><select id="oaCompany"><option value="">اختر الشركة</option>'+companies.map(c=>'<option value="'+Number(c.id)+'">'+esc(c.name)+'</option>').join('')+'</select><div id="oaBranchRow"><label for="oaBranch">الفرع</label><select id="oaBranch"><option value="">اختر الفرع</option></select></div></div><div id="oaFields"></div><button type="button" class="g big" id="oaPreview" style="margin-top:16px">معاينة العملية</button><div id="oaReview" class="oa-review" hidden></div><button type="button" class="p big" id="oaRun" style="margin-top:12px" disabled>تنفيذ العملية المعروضة</button><div id="oaResult" role="status"></div></section></main><aside><section class="card"><h2>آخر عمليات المساعد</h2><div id="oaHistory"></div></section><section class="card"><h2>حدود الصلاحية</h2><p class="meta">التنفيذ متاح بعد فتح قفل المالك فقط. يجب اختيار الشركة والفرع والحساب المقصود. الطلب غير الواضح يحتاج تحديدًا، ولا يتم اختيار حساب متشابه تلقائيًا.</p><p class="meta">الشركات الجديدة تُنشأ فورًا بحالة انتظار فحص العزل. إعداد كلمات المرور والصلاحيات يتم من شاشات الأمان والحسابات المخصصة.</p><p class="meta">المساعد يعمل بأوامر إدارة محددة؛ لا تُرسل المحادثة إلى مزود ذكاء اصطناعي خارجي.</p></section></aside></div></div>';
+ document.body.appendChild(overlay);
+ let context={branches:[],employees:[]},scopeEpoch=0,parsed={},prepared=null,logoObjectUrl=null,uploaded=null,busy=false;
+ const by=id=>overlay.querySelector('#'+id);
+ const reply=(text,error=false)=>{by('oaReply').className=error?'msg e':'msg o';by('oaReply').textContent=text;};
+ const invalidate=()=>{prepared=null;by('oaRun').disabled=true;by('oaReview').hidden=true;by('oaResult').textContent='';};
+ const drawHistory=items=>{by('oaHistory').innerHTML=items.length?items.map(h=>'<article class="oa-history"><p>'+esc(h.result?.summary||'عملية إدارية')+'</p><small>'+esc(new Date(h.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}))+'</small></article>').join(''):'<p class="meta">لا توجد عمليات مسجلة بعد.</p>';};
+ drawHistory(historyResult.data||[]);
+ const close=()=>{if(busy)return;if(logoObjectUrl)URL.revokeObjectURL(logoObjectUrl);overlay.remove();};
+ by('oaClose').onclick=close;
+ const action=()=>by('oaAction').value;
+ const employee=()=>context.employees.find(e=>e.user_id===by('oaEmployee')?.value);
+ function employeeFields(){
+  const e=employee();if(!e)return;
+  by('oaEmployeeName').value=e.full_name;by('oaEmployeeCode').value=e.employee_code;by('oaEmployeePhone').value=parsed.phone||e.phone||'';
+ }
+ function fields(){
+  invalidate();const a=action();by('oaScope').hidden=a==='create_company'||!a;by('oaBranchRow').hidden=a==='add_branch';
+  if(a==='create_company'){
+   by('oaFields').innerHTML='<label for="oaNewCompany">اسم الشركة</label><input id="oaNewCompany" maxlength="120" placeholder="اسم الشركة"><label for="oaFirstBranch">اسم الفرع الأول</label><input id="oaFirstBranch" maxlength="100" value="الفرع الرئيسي"><label for="oaLogo">لوجو الشركة</label><input id="oaLogo" type="file" accept="image/png,image/jpeg,image/webp"><p class="meta">PNG أو JPG أو WEBP، بحد أقصى 5 ميجابايت. الشعار يظهر في هوية الشركة وصفحة الشركاء العامة.</p><img id="oaLogoPreview" class="oa-logo-preview" alt="معاينة شعار الشركة" hidden><p class="msg">إنشاء الشركة لا يفعّل التشغيل قبل فحص العزل الأمني.</p>';
+   by('oaNewCompany').value=parsed.name||'';
+   by('oaLogo').onchange=()=>{invalidate();uploaded=null;const file=by('oaLogo').files[0];if(logoObjectUrl)URL.revokeObjectURL(logoObjectUrl);by('oaLogoPreview').hidden=true;if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024||file.size===0){by('oaLogo').value='';reply('اختَر صورة PNG أو JPG أو WEBP بحجم حتى 5 ميجابايت.',true);return;}logoObjectUrl=URL.createObjectURL(file);by('oaLogoPreview').src=logoObjectUrl;by('oaLogoPreview').hidden=false;};
+  }else if(a==='add_branch'||a==='rename_branch'){
+   by('oaFields').innerHTML='<label for="oaNewName">'+(a==='add_branch'?'اسم الفرع الجديد':'الاسم الجديد للفرع')+'</label><input id="oaNewName" maxlength="100">';by('oaNewName').value=parsed.name||'';
+  }else if(a==='update_employee'){
+   by('oaFields').innerHTML='<label for="oaEmployee">الحساب المقصود</label><select id="oaEmployee"><option value="">اختر الفرع ثم الحساب بالاسم والكود</option>'+context.employees.map(e=>'<option value="'+esc(e.user_id)+'">'+esc(e.full_name)+' · '+esc(e.employee_code)+(e.active?'':' · غير مفعل')+'</option>').join('')+'</select><label for="oaEmployeeName">اسم الموظف</label><input id="oaEmployeeName" maxlength="120"><label for="oaEmployeeCode">كود الموظف</label><input id="oaEmployeeCode" maxlength="40"><label for="oaEmployeePhone">الموبايل</label><input id="oaEmployeePhone" type="tel" maxlength="25" dir="ltr">';
+   by('oaEmployee').onchange=()=>{invalidate();employeeFields();};
+   if(parsed.code){const matches=context.employees.filter(e=>ownerAssistantNormalize(e.employee_code)===parsed.code);if(matches.length===1){by('oaEmployee').value=matches[0].user_id;employeeFields();}}
+  }else by('oaFields').innerHTML='<p class="meta">اختر مهمة للبدء.</p>';
+  by('oaFields').querySelectorAll('input:not([type=file])').forEach(e=>e.oninput=invalidate);
+ }
+ async function loadScope(branchChanged=false){
+  const epoch=++scopeEpoch;invalidate();
+  const companyId=Number(by('oaCompany').value),branchId=Number(by('oaBranch').value);
+  if(!companyId){context={branches:[],employees:[]};by('oaBranch').innerHTML='<option value="">اختر الشركة أولاً</option>';fields();return;}
+  const r=await safeRpc('dlv_owner_assistant_context',{p_company_id:companyId,p_branch_id:branchChanged&&branchId?branchId:null});
+  if(epoch!==scopeEpoch||!overlay.isConnected)return;
+  if(r.error){context={branches:[],employees:[]};reply('تعذر قراءة الشركة والفرع. أعد فتح قفل المالك إذا انتهت الجلسة.',true);return;}
+  context=r.data;
+  if(!branchChanged)by('oaBranch').innerHTML='<option value="">اختر الفرع</option>'+context.branches.map(b=>'<option value="'+Number(b.id)+'">'+esc(b.name)+'</option>').join('');
+  fields();
+ }
+ by('oaCompany').onchange=()=>{context.employees=[];by('oaBranch').value='';loadScope(false);};
+ by('oaBranch').onchange=()=>loadScope(true);
+ by('oaAction').onchange=()=>{parsed={};fields();if(action()!=='create_company'&&by('oaCompany').value)loadScope(!!by('oaBranch').value);};
+ by('oaUnderstand').onclick=async()=>{
+  parsed=ownerAssistantIntent(by('oaCommand').value);
+  if(parsed.sensitive){by('oaCommand').value='';return reply('تغيير باسورد الحساب أو رمز القفل يتم من إعدادات الأمان المخصصة. لا تكتب كلمة المرور داخل المساعد.',true);}
+  if(!parsed.action){invalidate();return reply('لم أحدد مهمة مدعومة. جرّب «أنشئ شركة باسم…»، «ضيف فرع جديد باسم…»، «غير اسم الفرع إلى…»، أو «عدل بيانات الموظف كود…». ويمكنك اختيار المهمة يدويًا.',true);}
+  by('oaAction').value=parsed.action;fields();
+  const text=ownerAssistantNormalize(by('oaCommand').value);
+  const matchedCompanies=companies.filter(c=>text.includes(ownerAssistantNormalize(c.name)));
+  if(matchedCompanies.length===1)by('oaCompany').value=matchedCompanies[0].id;
+  if(parsed.action!=='create_company'&&by('oaCompany').value){
+   await loadScope(false);const matched=context.branches.filter(b=>text.includes(ownerAssistantNormalize(b.name)));
+   if(matched.length===1){by('oaBranch').value=matched[0].id;await loadScope(true);}
+  }
+  reply('جهزت المهمة. حدد النطاق المقصود وأكمل البيانات ثم اضغط معاينة العملية.');
+ };
+ overlay.querySelectorAll('[data-oa-example]').forEach(b=>b.onclick=()=>{by('oaCommand').value=b.dataset.oaExample;by('oaCommand').focus();});
+ by('oaCommand').oninput=invalidate;
+ by('oaPreview').onclick=()=>{
+  try{
+   if(!isOwner())throw Error('هذه العملية لمالك النظام فقط');
+   const a=action(),cid=Number(by('oaCompany').value)||null,bid=Number(by('oaBranch').value)||null,co=companies.find(c=>Number(c.id)===cid),br=context.branches.find(b=>Number(b.id)===bid);let data={},user=null,lines=[],file=null;
+   if(a==='create_company'){
+    data={name:by('oaNewCompany').value.trim(),first_branch:by('oaFirstBranch').value.trim(),logo_url:''};file=by('oaLogo').files[0]||null;
+    if(data.name.length<2||data.name.length>120||data.first_branch.length<3||data.first_branch.length>100)throw Error('راجع اسم الشركة والفرع الأول');
+    if(companies.some(c=>ownerAssistantNormalize(c.name)===ownerAssistantNormalize(data.name)))throw Error('الشركة موجودة بالفعل؛ اختر مهمة داخلها');
+    lines=['إنشاء شركة: '+data.name,'الفرع الأول: '+data.first_branch,'اللوجو: '+(file?file.name:'بدون لوجو مرفق'),'الحالة: انتظار فحص العزل قبل التشغيل'];
+   }else{
+    if(!co)throw Error('اختر الشركة المقصودة');
+    if(a==='add_branch'){
+     data={name:by('oaNewName').value.trim()};if(data.name.length<3||data.name.length>100)throw Error('اسم الفرع من 3 إلى 100 حرف');lines=['الشركة: '+co.name,'إضافة فرع: '+data.name];
+    }else{
+     if(!br)throw Error('اختر الفرع المقصود');
+     if(a==='rename_branch'){data={name:by('oaNewName').value.trim(),expected_name:br.name};if(data.name.length<3||data.name.length>100)throw Error('اسم الفرع من 3 إلى 100 حرف');lines=['الشركة: '+co.name,'الفرع الحالي: '+br.name,'الاسم الجديد: '+data.name];}
+     else if(a==='update_employee'){
+      const e=employee();if(!e)throw Error('اختر الحساب بالاسم والكود');user=e.user_id;
+      data={full_name:by('oaEmployeeName').value.trim(),employee_code:by('oaEmployeeCode').value.trim(),phone:ownerPinValue(by('oaEmployeePhone').value),version:e.version};
+      if(data.full_name.length<2||data.full_name.length>120||!data.employee_code||data.employee_code.length>40||!/^[+0-9 ()-]{0,25}$/.test(data.phone))throw Error('راجع الاسم والكود والموبايل');
+      lines=['الشركة: '+co.name,'الفرع: '+br.name,'الحساب: '+e.full_name+' · '+e.employee_code,'الاسم: '+e.full_name+' ← '+data.full_name,'الكود: '+e.employee_code+' ← '+data.employee_code,'الموبايل: '+(e.phone||'غير مسجل')+' ← '+(data.phone||'غير مسجل')];
+     }else throw Error('اختر مهمة مدعومة');
+    }
+   }
+   prepared={id:crypto.randomUUID(),action:a,company:a==='create_company'?null:cid,branch:['create_company','add_branch'].includes(a)?null:bid,user,data,file};
+   by('oaReview').innerHTML='<h3>راجع العملية قبل التنفيذ</h3>'+lines.map(l=>'<p>'+esc(l)+'</p>').join('');by('oaReview').hidden=false;by('oaRun').disabled=false;reply('المعاينة جاهزة. زر التنفيذ يحفظ العملية المعروضة فقط.');
+  }catch(e){invalidate();reply(e.message,true);}
+ };
+ by('oaRun').onclick=async()=>{
+  if(!prepared||busy)return;const plan=prepared;busy=true;overlay.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=true);
+  try{
+   if(plan.file){
+    if(!uploaded||uploaded.file!==plan.file){
+     const bitmap=await createImageBitmap(plan.file);bitmap.close();
+     const ext=plan.file.type==='image/jpeg'?'jpg':plan.file.type.split('/')[1],path='assistant-logos/'+crypto.randomUUID()+'.'+ext;
+     const check=await safeRpc('dlv_owner_page_status');if(check.error||!check.data?.unlocked)throw Error('أعد فتح قفل صفحة المالك قبل رفع اللوجو');
+     const up=await sb.storage.from('brand-assets').upload(path,plan.file,{upsert:false,contentType:plan.file.type,cacheControl:'3600'});if(up.error)throw up.error;
+     uploaded={file:plan.file,url:sb.storage.from('brand-assets').getPublicUrl(path).data.publicUrl};
+    }
+    plan.data.logo_url=uploaded.url;
+   }
+   const r=await safeRpc('dlv_owner_assistant_execute',{p_request_id:plan.id,p_action:plan.action,p_company_id:plan.company,p_branch_id:plan.branch,p_user:plan.user,p_data:plan.data});
+   if(r.error){if(r.error.code==='40001')prepared=null;throw r.error;}
+const latestCompanies=await safeRpc('dlv_owner_list_companies');
+   if(!latestCompanies.error){companies.splice(0,companies.length,...latestCompanies.data);const selectedCompany=by('oaCompany').value;by('oaCompany').innerHTML='<option value="">اختر الشركة</option>'+companies.map(c=>'<option value="'+Number(c.id)+'">'+esc(c.name)+'</option>').join('');by('oaCompany').value=selectedCompany;}
+   if(plan.action==='update_employee'||plan.action==='rename_branch'||plan.action==='add_branch'){
+    const latestScope=await safeRpc('dlv_owner_assistant_context',{p_company_id:plan.company,p_branch_id:plan.branch});
+    if(!latestScope.error){context=latestScope.data;const selected=by('oaBranch').value;by('oaBranch').innerHTML='<option value="">اختر الفرع</option>'+context.branches.map(b=>'<option value="'+Number(b.id)+'">'+esc(b.name)+'</option>').join('');by('oaBranch').value=selected;fields();if(plan.user&&by('oaEmployee')){by('oaEmployee').value=plan.user;employeeFields();}}
+   }
+   prepared=null;by('oaResult').className='msg o';by('oaResult').textContent=r.data.summary;reply('تم التنفيذ وحُفظت العملية في السجل.');
+   const history=await safeRpc('dlv_owner_assistant_history');if(!history.error)drawHistory(history.data||[]);
+   if(r.data.company_id){ownerBrandCache.delete(Number(r.data.company_id));tenantBrandCache.delete(Number(r.data.company_id));}
+   by('oaReview').hidden=true;
+   const resultButton=document.createElement('button');resultButton.type='button';resultButton.className='g big';resultButton.textContent='فتح الشركة بعد التعديل';resultButton.onclick=()=>{close();ownerBranchPicker(Number(r.data.company_id));};by('oaResult').appendChild(resultButton);
+  }catch(e){by('oaResult').className='msg e';by('oaResult').textContent=e.code==='42501'?'انتهت صلاحية قفل المالك أو الحساب غير مصرح. أغلق المساعد وأعد فتح قفل الصفحة.':e.code==='40001'?'تغيرت البيانات بعد المعاينة. أعد اختيار النطاق والمعاينة.':e.code==='23505'?'الاسم أو كود الموظف مستخدم بالفعل. راجع البيانات.':'تعذر التنفيذ: '+(e.message||'تحقق من الاتصال. إعادة المحاولة تستخدم معرّف العملية نفسه لتجنب التكرار.');}
+  finally{busy=false;overlay.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=false);by('oaRun').disabled=!prepared;}
+ };
+ fields();
+ if(ownerActiveCompanyId&&companies.some(c=>Number(c.id)===Number(ownerActiveCompanyId))){by('oaCompany').value=String(ownerActiveCompanyId);await loadScope(false);}
+}
+
 function ownerQuickPanel(){
  if(!isOwner())return '';
  return '<section class="card" style="border:2px solid var(--gold);padding:14px"><div class="ord"><div><h2 style="margin:0">👑 تحكم المالك</h2><div class="meta">كل فروعك من مكان واحد · اختر المطلوب فقط</div></div><span class="badge">مالك النظام</span></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px">'+
- [['ownBranches','🏢 الفروع'],['ownAccounts','👥 الحسابات'],['ownOrders','📦 الطلبات'],['ownDrivers','🏍️ الطيارون'],['ownComplaints','📋 الشكاوى'],['ownReports','📊 التقارير']].map(x=>'<button type="button" class="g big" id="'+x[0]+'" onclick="ownerMenuOpen(this.id)" style="min-height:62px">'+x[1]+'</button>').join('')+
+ [['ownAssistant','✦ مساعد المالك'],['ownBranches','🏢 الفروع'],['ownAccounts','👥 الحسابات'],['ownOrders','📦 الطلبات'],['ownDrivers','🏍️ الطيارون'],['ownComplaints','📋 الشكاوى'],['ownReports','📊 التقارير']].map(x=>'<button type="button" class="g big" id="'+x[0]+'" onclick="ownerMenuOpen(this.id)" style="min-height:62px">'+x[1]+'</button>').join('')+
  '</div><div class="row" style="margin-top:10px"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">🗂️ الكنسلة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 المشاكل والشكاوى</button></div><details style="margin-top:12px"><summary style="cursor:pointer">⚙️ إعدادات متقدمة (للمالك فقط)</summary><div class="row" style="margin-top:10px"><button type="button" id="ownIdentity" onclick="ownerMenuOpen(&quot;ownIdentity&quot;)">الهوية والإعدادات</button><button type="button" id="ownSecurity" onclick="ownerMenuOpen(&quot;ownSecurity&quot;)">الأمان والصلاحيات</button><button type="button" id="ownRatings" onclick="ownerMenuOpen(&quot;ownRatings&quot;)">تقييمات العملاء</button></div></details></section>';
 }
 function ownerMenuOpen(id){
  if(!isOwner()){flash('غير مصرح',false);return;}
- const actions={ownBranches:ownerBranchPicker,ownAccounts:managePilots,ownOrders:openOperationsRoom,ownDrivers:openMap,ownComplaints:openManagementComplaints,ownReports:openReport,ownIdentity:openBrandSettings,ownSecurity:openSecurityCommand,ownRatings:ownerRatingsView};
+ const actions={ownAssistant:openOwnerAssistant,ownBranches:ownerBranchPicker,ownAccounts:managePilots,ownOrders:openOperationsRoom,ownDrivers:openMap,ownComplaints:openManagementComplaints,ownReports:openReport,ownIdentity:openBrandSettings,ownSecurity:openSecurityCommand,ownRatings:ownerRatingsView};
  const action=actions[id];
  if(!action){flash('القسم غير معروف',false);return;}
  try{const result=action();if(result&&typeof result.catch==='function')result.catch(e=>{console.error('Owner menu error',e);alert('تعذر فتح القسم: '+(e.message||'خطأ غير متوقع'));});}
@@ -3050,6 +3254,8 @@ function trackView(code0) {
       document.querySelectorAll('[data-brand-logo]').forEach(el=>{el.src=logoSafe?logo:'yourstaff-icon.svg';el.alt='شعار '+bn;});
       document.querySelectorAll('[data-brand-title]').forEach(el=>el.textContent=bn);
       brandConfig={...brandConfig,brand_name:bn,logo_url:logoSafe?logo:''};
+      const trackingPalette={...PLATFORM_BRAND,brand_color:/^#[0-9a-f]{6}$/i.test(color)?color:PLATFORM_BRAND.brand_color,gold_color:/^#[0-9a-f]{6}$/i.test(gold)?gold:PLATFORM_BRAND.gold_color};
+      for(const [key,value] of Object.entries(ysThemeColors(trackingPalette)))document.documentElement.style.setProperty(key,value);
       document.title='متابعة الطلب — '+bn;
     }
     const oldNotice = $('trackConnectionNotice'); if (oldNotice) oldNotice.remove();
@@ -3125,3 +3331,4 @@ const _t = new URLSearchParams(location.search).get('t'); (async()=>{if (_t !== 
 </script>
 </body>
 </html>
+

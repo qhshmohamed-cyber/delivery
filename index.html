@@ -1460,9 +1460,17 @@ function copyCallcenterStatus(id){
  const msg='طلبك رقم '+o.order_no+' — '+(STG[o.workflow_stage]||'قيد المتابعة')+(o.driver?.full_name?' — الطيار: '+o.driver.full_name:'')+'. '+(brandConfig.brand_name||'المطعم')+'.';
  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(msg).then(()=>flash('تم نسخ الرسالة',true)).catch(()=>prompt('انسخ الرسالة',msg));else prompt('انسخ الرسالة',msg);
 }
+// Safe starter checklists: suggestions are personal tasks, not financial or order transactions.
+function customJobSuggestions(title){
+ const t=String(title||'').toLowerCase();
+ if(/كاشير|cashier|صندوق|خزنة/.test(t))return ['مراجعة جاهزية نقطة الكاشير','مراجعة ملاحظات الوردية السابقة','تجهيز ملخص تسليم الوردية'];
+ if(/ويتر|صالة|كابتن|waiter|hall|service/.test(t))return ['مراجعة جاهزية منطقة الخدمة','متابعة احتياجات الصالة','تسجيل ملاحظات تسليم الوردية'];
+ if(/مخزن|store|inventory/.test(t))return ['مراجعة المهام المفتوحة بالمخزن','تسجيل ملاحظات النواقص','تجهيز ملخص تسليم الوردية'];
+ return ['مراجعة مهام بداية الوردية','تسجيل المهام المطلوبة اليوم','تجهيز ملخص نهاية الوردية'];
+}
 async function customStaffView(){
  if(!me||me.workflow_role!=='custom_unassigned')return;
- $('app').innerHTML=shell('<section class="card"><h2>مساحة عمل '+esc(me.job_title||'الوظيفة')+'</h2><p class="meta">مرحبًا بك. هذه مساحة مهامك الخاصة داخل فرعك، ويمكنك تسجيل المهام وإنجازها. أنظمة الكاشير والصالة ستضاف عند تجهيزها وربط صلاحياتها.</p><div class="row"><input id="customTaskInput" maxlength="160" placeholder="اكتب مهمة جديدة" aria-label="عنوان المهمة" style="flex:1"><button class="p" id="customTaskAdd">إضافة مهمة</button></div><div id="customTaskCount" class="meta" role="status"></div></section><section id="customTaskRows" aria-label="مهامي" class="card">جاري تحميل المهام...</section>');
+ $('app').innerHTML=shell('<section class="card"><h2>مساحة عمل '+esc(me.job_title||'الوظيفة')+'</h2><p class="meta">مرحبًا بك. هذه مساحة مهامك الخاصة داخل فرعك، ويمكنك تسجيل المهام وإنجازها. أنظمة الكاشير والصالة ستضاف عند تجهيزها وربط صلاحياتها.</p><div class="row"><input id="customTaskInput" maxlength="160" placeholder="اكتب مهمة جديدة" aria-label="عنوان المهمة" style="flex:1"><button class="p" id="customTaskAdd">إضافة مهمة</button></div><div id="customTaskCount" class="meta" role="status"></div><div id="customSuggestions" style="margin-top:12px"><b>مهام مقترحة لوظيفتك</b><p class="meta">اضغط على المهمة لإضافتها لقائمتك؛ لن تُنفذ تلقائيًا.</p><div id="customSuggestionButtons" class="row" style="flex-wrap:wrap"></div></div></section><section id="customTaskRows" aria-label="مهامي" class="card">جاري تحميل المهام...</section>');
  bindOut();
  const add=$('customTaskAdd'),input=$('customTaskInput');
  add.onclick=async()=>{
@@ -1471,6 +1479,8 @@ async function customStaffView(){
   add.disabled=true;
   try{const {error}=await sb.from('dlv_custom_staff_tasks').insert({user_id:me.user_id,title});if(error)throw error;input.value='';await loadCustomStaffTasks();}catch(e){flash('تعذر حفظ المهمة: '+e.message,false);}finally{if(add.isConnected)add.disabled=false;}
  };
+ const suggestions=$('customSuggestionButtons');
+ customJobSuggestions(me.job_title).forEach(title=>{const btn=document.createElement('button');btn.type='button';btn.textContent='＋ '+title;btn.onclick=()=>{input.value=title;input.focus();};suggestions.appendChild(btn);});
  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.click();}};
  await loadCustomStaffTasks();
 }

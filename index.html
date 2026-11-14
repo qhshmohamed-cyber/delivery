@@ -640,8 +640,8 @@ async function refreshKitchenDelayNotices() {
   if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل التنبيهات: '+esc(error.message)+'</div>'; return; }
   // التنبيه المقروء يختفي من الشاشة نهائيًا، مع بقائه محفوظًا في السجل.
   const rows = (data || []).filter(n => !n.read_at && (n.notification_type === 'kitchen_delay' || !n.notification_type));
-  box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ تمت المعالجة وإخفاء التنبيه</button></div>').join('')+'</section>' : '';
-  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { if (!requireOnline('تحديث التنبيه')) return; b.disabled=true; await safeRpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); refreshKitchenDelayNotices(); });
+  box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ قرأت التنبيه</button></div>').join('')+'</section>' : '';
+  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { if (!requireOnline('تحديث التنبيه')) return; b.disabled=true; const {error}=await safeRpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); if(error){b.disabled=false;return flash('تعذر حفظ قراءة التنبيه',false);} refreshKitchenDelayNotices(); });
 }
 async function runKitchenDelayCheck() {
   if (!me || !(canViewManagerBoard() || me.workflow_role === 'callcenter_followup')) return;
@@ -1306,7 +1306,7 @@ function managerView() {
     <select id="f_dr"><option value="">كل الدليفري</option>${drivers.map(x => `<option value="${x.user_id}">${esc(x.full_name)}</option>`).join('')}</select>
     <input id="f_q" placeholder="بحث: رقم الطلب / عميل / هاتف"></div>
     <div class="row" style="margin-bottom:10px">${board?'<button class="p" id="operationsBtn">🚦 غرفة العمليات</button>':''}<button class="g" id="nw">＋ طلب جديد</button><button class="p" id="mp">🗺️ خريطة الطيارين</button>${ownerTools}</div>
-    ${board ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 الطلبات المتأخرة في المطبخ (+25 دقيقة)</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
+    ${board ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div id="delayNotices"></div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 تأخيرات المطبخ والإسناد والتوصيل</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
     <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div><h2>الطلبات</h2><div class="card tw" id="tbl"></div><div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>
   `);
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;
@@ -1364,11 +1364,12 @@ async function loadManagerLiveKpis() {
   box.innerHTML=[['طلبات اليوم',rows.length],['في الانتظار',pending],['عند المطبخ',kitchen],['خرجت للتوصيل',out]].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
 }
 async function loadManagerDelayed() {
-  const box=$('managerDelayed'); if(!box) return;
-  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,created_at,kitchen_received_at,workflow_stage,status')).eq('status','new').eq('workflow_stage','new').order('created_at').limit(200);
-  if(error){box.innerHTML='<div class="msg e">تعذر تحميل الطلبات المتأخرة: '+esc(error.message)+'</div>';return;}
-  const now=Date.now(), rows=(data||[]).map(o=>({...o,elapsed:Math.floor((now-new Date(o.kitchen_received_at||o.created_at).getTime())/60000)})).filter(o=>o.elapsed>=25);
-  box.innerHTML=rows.length?rows.map(o=>`<div class="card" style="border:2px solid #e8590c"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:#e8590c">متأخر ${o.elapsed} دقيقة</span></div><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(o.phone||'')}<br>منذ: ${tm(o.kitchen_received_at||o.created_at)}</div></div>`).join(''):'<div class="msg">لا توجد طلبات تجاوزت 25 دقيقة في المطبخ حاليًا.</div>';
+ const box=$('managerDelayed');if(!box)return;
+ const {data,error}=await safeRpc('dlv_followup_pulse',{p_branch:selectedBranch||null});
+ if(!box.isConnected)return;
+ if(error){box.textContent='تعذر تحميل التأخيرات';return;}
+ const rows=data?.alerts||[];
+ box.innerHTML=rows.length?rows.map(o=>'<div class="card"><div class="ord"><b>طلب #'+esc(o.order_no)+'</b><span class="badge" style="background:#c44912">'+esc(o.reason)+'</span></div><div class="meta">مدة المرحلة: '+Number(o.elapsed_minutes)+' دقيقة · الحد: '+Number(o.limit_minutes)+' دقيقة · '+esc(branchTitle(o.branch_id))+'</div></div>').join(''):'<div class="meta">لا توجد تأخيرات حسب حدود المراحل المحددة للفروع.</div>';
 }
 async function loadManagerRatings() {
   const box=$('managerRatings'); if(!box) return;

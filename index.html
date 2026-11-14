@@ -197,18 +197,23 @@ const tenantBrandCache=new Map(),tenantBranchCompanyCache=new Map();
 async function loadBrandConfig(){
  resetPlatformBrand();if(!me||!selectedBranch||isOwner())return;
  const branchId=Number(selectedBranch);
+ const userId=me.user_id;
+ const stillCurrent=()=>!!me&&me.user_id===userId&&Number(selectedBranch)===branchId&&!isOwner();
  let companyId=tenantBranchCompanyCache.get(branchId);
  if(!companyId){
   const {data:branches,error:branchError}=await sb.from('dlv_branches').select('id,company_id').eq('id',branchId).limit(1);
+  if(!stillCurrent())return;
   if(branchError||!branches?.length||!branches[0].company_id)throw Error('تعذر تحديد شركة الفرع');
   companyId=branches[0].company_id;tenantBranchCompanyCache.set(branchId,companyId);
  }
  let data=tenantBrandCache.get(companyId);
  if(!data){
   const result=await sb.from('dlv_company_branding').select('*').eq('company_id',companyId).maybeSingle();
+  if(!stillCurrent())return;
   if(result.error||!result.data)throw Error('تعذر تحميل الهوية المعتمدة للشركة');
   data=result.data;tenantBrandCache.set(companyId,data);
  }
+ if(!stillCurrent())return;
  activeBrandCompanyId=companyId;applyBrandConfig(data);
 }
 function subscribeBrandConfig(){

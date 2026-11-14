@@ -1090,15 +1090,29 @@ function customerWhatsAppUrl(phone,message){
  const d=String(phone||'').replace(/\D/g,'');const p=d.startsWith('0')?'20'+d.slice(1):d;
  return /^20(?:10|11|12|15)\d{8}$/.test(p)?'https://wa.me/'+p+'?text='+encodeURIComponent(message):'';
 }
-function customerWelcomeMessage(o,template=''){
+function customerWelcomeMessage(o,template='',companyOverride=''){
+
  const link=location.origin+location.pathname+'?t='+encodeURIComponent(o.track_code);
- const company=brandConfig?.brand_name||'المطعم';
+ const company=companyOverride||brandConfig?.brand_name||'المطعم';
  let message=fillCustomerMessage(template||'مطاعم {company} ترحب بكم 🌴\nرقم طلبكم: {order_no}\nكود المتابعة: {tracking_code}\nتابعوا حالة طلبكم من هنا: {tracking_link}',{company,branch:branchNames[o.branch_id]||'',customer:o.customer_name||'',order_no:o.order_no,tracking_code:o.track_code,tracking_link:link});
  if(!message.includes(String(o.order_no)))message+='\nرقم الطلب: '+o.order_no;
  if(!message.includes('كود المتابعة: '+o.track_code))message+='\nكود المتابعة: '+o.track_code;
  if(!message.includes(link))message+='\nتابعوا حالة طلبكم: '+link;
  if(company.includes('واحة')&&!message.includes('17722'))message+='\nللتواصل معنا: الخط الساخن 17722';
  return message;
+}
+async function customerWelcomeMessageForOrder(o,template=null){
+ const branchId=Number(o.branch_id);
+ if(!Number.isInteger(branchId)||branchId<1)throw Error('فرع الطلب غير محدد');
+ const {data:brand,error:brandError}=await safeRpc('dlv_customer_branch_brand',{p_branch:branchId});
+ if(brandError||!brand?.brand_name)throw Error('تعذر التحقق من هوية شركة الطلب');
+ let chosenTemplate=template;
+ if(chosenTemplate===null){
+  const {data,error}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
+  if(error)throw Error('تعذر تحميل تحية شركة الطلب');
+  chosenTemplate=data||'';
+ }
+ return customerWelcomeMessage(o,chosenTemplate,brand.brand_name);
 }
 function customerMessageSettings(){
  if(!isOwner())return flash('مالك المنصة فقط',false);
@@ -1295,7 +1309,9 @@ function newOrderForm() {
       const branchId=customerBranchId;
       const {data:welcomeTemplate,error:welcomeError}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
       if(welcomeError)console.warn('Welcome template:',welcomeError.message);
-      const msg=customerWelcomeMessage({order_no:orderNo,track_code:trackingCode,branch_id:branchId,customer_name:customerNameForMessage},welcomeTemplate||'');
+      let msg;
+      try{msg=await customerWelcomeMessageForOrder({order_no:orderNo,track_code:trackingCode,branch_id:branchId,customer_name:customerNameForMessage},welcomeTemplate||'');}
+      catch(e){msg='';console.warn('Customer company brand unavailable:',e.message);}
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
@@ -2676,12 +2692,13 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- أكواد متابعة العملاء (للموظفين) ---------- */
 const trackMsg = o => customerWelcomeMessage(o);
-function copyMsg(id) { const o = ORD[id]; if (!o) return; navigator.clipboard && navigator.clipboard.writeText(trackMsg(o)); flash('اتنسخت رسالة العميل، ابعتها له', true); }
-function waMsg(id) {
+async function copyMsg(id) { const o=ORD[id];if(!o)return;try{const msg=await customerWelcomeMessageForOrder(o);await navigator.clipboard.writeText(msg);flash('تم نسخ رسالة شركة الطلب',true);}catch(e){flash('تعذر تجهيز الرسالة: '+e.message,false);} }
+async function waMsg(id) {
   if(!(isOwner() || isLocationManager() || me?.workflow_role==='callcenter_followup' || me?.role==='admin')) return flash('واتساب العميل متاح للمدير ومتابعة الكول سنتر فقط',false);
   const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);
   if(!/^20(?:10|11|12|15)\d{8}$/.test(d))return flash('رقم العميل غير صالح لواتساب',false);
-  const link=document.createElement('a');link.href='https://wa.me/'+d+'?text='+encodeURIComponent(trackMsg(o));link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();
+  let msg;try{msg=await customerWelcomeMessageForOrder(o);}catch(e){return flash('تعذر تجهيز رسالة الشركة: '+e.message,false);}
+  const link=document.createElement('a');link.href='https://wa.me/'+d+'?text='+encodeURIComponent(msg);link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();
 }
 async function loadCodes() {
   const box = $('codes'); if (!box) return;

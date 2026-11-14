@@ -319,7 +319,7 @@ function roleWorkGuide(){
 }
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});
-const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||\'yourstaff-icon.svg\')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||\'الشركة\')}</span> — <span data-brand-app>${esc(brandConfig.app_name||\'إدارة التشغيل\')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
+const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().length > 1; return `<header><img data-brand-logo src="${esc(brandConfig.logo_url||'yourstaff-icon.svg')}" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1;min-width:0"><small style="opacity:.8"><span data-brand-title>${esc(brandConfig.brand_name||'الشركة')}</span> — <span data-brand-app>${esc(brandConfig.app_name||'إدارة التشغيل')}</span></small><div id="hname" style="font-size:18px;font-weight:700;line-height:1.3">${esc(me.full_name)}</div><small id="hmeta">${esc(roleLabel(me))} · كود ${esc(me.employee_code)}</small><div style="margin-top:4px;font-size:12px;font-weight:700;color:#ffe0a3">📍 الفرع الحالي: <span id="activeBranchLabel">${esc(activeBranchTitle())}</span></div></div>${canSwitch ? '<button id="branchSwitch" style="white-space:nowrap">تغيير الفرع</button>' : ''}<button id="out">خروج</button></header><div id="flash" class="hide"></div><div id="delayNotices"></div>${canViewManagerBoard()?'<section class="card"><h2>📍 صحة تتبع الطيارين</h2><div id="managerGpsHealth">جاري فحص المواقع...</div></section>':''}${roleWorkGuide()}${inner}`; };
 
 /* ---------- الدخول ---------- */
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
@@ -2340,14 +2340,14 @@ function openReport() {
     const names = Object.keys(by).sort((a, b) => by[b].t - by[a].t);
     const fails = rows.filter(o => o.status === 'failed'), notes = rows.filter(o => o.driver_note);
     const nm = o => o.driver ? o.driver.full_name : '؟';
-    text = '📊 تقرير الدليفري — واحة اليمن\nالفرع: ' + branchName + '\nالتاريخ: ' + day + '\nإجمالي الطلبات: ' + rows.length + '\n✅ تم التوصيل: ' + c('delivered') + '\n🛵 خرج للتوصيل: ' + c('out') +
+    text = '📊 تقرير الدليفري — '+(brandConfig.brand_name||'الشركة')+'\nالفرع: ' + branchName + '\nالتاريخ: ' + day + '\nإجمالي الطلبات: ' + rows.length + '\n✅ تم التوصيل: ' + c('delivered') + '\n🛵 خرج للتوصيل: ' + c('out') +
       '\n📥 لم يخرج بعد: ' + (c('new') + c('received')) + '\n⛔ تعذر: ' + c('failed') + '\n❌ ملغي: ' + c('cancelled') + '\n⚠ متأخر: ' + late +
       '\n⏱ متوسط مدة التوصيل: ' + (avg == null ? '—' : avg + ' د') + '\n\nحسب الطيار:\n' +
       names.map(n => '- ' + n + ': ' + by[n].t + ' طلب · تم ' + by[n].d + ' · تعذر ' + by[n].f + ' · متأخر ' + by[n].l + ' · متوسط ' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du) + ' د')).join('\n') +
       (fails.length ? '\n\nتعذر التوصيل:\n' + fails.map(o => '- #' + o.order_no + ' (' + nm(o) + '): ' + (o.failed_reason || '') + (o.driver_note ? ' | ' + o.driver_note : '')).join('\n') : '') +
       (notes.length ? '\n\nملاحظات الطيارين:\n' + notes.map(o => '- #' + o.order_no + ' (' + nm(o) + '): ' + o.driver_note).join('\n') : '');
     const kp = [['إجمالي الطلبات', rows.length], ['تم التوصيل', c('delivered')], ['خرجت للتوصيل', c('out')], ['لم تخرج بعد', c('new') + c('received')], ['تعذر', c('failed')], ['ملغي', c('cancelled')], ['متأخرة', late], ['متوسط التوصيل (د)', avg == null ? '—' : avg]];
-    $('rbody').innerHTML = '<h2 style="font-size:16px">واحة اليمن — '+esc(branchName)+' — تقرير يوم ' + esc(day) + '</h2>' +
+    $('rbody').innerHTML = '<h2 style="font-size:16px">'+esc(brandConfig.brand_name||'الشركة')+' — '+esc(branchName)+' — تقرير يوم ' + esc(day) + '</h2>' +
       '<div class="grid">' + kp.map(k => '<div class="stat"><b>' + k[1] + '</b><span>' + k[0] + '</span></div>').join('') + '</div>' +
       '<h2>حسب الطيار</h2><div class="card tw"><table><tr><th>الطيار</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>تعذر</th><th>متأخر</th><th>متوسط (د)</th></tr>' +
       (names.map(n => '<tr><td>' + esc(n) + '</td><td>' + by[n].t + '</td><td>' + by[n].d + '</td><td>' + by[n].o + '</td><td>' + by[n].f + '</td><td>' + by[n].l + '</td><td>' + (avgOf(by[n].du) == null ? '—' : avgOf(by[n].du)) + '</td></tr>').join('') || '<tr><td colspan="7">لا طلبات</td></tr>') + '</table></div>' +
@@ -2479,8 +2479,8 @@ async function loadCodes() {
 
 /* ---------- صفحة العميل: تتبع الطلب بالكود (من غير دخول) ---------- */
 function trackView(code0) {
-  document.title = 'تتبع طلبك — '+(brandConfig.brand_name||'واحة اليمن');
-  $('app').innerHTML = '<header><img data-brand-logo src="logo-original.png" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>واحة اليمن</small></div></header>' +
+  document.title = 'تتبع طلبك — '+(brandConfig.brand_name||'المطعم');
+  $('app').innerHTML = '<header><img data-brand-logo src="'+esc(brandConfig.logo_url||'yourstaff-icon.svg')+'" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>'+esc(brandConfig.brand_name||'المطعم')+'</small></div></header>' +
     '<div class="card"><label style="font-size:12px">كود المتابعة</label><div class="row"><input id="tc" dir="ltr" style="flex:1;text-transform:uppercase" placeholder="مثال: 7K2M9QXA" value="' + esc((code0 || '').toUpperCase()) + '"><button class="p" id="tg">تتبّع</button></div></div>' +
     '<div id="tinfo"></div><div id="tmap" class="card" style="height:320px;display:none;padding:0;overflow:hidden"></div>';
   let tmr, mapT, mk, lastTrackPos = null, trackBusy = false;
@@ -2545,7 +2545,7 @@ function trackView(code0) {
       if (already) {
         box.innerHTML += '<div class="card"><h2>شكرًا لتقييمك ❤️</h2><div class="meta">تم استلام تقييمك بنجاح.</div></div>';
       } else {
-        box.innerHTML += `<div class="card" id="ratingCard"><h2>⭐ قيّم تجربتك مع واحة اليمن</h2><div class="meta">يسعدنا نعرف رأيك بعد استلام طلبك.</div>
+        box.innerHTML += `<div class="card" id="ratingCard"><h2>⭐ قيّم تجربتك مع '+esc(brandConfig.brand_name||'المطعم')+'</h2><div class="meta">يسعدنا نعرف رأيك بعد استلام طلبك.</div>
           <label>تقييم الطيار</label><div class="rateRow" data-rate="delivery">${[1,2,3,4,5].map(n=>`<button type="button" class="rateStar" data-v="${n}">☆</button>`).join('')}</div>
           <label>تقييم المطعم</label><div class="rateRow" data-rate="restaurant">${[1,2,3,4,5].map(n=>`<button type="button" class="rateStar" data-v="${n}">☆</button>`).join('')}</div>
           <label>تقييم موظف متابعة الكول سنتر</label><div class="rateRow" data-rate="callcenter">${[1,2,3,4,5].map(n=>`<button type="button" class="rateStar" data-v="${n}">☆</button>`).join('')}</div>

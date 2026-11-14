@@ -1649,7 +1649,20 @@ function reportOperationalDay(){
 }
 async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  if(!isOwner()&&!isLocationManager())return;
- const id=branchId===null?(selectedBranch||me?.branch_id):branchId;
+ let id=branchId===null?(selectedBranch||me?.branch_id):branchId;
+ if(isOwner()){
+  const companyId=Number(ownerActiveCompanyId);
+  if(!Number.isInteger(companyId)||companyId<1)return ownerCompanyPicker();
+  const {data:companyBranches,error:branchError}=await safeRpc('dlv_owner_company_branches',{p_company_id:companyId});
+  if(branchError)return alert('تعذر تحميل فروع الشركة: '+branchError.message);
+  const allowed=(companyBranches||[]).map(b=>Number(b.id));
+  if(branchId===null){
+   const chosen=prompt('اختر رقم الفرع للتقرير:\\n'+(companyBranches||[]).map(b=>b.id+' - '+b.name).join('\\n'),allowed.includes(Number(selectedBranch))?String(selectedBranch):String(allowed[0]||''));
+   if(chosen===null)return;
+   id=Number(chosen);
+  }
+  if(!allowed.includes(Number(id)))return alert('الفرع المختار لا يتبع الشركة الحالية.');
+ }
  if(!Number.isInteger(Number(id))||Number(id)<1)return alert('اختر فرعًا واحدًا أولًا لسحب تقريره.');
  const day=isOwner()&&requestedDay?requestedDay:reportOperationalDay();
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return alert('تاريخ التقرير غير صحيح.');
@@ -1664,10 +1677,10 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  const url=URL.createObjectURL(file),a=document.createElement('a');
  a.href=url;a.download=[data.company,data.branch,day].map(x=>String(x).replace(/[\\/:*?"<>|]/g,'-')).join(' - ')+'.html';
  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
- alert('تم تجهيز التقرير للتنزيل. افتح الملف ثم اختر طباعة / حفظ PDF. التنزيل التلقائي للموبايل لم يُفعّل بعد.');
+ flash('تم إنشاء ملف التقرير. إذا منع المتصفح التنزيل، افتح الموقع في Chrome واسمح بتنزيل الملفات.',true);
 }
 function managerView() {
-  if(isOwner()||isLocationManager())setTimeout(()=>{const app=$('app');if(!app||$('dailyReportBtn'))return;const btn=document.createElement('button');btn.id='dailyReportBtn';btn.className='g big';btn.textContent='📄 تنزيل تقرير الوردية الحالية';btn.onclick=downloadBranchDailyReport;app.prepend(btn);},0);
+  if(isOwner()||isLocationManager())setTimeout(()=>{const app=$('app');if(!app||$('dailyReportBtn'))return;const btn=document.createElement('button');btn.id='dailyReportBtn';btn.className='g big';btn.textContent='📄 تنزيل تقرير الوردية الحالية';btn.onclick=()=>downloadBranchDailyReport();app.prepend(btn);},0);
   const t = reportOperationalDay();
   const owner = isOwner();
   const board = canViewManagerBoard();

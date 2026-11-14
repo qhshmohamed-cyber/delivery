@@ -751,7 +751,7 @@ function newOrderForm() {
     refreshView();
     if (consent && /^20(?:10|11|12|15)\d{8}$/.test(normalizedPhone) && trackingCode) {
       const link = location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
-      const msg = (activeBrand?.brand_name||activeBrand?.app_name||'المطعم')+' — تم تسجيل طلبك رقم '+$('n_no').value+'. تابع طلبك من هنا: '+link;
+      const msg = (brandConfig?.brand_name||brandConfig?.app_name||'المطعم')+' — تم تسجيل طلبك رقم '+$('n_no').value+'. تابع طلبك من هنا: '+link;
       const waLink = 'https://wa.me/'+normalizedPhone+'?text='+encodeURIComponent(msg);
       const go = document.createElement('a');go.href=waLink;go.target='_blank';go.rel='noopener noreferrer';go.textContent='فتح واتساب لإرسال رابط المتابعة';
       go.style.cssText='display:block;padding:12px;background:#fff8ea;color:#5a3317;border:1px solid #b9832e;border-radius:10px;margin:12px 0;text-align:center';
@@ -1181,7 +1181,7 @@ function managerView() {
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
-      <div class="ord"><div><b style="font-size:18px">مركز قيادة ${esc(activeBrand?.brand_name||activeBrand?.app_name||"الشركة")}</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">مركز التحكم التشغيلي · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
+      <div class="ord"><div><b style="font-size:18px">مركز قيادة ${esc(brandConfig?.brand_name||brandConfig?.app_name||"الشركة")}</b><div style="color:#f1dfc3;font-size:12px;margin-top:5px">مركز التحكم التشغيلي · ${esc(activeBranchTitle())}</div></div><span class="badge" style="background:#2f9e44">● مباشر</span></div>
       <div class="meta" id="managerUpdatedAt" style="color:#f1dfc3">جاري تحديث البيانات...</div>
     </section>
     <div id="delayNotices"></div>

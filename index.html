@@ -1336,7 +1336,7 @@ async function sendDriverPosition(p, force = false) {
     if (s) s.textContent = error
       ? '⚠ تعذر إرسال الموقع: ' + error.message
       : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
-    if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG')+' · يجب إبقاء التطبيق مفتوحًا';}
+    if (!error) {lastSend = Date.now();const details=$('locdetail');if(details)details.textContent='دقة الموقع: '+Math.round(p.coords.accuracy)+' متر · آخر إرسال: '+new Date().toLocaleTimeString('ar-EG')+' · عند قفل الشاشة قد يتوقف GPS حتى إعادة فتح الصفحة';}
   } catch(e) {const st=$('locst');if(st)st.textContent='⚠ فشل إرسال GPS: '+String(e?.message||'خطأ اتصال');} finally { locationBusy = false; }
 }
 function attachLocationWatch() {
@@ -1386,7 +1386,7 @@ async function startShare() {
   await acquireWakeLock();
   renderShare();
   const s = $('locst');
-  if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… اترك الصفحة مفتوحة أثناء التوصيل';
+  if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… التحديث أثناء قفل الشاشة غير مضمون من المتصفح';
 }
 async function stopShare(callServer = true) {
   shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;gpsPollBusy=false;
@@ -1548,10 +1548,13 @@ function openMap() {
     $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+validLocations.filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';
     if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }
+  const mapVisibilityRefresh=()=>{if(document.visibilityState==='visible'&&d.isConnected){map.invalidateSize();refresh();}};
+  document.addEventListener('visibilitychange',mapVisibilityRefresh);
+  window.addEventListener('online',mapVisibilityRefresh);
   $('msel').onchange = () => { fitted = false; refresh(); };
   setTimeout(()=>{if(document.getElementById('lmap'))map.invalidateSize()},150);
   refresh(); mapTimer = setInterval(refresh, 5000);
-  $('mclose').onclick = () => { clearInterval(mapTimer); map.remove(); d.remove(); };
+  $('mclose').onclick = () => { clearInterval(mapTimer);document.removeEventListener('visibilitychange',mapVisibilityRefresh);window.removeEventListener('online',mapVisibilityRefresh); map.remove(); d.remove(); };
 }
 
 /* ---------- إضافة طيار (المدير) ---------- */
@@ -2005,10 +2008,10 @@ function trackView(code0) {
     }
     box.innerHTML = h;
     const m = $('tmap');
-    if (j.lat != null) {
+    if (j.lat != null && Number.isFinite(Number(j.lat)) && Number.isFinite(Number(j.lng))) {
       m.style.display = 'block';
       if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapT); mk = L.marker([j.lat, j.lng], { icon: bikeIcon(0, true, 90), keyboard: false }).addTo(mapT); lastTrackPos = {lat:j.lat,lng:j.lng}; }
-      else { const nextPos = {lat:j.lat,lng:j.lng}; const bearing = bikeBearing(lastTrackPos, nextPos); animateRiderMarker(mk,j.lat,j.lng,4200); mk.setIcon(bikeIcon(bearing, true, 90)); mapT.panTo([j.lat, j.lng],{animate:true,duration:1}); lastTrackPos = nextPos; }
+      else { const nextPos = {lat:j.lat,lng:j.lng}; const moved=lastTrackPos&&L.latLng(lastTrackPos).distanceTo(L.latLng(nextPos))>5; const bearing = moved?bikeBearing(lastTrackPos, nextPos):0; if(moved)animateRiderMarker(mk,j.lat,j.lng,4200); else mk.setLatLng([j.lat,j.lng]); mk.setIcon(bikeIcon(bearing, true, 90)); if(moved)mapT.panTo([j.lat, j.lng],{animate:true,duration:1}); lastTrackPos = nextPos; }
     } else m.style.display = 'none';
     if (j.status === 'delivered') {
       m.style.display = 'none';

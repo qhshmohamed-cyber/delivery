@@ -731,6 +731,22 @@ function openCancelPermissions(){
  d.querySelector('#cancelPermissionRows').onclick=async e=>{const b=e.target.closest('[data-cancel-user]');if(!b)return;const x=rows.find(x=>x.user_id===b.dataset.cancelUser);if(!x)return;const enabled=!x.can_cancel_orders;if(!confirm((enabled?'منح':'سحب')+' صلاحية إلغاء الطلبات من '+x.full_name+'؟'))return;b.disabled=true;const {error}=await safeRpc('dlv_set_cancel_permission',{p_user:x.user_id,p_enabled:enabled});if(error){b.disabled=false;return flash(error.message,false)}x.can_cancel_orders=enabled;draw();flash('تم تحديث صلاحية الإلغاء',true)};
  safeRpc('dlv_owner_cancel_permissions').then(({data,error})=>{if(!d.isConnected)return;if(error){d.querySelector('#cancelPermissionRows').textContent=error.message;return}rows=data||[];draw()});
 }
+function fillCustomerMessage(template,values){
+ return String(template||'').replace(/\\{(company|branch|order_no|tracking_link|customer)\\}/g,(_,key)=>String(values[key]||''));
+}
+function customerWhatsAppUrl(phone,message){
+ const d=String(phone||'').replace(/\\D/g,'');const p=d.startsWith('0')?'20'+d.slice(1):d;
+ return /^20(?:10|11|12|15)\\d{8}$/.test(p)?'https://wa.me/'+p+'?text='+encodeURIComponent(message):'';
+}
+function customerMessageSettings(){
+ if(!isOwner())return flash('مالك المنصة فقط',false);
+ const d=document.createElement('div');d.className='modal';d.innerHTML='<div><h2>✉️ رسائل ترحيب العملاء لكل فرع</h2><p class="meta">المتغيرات المتاحة: {company} {branch} {customer} {order_no} {tracking_link}. يمكن إضافة عروض في نص الرسالة. فتح واتساب لا يعني إرسالًا تلقائيًا.</p><select id="welcomeBranch"></select><label>نص رسالة الترحيب</label><textarea id="welcomeTemplate" rows="9"></textarea><div class="row"><button class="p" id="welcomeSave">حفظ رسالة الفرع</button><button id="welcomeClose">إغلاق</button></div><div id="welcomeError" class="meta"></div></div>';document.body.appendChild(d);
+ const select=d.querySelector('#welcomeBranch'),area=d.querySelector('#welcomeTemplate');let rows=[];
+ const update=()=>{area.value=rows.find(x=>String(x.branch_id)===select.value)?.message_template||''};
+ select.onchange=update;d.querySelector('#welcomeClose').onclick=()=>d.remove();
+ d.querySelector('#welcomeSave').onclick=async()=>{const branch=Number(select.value);if(!branch)return;if(!area.value.includes('{tracking_link}'))return flash('الرسالة لازم تحتوي {tracking_link}',false);const {error}=await safeRpc('dlv_owner_set_customer_message',{p_branch:branch,p_template:area.value});if(error)return flash(error.message,false);rows.find(x=>x.branch_id===branch).message_template=area.value;flash('تم حفظ رسالة الترحيب للفرع',true)};
+ safeRpc('dlv_owner_customer_message_branches').then(({data,error})=>{if(!d.isConnected)return;if(error){d.querySelector('#welcomeError').textContent=error.message;return}rows=data||[];select.innerHTML=rows.map(x=>'<option value="'+x.branch_id+'">'+esc(x.company_name)+' — '+esc(x.branch_name)+'</option>').join('');update()});
+}
 function newOrderForm() {
   const wf = me?.workflow_role || me?.role;
   if (!me || !['callcenter_followup','manager','admin'].includes(wf)) return flash('إنشاء الطلب متاح لمتابعة الكول سنتر والإدارة فقط', false);
@@ -782,16 +798,19 @@ function newOrderForm() {
     const title=document.createElement('h2');title.textContent='تم تسجيل الطلب #'+orderNo;panel.appendChild(title);
     if(trackingCode){
       const link=location.origin+location.pathname+'?t='+encodeURIComponent(trackingCode);
-      const msg=(brandConfig?.brand_name||'المطعم')+' — طلب رقم #'+orderNo+'\nتابع طلبك من هنا: '+link;
+      const branchId=Number($('n_branch')?.value||selectedBranch||me.branch_id);
+      const {data:welcomeTemplate,error:welcomeError}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
+      if(welcomeError)console.warn('Welcome template:',welcomeError.message);
+      const msg=fillCustomerMessage(welcomeTemplate||'مطاعم {company} - {branch} ترحب بكم!\\nطلبك رقم {order_no}.\\nتابع حالة طلبك من هنا: {tracking_link}',{company:brandConfig?.brand_name||'المطعم',branch:branchNames[branchId]||activeBranchTitle(),order_no:orderNo,tracking_link:link,customer:$('n_c')?.value||''});
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
       const open=document.createElement('a');open.href=link;open.target='_blank';open.rel='noopener noreferrer';open.textContent='🔗 فتح متابعة العميل';open.style.cssText='padding:12px;background:#eee0c2;border-radius:9px;color:#4b2814;font-weight:700;text-decoration:none';
       actions.append(copy,open);
       if(validPhone){
-        const wa=document.createElement('a');wa.href='https://wa.me/'+normalizedPhone+'?text='+encodeURIComponent(msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 فتح واتساب العميل';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
+        const wa=document.createElement('a');wa.href=customerWhatsAppUrl(normalizedPhone,msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 فتح واتساب العميل برسالة جاهزة';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
       }
-      panel.appendChild(actions);
+      panel.appendChild(actions);const preview=document.createElement('pre');preview.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f7f1e6;color:#302014;padding:12px;border-radius:10px;margin-top:12px';preview.textContent=msg;panel.appendChild(preview);
       if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='لم يتم تأكيد موافقة العميل على استلام رسالة واتساب؛ استخدم الرابط وفق سياسة التواصل مع العملاء.';panel.appendChild(note);}
       if(!validPhone){const note=document.createElement('div');note.className='meta';note.textContent='لإظهار زر واتساب، أضف رقم موبايل مصري صحيح للعميل.';panel.appendChild(note);}
     }else{
@@ -1220,7 +1239,7 @@ function managerView() {
   const t = cairoDate();
   const owner = isOwner();
   const board = canViewManagerBoard();
-  const ownerTools = owner ? '<button id="ad">＋ إنشاء حساب موظف</button><button id="cancelPermissionsBtn">🔐 صلاحيات إلغاء الطلبات</button>' : '';
+  const ownerTools = owner ? '<button id="ad">＋ إنشاء حساب موظف</button><button id="cancelPermissionsBtn">🔐 صلاحيات إلغاء الطلبات</button><button id="customerMessagesBtn">✉️ رسائل العملاء</button>' : '';
   const managerScreen = !owner && isLocationManager();
   $('app').innerHTML = shell(managerScreen ? `
     <section class="card" style="background:linear-gradient(135deg,#4e2c12,#805026);color:#fff;border:0;padding:16px">
@@ -1245,7 +1264,7 @@ function managerView() {
     <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div><h2>الطلبات</h2><div class="card tw" id="tbl"></div><div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>
   `);
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;
-  if ($('ad')) $('ad').onclick = addDriverForm; if($('cancelPermissionsBtn'))$('cancelPermissionsBtn').onclick=openCancelPermissions; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
+  if ($('ad')) $('ad').onclick = addDriverForm; if($('cancelPermissionsBtn'))$('cancelPermissionsBtn').onclick=openCancelPermissions;if($('customerMessagesBtn'))$('customerMessagesBtn').onclick=customerMessageSettings; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
     $('managerSearch').onclick = async () => { const q=$('f_q').value.trim().replace(/[^\\p{L}\\p{N}\\s-]/gu,'').slice(0,60); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();

@@ -217,7 +217,34 @@ async function openOwnerBranchManager(){
  await refreshBranchNames();flash('تم إضافة الفرع. يمكنك إنشاء حسابات موظفيه الآن',true);ownerBranchPicker();
 }
 const branchTitle = id => (branchNames[Number(id)] || 'فرع غير محدد');
-const permittedBranches = () => (Array.isArray(me?.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me?.branch_id]).filter(Boolean);
+const permittedBranches = () => [...new Set([me?.branch_id,...(Array.isArray(me?.allowed_branch_ids)?me.allowed_branch_ids:[])].map(Number).filter(x=>Number.isInteger(x)&&x>0))];
+let profileSyncChannel=null,profileSyncTimer=null,profileSyncBusy=false,profileSyncFingerprint='';
+function profileSignature(p){return JSON.stringify([p?.active,p?.role,p?.workflow_role,p?.branch_id,p?.company_id,p?.full_name,[...(p?.allowed_branch_ids||[])].sort((a,b)=>a-b)]);}
+async function checkProfileUpdates(){
+ if(profileSyncBusy||!me||document.visibilityState==='hidden')return;
+ profileSyncBusy=true;
+ try{
+  const {data,error}=await sb.from('dlv_profiles').select('*').eq('user_id',me.user_id).maybeSingle();
+  if(error){console.warn('Profile refresh failed:',error.message);return;}
+  const sig=profileSignature(data);
+  if(sig!==profileSyncFingerprint){profileSyncFingerprint=sig;selectedBranch=null;await boot();}
+ }catch(e){console.warn('Profile refresh unavailable:',e)}
+ finally{profileSyncBusy=false;}
+}
+function startProfileSync(){
+ if(!me)return;
+ profileSyncFingerprint=profileSignature(me);
+ if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
+ profileSyncChannel=sb.channel('my-profile-'+me.user_id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).subscribe();
+ if(profileSyncTimer)clearInterval(profileSyncTimer);
+ profileSyncTimer=setInterval(()=>{void checkProfileUpdates()},30000);
+}
+function stopProfileSync(){
+ if(profileSyncTimer){clearInterval(profileSyncTimer);profileSyncTimer=null;}
+ if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
+ profileSyncFingerprint='';
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void checkProfileUpdates();});
 const activeBranchTitle = () => selectedBranch ? branchTitle(selectedBranch) : 'عرض الفرعين معًا';
 const canViewManagerBoard = () => isOwner() || isLocationManager();
 
@@ -233,7 +260,7 @@ const shell = (inner) => { const canSwitch = isOwner() || permittedBranches().le
 function reconnectView(message='الاتصال بالخادم غير متاح حاليًا. بيانات الدخول محفوظة؛ أعد المحاولة عند رجوع الإنترنت.') {
   $('app').innerHTML = `<div class="card" style="max-width:420px;margin:40px auto;text-align:center"><img data-brand-logo src="yourstaff-icon.svg" alt="Your Staff" style="width:104px;height:104px;object-fit:contain;object-position:center;display:block;margin:0 auto 10px;background:transparent"><h1 style="font-size:18px">تعذر الاتصال</h1><p class="meta">${esc(message)}</p><button class="p big" id="retryBoot">إعادة المحاولة</button><button id="retryLogout" style="margin-top:10px">تسجيل الخروج</button></div>`;
   $('retryBoot').onclick=()=>boot();
-  $('retryLogout').onclick=async()=>{await sb.auth.signOut();me=null;selectedBranch=null;loginView();};
+  $('retryLogout').onclick=async()=>{await sb.auth.signOut();stopProfileSync();me=null;selectedBranch=null;loginView();};
 }
 let loginFailures=0,loginBlockedUntil=0;
 function loginView(err) {
@@ -380,12 +407,17 @@ async function boot() {
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { await sb.auth.signOut(); return loginView('الحساب غير مفعّل أو غير مربوط بموظف'); }
   me = data;
+  startProfileSync();
   if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
-  const permitted = [...new Set((Array.isArray(me.allowed_branch_ids) && me.allowed_branch_ids.length ? me.allowed_branch_ids : [me.branch_id]).map(Number).filter(Number.isInteger))];
+  const branchResult=await safeRpc('dlv_my_branches');
+  if(branchResult.error)return reconnectView('تعذر التحقق من الفروع المصرح بها حاليًا. أعد المحاولة.');
+  const permitted=[...new Set((branchResult.data||[]).map(b=>Number(b.id)).filter(x=>Number.isInteger(x)&&x>0))];
+  branchNames={...branchNames,...Object.fromEntries((branchResult.data||[]).map(b=>[Number(b.id),b.name]))};
+  me.allowed_branch_ids=permitted;
   if (!permitted.length) return reconnectView('لا توجد فروع مصرح بها لهذا الحساب. راجع مسؤول النظام.');
-  if (permitted.length > 1) { resetPlatformBrand(); await employeeBranchPicker(permitted); return; }
-  selectedBranch = permitted[0];
+  if (permitted.length > 1 && !permitted.includes(Number(selectedBranch))) { resetPlatformBrand(); await employeeBranchPicker(permitted); return; }
+  selectedBranch = permitted.includes(Number(selectedBranch)) ? Number(selectedBranch) : permitted[0];
   try{await loadBrandConfig();subscribeBrandConfig();}catch(e){console.warn('تعذر تحميل مظهر الشركة، جاري فتح لوحة العمل بالتصميم الافتراضي:',e);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
     const r = await safeRpc('dlv_list_active_drivers');
@@ -403,7 +435,7 @@ async function boot() {
 async function employeeBranchPicker(permitted){
   const {data,error}=await safeRpc('dlv_my_branches');
   if(error){console.warn('تعذر تحميل فروع الحساب:',error.message);return reconnectView('تعذر تحميل فروع حسابك الآن. جلسة الدخول محفوظة؛ أعد المحاولة.');}
-  const branches=(data||[]).filter(b=>permitted.includes(b.id));
+  const branches=(data||[]).filter(b=>permitted.includes(Number(b.id)));
   if(!branches.length){return reconnectView('لا يوجد فرع مسموح لهذا الحساب حاليًا. لم نسجّل خروجك؛ راجع مسؤول النظام.');}
   $('app').innerHTML=`<div class="card" style="max-width:520px;margin:35px auto;text-align:center;padding:22px"><h1>اختيار فرع العمل</h1><p class="meta">أهلاً ${esc(me.full_name)} — اختر الفرع الذي ستعمل عليه</p><div class="grid" style="grid-template-columns:1fr">${branches.map(b=>`<button class="p big" data-emp-branch="${b.id}">${esc(b.name)}</button>`).join('')}</div><button id="empOut">تسجيل الخروج</button></div>`;
   document.querySelectorAll('[data-emp-branch]').forEach(b=>b.onclick=async()=>{const id=Number(b.dataset.empBranch);if(!branches.some(x=>x.id===id))return;selectedBranch=id;try{try{await loadBrandConfig();subscribeBrandConfig();}catch(brandError){console.warn('Brand load failed:',brandError);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}await enterEmployeeDashboard();}catch(e){reconnectView('تعذر فتح لوحة العمل. أعد المحاولة.')}});
@@ -569,7 +601,7 @@ function startKitchenDelayMonitor() {
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut(); if (chan) sb.removeChannel(chan); loginView(); }; }
+function bindOut() { const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { if (watchId != null) await stopShare(); clearInterval(delayTimer); clearInterval(managerBoardTimer); clearInterval(managerClockTimer); await sb.auth.signOut();stopProfileSync(); if (chan) sb.removeChannel(chan); loginView(); }; }
 
 /* ---------- هوية النظام (مالك النظام فقط) ---------- */
 async function openBrandSettings(){

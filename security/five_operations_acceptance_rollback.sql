@@ -25,7 +25,7 @@ begin
  perform set_config('request.jwt.claim.sub',k::text,true);perform public.dlv_record_delay_action(oid,'QA kitchen followup');
  if not exists(select 1 from private.dlv_stage_followups where order_id=oid and action_by=k) then raise exception 'Action not attributed';end if;
  perform public.dlv_kitchen_forward(oid,null);
- perform set_config('request.jwt.claim.sub',s::text,true);perform public.dlv_supervisor_receive(oid,null);
+ insert into private.dlv_driver_duty(user_id,state) values(d,'available') on conflict(user_id) do update set state='available',updated_at=now(); perform set_config('request.jwt.claim.sub',s::text,true);perform public.dlv_supervisor_receive(oid,null);
  j:=public.dlv_suggest_drivers(oid);
  if jsonb_array_length(j)=0 or exists(select 1 from jsonb_array_elements(j) x where (x->>'active_orders')::int<0) then raise exception 'Suggestion invalid';end if;
  if exists(select 1 from jsonb_array_elements(j) x where x ? 'phone' or x ? 'lat' or x ? 'lng') then raise exception 'Suggestion privacy failure';end if;

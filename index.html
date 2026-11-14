@@ -1795,10 +1795,10 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
   if(!allowed.includes(Number(id)))return alert('الفرع المختار لا يتبع الشركة الحالية.');
  }
  if(!Number.isInteger(Number(id))||Number(id)<1)return alert('اختر فرعًا واحدًا أولًا لسحب تقريره.');
- const day=isOwner()?(requestedDay||prompt('تاريخ التقرير (YYYY-MM-DD):',reportOperationalDay())):reportOperationalDay();
+ const day=requestedDay||prompt('تاريخ يوم التشغيل (YYYY-MM-DD) — يمكنك اختيار يوم سابق بعد الخامسة صباحًا:',reportOperationalDay());
  if(day===null)return;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day)return alert('تاريخ التقرير غير صحيح.');
- const {data,error}=await safeRpc('dlv_daily_branch_report',{p_branch_id:Number(id),p_day:day});
+ const {data,error}=await safeRpc('dlv_archived_daily_report',{p_branch_id:Number(id),p_day:day});
  if(error)return alert('تعذر إنشاء التقرير: '+error.message);
  const h=x=>esc(String(x??''));
  if(!data||typeof data!=='object'||Array.isArray(data)||!data.orders||typeof data.orders!=='object'||!Array.isArray(data.order_details))return alert('الخادم لم يرجع تقريرًا مكتملًا. لن يتم تنزيل ملف ناقص.');
@@ -1814,7 +1814,7 @@ async function downloadBranchDailyReport(branchId=null,requestedDay=null){
  flash('تم تجهيز ملف التقرير وإرسال طلب تنزيل للمتصفح. تحقق من التنزيلات؛ لا يمكن التأكد من حفظ الملف تلقائيًا.',true);
 }
 function managerView() {
-  if(isOwner()||isLocationManager())setTimeout(()=>{const app=$('app');if(!app||$('dailyReportBtn'))return;const btn=document.createElement('button');btn.id='dailyReportBtn';btn.className='g big';btn.textContent='📄 تنزيل تقرير الوردية الحالية';btn.onclick=()=>downloadBranchDailyReport();app.prepend(btn);},0);
+  if(isOwner()||isLocationManager())setTimeout(()=>{const app=$('app');if(!app||$('dailyReportBtn'))return;const btn=document.createElement('button');btn.id='dailyReportBtn';btn.className='g big';btn.textContent='📄 التقارير اليومية المحفوظة';btn.onclick=()=>downloadBranchDailyReport();app.prepend(btn);},0);
   const t = reportOperationalDay();
   const owner = isOwner();
   const board = canViewManagerBoard();

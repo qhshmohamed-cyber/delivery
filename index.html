@@ -1018,7 +1018,7 @@ function driverView() {
   $('app').innerHTML = shell(`<div class="grid"><div class="stat"><b id="s1">0</b><span>طلبات معايا</span></div>
     <div class="stat"><b id="s2">0</b><span>خرجت للتوصيل</span></div><div class="stat"><b id="s3">0</b><span>تم توصيلها اليوم</span></div></div>
     <div class="card"><div class="meta" id="locst">📍 جاري تشغيل مشاركة الموقع... بيفضل شغّال لحد ما تعمل خروج، سيب الصفحة مفتوحة.</div><div class="meta" id="locdetail">التتبع يتطلب إبقاء التطبيق ظاهرًا أثناء التوصيل.</div><button id="gpsRetry" class="g">↻ تحديث GPS الآن</button></div><h2>📦 طلباتي الحالية</h2><p class="meta">اختار الإجراء المناسب من كل طلب لتحديث حالته مباشرة.</p><div id="ol"></div>`);
-  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>resumeDriverLocationNow(); loadMine();
+  bindOut();if($('gpsRetry'))$('gpsRetry').onclick=()=>{if(!shareWanted)void startShare();else void resumeDriverLocationNow();}; loadMine(); if(!shareWanted)void startShare();
 }
 async function loadMine() {
   const {data, error} = await branchQuery(sb.from('dlv_orders').select('*')).eq('driver_id', me.user_id).in('status', ['new','received','out']).order('created_at', {ascending:false}).limit(100);
@@ -1604,7 +1604,7 @@ async function acquireWakeLock() {
   } catch (e) { /* Wake Lock تحسين اختياري وليس ضمانًا للتتبع بالخلفية */ }
 }
 async function startShare() {
-  if(['break','off_shift'].includes(driverDutyState))return;
+  if(!me || me.role!=='driver' || shareWanted)return;
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
   if (!navigator.onLine) return flash('شغّل الإنترنت قبل بدء مشاركة الموقع',false);
   if (!window.isSecureContext) return flash('مشاركة الموقع تحتاج HTTPS', false);
@@ -2172,7 +2172,7 @@ async function kitchenForward(id) {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && me && me.role === 'driver') {
-    if (!shareWanted && watchId == null && !window._sd && !['break','off_shift'].includes(driverDutyState)) startShare();
+    if (!shareWanted && watchId == null && !window._sd) startShare();
     else if (shareWanted) resumeDriverLocationNow();
   }
 });

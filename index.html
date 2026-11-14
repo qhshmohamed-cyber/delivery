@@ -2694,7 +2694,7 @@ document.addEventListener('visibilitychange', () => {
 function canAccessCustomerTracking(){return !!(isOwner() || me?.role==='admin' || me?.role==='complaints_officer' || ['callcenter_followup','complaints_officer','manager','admin'].includes(me?.workflow_role));}
 /* ---------- أكواد متابعة العملاء (للموظفين) ---------- */
 const trackMsg = o => customerWelcomeMessage(o);
-async function copyMsg(id) { if(!canAccessCustomerTracking())return flash('غير مصرح بعرض كود متابعة العميل',false); const o=ORD[id];if(!o)return;try{const msg=await customerWelcomeMessageForOrder(o);await navigator.clipboard.writeText(msg);flash('تم نسخ رسالة شركة الطلب',true);}catch(e){flash('تعذر تجهيز الرسالة: '+e.message,false);} }
+async function copyMsg(id) { if(!canAccessCustomerTracking())return flash('غير مصرح بعرض كود متابعة العميل',false); const o=ORD[id];if(!o)return;try{const {data:secureCode,error:secureError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(id)});if(secureError||!secureCode)throw Error('غير مصرح بكود المتابعة');const msg=await customerWelcomeMessageForOrder({...o,track_code:secureCode});await navigator.clipboard.writeText(msg);flash('تم نسخ رسالة شركة الطلب',true);}catch(e){flash('تعذر تجهيز الرسالة: '+e.message,false);} }
 async function waMsg(id) {
   if(!canAccessCustomerTracking()) return flash('واتساب العميل متاح للشكاوى والمتابعة والمدير ومالك المنصة فقط',false);
   const o=ORD[id];if(!o)return;
@@ -2707,7 +2707,9 @@ async function waMsg(id) {
   if(btn?.dataset.sending==='1')return;
   if(btn){btn.dataset.sending='1';btn.disabled=true;}
   try{
-    const msg=await customerWelcomeMessageForOrder(o);
+    const {data:secureCode,error:secureError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(id)});
+    if(secureError||!secureCode)throw Error('غير مصرح بكود المتابعة');
+    const msg=await customerWelcomeMessageForOrder({...o,track_code:secureCode});
     const {data:consentRecorded,error:consentError}=await safeRpc('dlv_record_customer_whatsapp_consent',{p_order_id:Number(o.id)});
     if(consentError||consentRecorded!==true)throw Error('تعذر تسجيل تأكيد موافقة العميل؛ لم يتم فتح واتساب');
     const link=customerWhatsAppUrl(phone,msg);

@@ -785,11 +785,21 @@ function openCancelPermissions(){
  safeRpc('dlv_owner_cancel_permissions').then(({data,error})=>{if(!d.isConnected)return;if(error){d.querySelector('#cancelPermissionRows').textContent=error.message;return}rows=data||[];draw()});
 }
 function fillCustomerMessage(template,values){
- return String(template||'').replace(/\\{(company|branch|order_no|tracking_link|customer)\\}/g,(_,key)=>String(values[key]||''));
+ return String(template||'').replace(/\\n/g,'\n').replace(/\{(company|branch|order_no|tracking_link|tracking_code|customer)\}/g,(_,key)=>String(values[key]??''));
 }
 function customerWhatsAppUrl(phone,message){
- const d=String(phone||'').replace(/\\D/g,'');const p=d.startsWith('0')?'20'+d.slice(1):d;
- return /^20(?:10|11|12|15)\\d{8}$/.test(p)?'https://wa.me/'+p+'?text='+encodeURIComponent(message):'';
+ const d=String(phone||'').replace(/\D/g,'');const p=d.startsWith('0')?'20'+d.slice(1):d;
+ return /^20(?:10|11|12|15)\d{8}$/.test(p)?'https://wa.me/'+p+'?text='+encodeURIComponent(message):'';
+}
+function customerWelcomeMessage(o,template=''){
+ const link=location.origin+location.pathname+'?t='+encodeURIComponent(o.track_code);
+ const company=brandConfig?.brand_name||'المطعم';
+ let message=fillCustomerMessage(template||'مطاعم {company} ترحب بكم 🌴\nرقم طلبكم: {order_no}\nكود المتابعة: {tracking_code}\nتابعوا حالة طلبكم من هنا: {tracking_link}',{company,branch:branchNames[o.branch_id]||'',customer:o.customer_name||'',order_no:o.order_no,tracking_code:o.track_code,tracking_link:link});
+ if(!message.includes(String(o.order_no)))message+='\nرقم الطلب: '+o.order_no;
+ if(!message.includes('كود المتابعة: '+o.track_code))message+='\nكود المتابعة: '+o.track_code;
+ if(!message.includes(link))message+='\nتابعوا حالة طلبكم: '+link;
+ if(company.includes('واحة')&&!message.includes('17722'))message+='\nللتواصل معنا: الخط الساخن 17722';
+ return message;
 }
 function customerMessageSettings(){
  if(!isOwner())return flash('مالك المنصة فقط',false);
@@ -856,14 +866,14 @@ function newOrderForm() {
       const branchId=customerBranchId;
       const {data:welcomeTemplate,error:welcomeError}=await safeRpc('dlv_customer_message_template',{p_branch:branchId});
       if(welcomeError)console.warn('Welcome template:',welcomeError.message);
-      const msg=fillCustomerMessage(welcomeTemplate||'مطاعم {company} - {branch} ترحب بكم!\\nطلبك رقم {order_no}.\\nتابع حالة طلبك من هنا: {tracking_link}',{company:brandConfig?.brand_name||'المطعم',branch:branchNames[branchId]||activeBranchTitle(),order_no:orderNo,tracking_link:link,customer:customerNameForMessage});
+      const msg=customerWelcomeMessage({order_no:orderNo,track_code:trackingCode,branch_id:branchId,customer_name:customerNameForMessage},welcomeTemplate||'');
       const code=document.createElement('div');code.className='meta';code.textContent='رابط متابعة العميل جاهز · كود المتابعة: '+trackingCode;panel.appendChild(code);
       const actions=document.createElement('div');actions.className='row';actions.style.marginTop='12px';
       const copy=document.createElement('button');copy.textContent='📋 نسخ رابط المتابعة';copy.onclick=async()=>{try{await navigator.clipboard.writeText(link);flash('تم نسخ رابط العميل',true)}catch(e){window.prompt('انسخ رابط المتابعة:',link)}};
       const open=document.createElement('a');open.href=link;open.target='_blank';open.rel='noopener noreferrer';open.textContent='🔗 فتح متابعة العميل';open.style.cssText='padding:12px;background:#eee0c2;border-radius:9px;color:#4b2814;font-weight:700;text-decoration:none';
       actions.append(copy,open);
       if(validPhone){
-        const wa=document.createElement('a');wa.href=customerWhatsAppUrl(normalizedPhone,msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 فتح واتساب العميل برسالة جاهزة';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
+        const wa=document.createElement('a');wa.href=customerWhatsAppUrl(normalizedPhone,msg);wa.target='_blank';wa.rel='noopener noreferrer';wa.textContent='🟢 إرسال المتابعة على واتساب';wa.style.cssText='padding:12px;background:#187b50;border-radius:9px;color:white;font-weight:700;text-decoration:none';actions.appendChild(wa);
       }
       panel.appendChild(actions);const preview=document.createElement('pre');preview.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f7f1e6;color:#302014;padding:12px;border-radius:10px;margin-top:12px';preview.textContent=msg;panel.appendChild(preview);
       if(!consent){const note=document.createElement('div');note.className='meta';note.textContent='لم يتم تأكيد موافقة العميل على استلام رسالة واتساب؛ استخدم الرابط وفق سياسة التواصل مع العملاء.';panel.appendChild(note);}
@@ -925,7 +935,7 @@ async function openCallcenterComplaint(id){
  const o=ORD[id];if(!o)return flash('الطلب غير موجود',false);
  const title=prompt('عنوان شكوى الطلب '+o.order_no);if(title===null)return;
  if(title.trim().length<3)return flash('العنوان قصير',false);
- const details=prompt('تفاصيل الشكوى')||'';
+ const details=prompt('تفاصيل الشكوى');if(details===null)return;
  const {data,error}=await safeRpc('dlv_create_customer_complaint',{p_order_id:Number(id),p_title:title.trim(),p_details:details,p_priority:'medium'});
  if(error)return flash(error.message,false);flash('تم تسجيل الشكوى رقم '+data.id,true);
 }
@@ -936,7 +946,7 @@ function copyCallcenterStatus(id){
 }
 function complaintsOfficerView(){
  if(!me||!(isOwner()||isLocationManager()||me.role==='complaints_officer'))return flash('غير مصرح',false);
- $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث برقم العميل أو الطلب أو الشكوى" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');
+ $('app').innerHTML=shell('<section class="card"><div class="ord"><h2>📞 متابعة الشكاوى</h2><button id="complaintsReload">تحديث</button></div><p class="meta">الشكاوى حسب تاريخ التسجيل · رقم العميل · الإجراء المتخذ · الموظف المسؤول</p><div class="row"><input id="complaintsSearch" placeholder="بحث بالعميل أو الطلب أو الشكوى أو موظف المتابعة" style="flex:1"><select id="complaintsFilter"><option value="">كل الحالات</option><option value="open">مفتوحة</option><option value="in_progress">جارٍ المتابعة</option><option value="resolved">تم الحل</option></select></div><div id="complaintsSummary" class="meta"></div></section><div class="row"><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">🚨 سجل المشاكل</button><button class="g" onclick="openPerformanceReport()">📊 تقييم الأداء</button></div><div id="complaintsRows"></div>');
  bindOut();$('complaintsReload').onclick=loadComplaintsInbox;$('complaintsSearch').oninput=paintComplaintsInbox;$('complaintsFilter').onchange=paintComplaintsInbox;
  loadComplaintsInbox();
 }
@@ -952,7 +962,7 @@ async function loadComplaintsInbox(){
 function paintComplaintsInbox(){
  const box=$('complaintsRows');if(!box)return;
  const q=($('complaintsSearch')?.value||'').trim().toLowerCase(),status=$('complaintsFilter')?.value||'';
- const rows=complaintsInboxRows.filter(x=>(!status||x.status===status)&&(!q||[x.customer_phone,x.order_no,x.title,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
+ const rows=complaintsInboxRows.filter(x=>(!status||x.status===status)&&(!q||[x.customer_phone,x.order_no,x.title,x.details,x.followup_action,x.followup_employee,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
  $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
  box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG')+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'—')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG'):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
  box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=async()=>{
@@ -966,27 +976,6 @@ function paintComplaintsInbox(){
   const {error}=await safeRpc('dlv_complaint_followup',{p_incident:x.id,p_action:action.trim(),p_status:next});
   if(error){b.disabled=false;return flash(error.message,false);}
   flash('تم حفظ الإجراء وإتاحته للإدارة',true);loadComplaintsInbox();
- });
-}
-function complaintsOfficerView(){
- $('app').innerHTML=shell('<section class="card"><h2>📋 مكتب مسؤول الشكاوى</h2><div class="meta">الشكاوى حسب الفرع المصرح به · يتم حفظ كل إجراء واسم الموظف وتاريخه</div><div class="row"><button id="complaintsRefresh">تحديث الشكاوى</button></div><div id="complaintsInbox">جاري التحميل...</div></section>');
- bindOut();$('complaintsRefresh').onclick=loadComplaintsInbox;loadComplaintsInbox();
-}
-async function loadComplaintsInbox(){
- const box=$('complaintsInbox');if(!box)return;
- const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});
- if(!box.isConnected)return;
- if(error){box.textContent='تعذر تحميل الشكاوى: '+error.message;return;}
- box.innerHTML=(data||[]).map(x=>'<div class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'—')+'</b><span>'+esc(x.status)+'</span></div><div class="meta">تاريخ الشكوى: '+new Date(x.created_at).toLocaleString('ar-EG')+' · هاتف العميل: '+esc(x.customer_phone||'غير متاح')+' · فرع '+esc(branchTitle(x.branch_id))+'</div><b>'+esc(x.title)+'</b><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يتم اتخاذ إجراء بعد')+' · بواسطة: '+esc(x.followup_employee||'—')+(x.followup_at?' · '+new Date(x.followup_at).toLocaleString('ar-EG'):'')+'</div><div class="row"><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></div></div>').join('')||'<div class="meta">لا توجد شكاوى لهذا الفرع</div>';
- box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=async()=>{
-  const action=prompt('ما الإجراء الذي تم اتخاذه؟');if(action===null)return;
-  if(action.trim().length<3)return flash('اكتب الإجراء بالتفصيل',false);
-  const state=prompt('حالة الشكوى: open أو in_progress أو resolved','in_progress');
-  if(state===null)return;
-  if(!['open','in_progress','resolved'].includes(state))return flash('حالة غير صحيحة',false);
-  b.disabled=true;
-  const {error}=await safeRpc('dlv_complaint_followup',{p_incident:Number(b.dataset.complaint),p_action:action.trim(),p_status:state});
-  if(error){flash(error.message,false);b.disabled=false;}else{flash('تم حفظ الإجراء',true);loadComplaintsInbox();}
  });
 }
 function openManagementComplaints(){
@@ -1091,7 +1080,7 @@ async function loadCallcenterOrders() {
  rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
  <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>
  <div class="meta" style="margin:7px 0">المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
- <div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button></div>
+ <div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button>${o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
  <details style="margin-top:9px"><summary style="cursor:pointer;padding:7px 0;font-weight:600">تفاصيل وإجراءات إضافية</summary>
  <div class="meta" style="margin:9px 0">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</div>
  <div class="row"><button onclick="copyCallcenterStatus(${o.id})">نسخ تحديث الحالة</button><button onclick="openCallcenterComplaint(${o.id})">تسجيل شكوى</button></div>
@@ -2067,7 +2056,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- أكواد متابعة العملاء (للموظفين) ---------- */
-const trackMsg = o => 'أهلًا ' + (o.customer_name || '') + '، تابع طلبك رقم #' + o.order_no + ' من هنا:\n' + location.origin + location.pathname + '?t=' + o.track_code + '\nكود المتابعة: ' + o.track_code;
+const trackMsg = o => customerWelcomeMessage(o);
 function copyMsg(id) { const o = ORD[id]; if (!o) return; navigator.clipboard && navigator.clipboard.writeText(trackMsg(o)); flash('اتنسخت رسالة العميل، ابعتها له', true); }
 function waMsg(id) {
   const o = ORD[id]; if (!o) return; let d = (o.phone || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '20' + d.slice(1);

@@ -666,7 +666,36 @@ async function ownerBranchPicker(companyId=1){
  const active=company.onboarding_status==='active';
  const setupPending=!active;
  const branchButtons=branches.map(b=>'<button class="p big" data-branch="'+Number(b.id)+'" '+(active&&b.active?'':'disabled')+'>'+esc(b.name)+(b.active?'':' · قيد التجهيز')+'</button>').join('');
- $('app').innerHTML=`<div class="card" style="max-width:600px;margin:24px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:95px;height:95px;object-fit:contain;margin:auto"><h1>${esc(company.name)}</h1><p class="meta">إدارة فروع المطعم</p><button id="addNewBranch" class="p big" style="margin:12px 0">＋ إضافة فرع آخر</button><button id="ownerEditCompanyBrand">تعديل شعار وخلفية الشركة</button><button id="ownerBranchAddons" style="margin-top:10px">🧩 الميزات الإضافية للفروع</button>${setupPending?'<p class="msg e">الفروع الجديدة تُنشأ تلقائيًا في وضع التجهيز. التشغيل الفعلي بعد مراجعة العزل الأمني.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:14px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div><button id="backCompanies" style="margin-top:18px">العودة إلى الشركات</button></div>`;
+ $('app').innerHTML=`<div class="card" style="max-width:600px;margin:24px auto;text-align:center;padding:22px"><img src="${esc(ownerBrandCache.get(Number(companyId))?.logo_url||'yourstaff-icon.svg')}" alt="شعار الشركة" style="width:95px;height:95px;object-fit:contain;margin:auto"><h1>${esc(company.name)}</h1><p class="meta">إدارة فروع المطعم</p><button id="addNewBranch" class="p big" style="margin:12px 0">＋ إضافة فرع آخر</button><button id="ownerEditCompanyBrand">تعديل شعار وخلفية الشركة</button><button id="ownerBranchAddons" style="margin-top:10px">🧩 الميزات الإضافية للفروع</button><button id="ownerPreviewAddons" class="p big" style="margin-top:10px">👁 معاينة جميع الميزات للعميل قبل التفعيل</button>${setupPending?'<p class="msg e">الفروع الجديدة تُنشأ تلقائيًا في وضع التجهيز. التشغيل الفعلي بعد مراجعة العزل الأمني.</p>':''}<div class="grid" style="grid-template-columns:1fr;gap:10px;margin-top:14px">${branchButtons}${active?'<button class="g big" data-branch="all">عرض جميع فروع الشركة</button>':''}</div><button id="backCompanies" style="margin-top:18px">العودة إلى الشركات</button></div>`;
+ $('ownerPreviewAddons').onclick=async()=>{
+   if(!branches.length)return alert('أضف فرعًا أولًا.');
+   const selection=prompt('اختر رقم الفرع للمعاينة:\\n'+branches.map(b=>Number(b.id)+': '+b.name).join('\\n'));
+   if(selection===null)return;
+   const branchId=Number(selection);
+   const branch=branches.find(b=>Number(b.id)===branchId);
+   if(!branch)return alert('رقم الفرع غير صحيح.');
+   const [preview,flags]=await Promise.all([
+     safeRpc('dlv_owner_preview_branch_addons',{p_branch_id:branchId}),
+     safeRpc('dlv_owner_list_branch_addons',{p_branch_id:branchId})
+   ]);
+   if(preview.error||flags.error)return alert('تعذر عرض المعاينة: '+(preview.error||flags.error).message);
+   const data=preview.data||{},states=flags.data||[];
+   const entries=[
+     ['profit_reports','تقارير الأرباح والتكاليف','إيرادات مسجلة: '+(data.finance?.revenue??0)+' | مصروفات: '+(data.finance?.expenses??0)],
+     ['smart_dispatch','مساعدة المشرف في توزيع الطلبات','طيارون: '+(data.dispatch?.count??0)+' | مواقع GPS حديثة: '+(data.dispatch?.with_recent_gps??0)],
+     ['vip_customers','إدارة العملاء VIP','عملاء VIP مسجلون: '+(data.vip?.count??0)],
+     ['customer_ratings','تقييمات العملاء','عدد التقييمات: '+(data.ratings?.count??0)+' | متوسط المطعم: '+(data.ratings?.restaurant??'—')],
+     ['advanced_kitchen','أداء المطبخ','طلبات مجهزة: '+(data.kitchen?.ready??0)+' | متوسط دقائق التجهيز: '+(data.kitchen?.avg_minutes??'—')],
+     ['driver_shifts','شيفتات الطيارين','إجمالي الشيفتات: '+(data.shifts?.total??0)+' | مفتوحة: '+(data.shifts?.open??0)],
+     ['digital_menu','المنيو الإلكتروني','أصناف: '+(data.menu?.count??0)+' | متاحة: '+(data.menu?.available??0)],
+     ['restaurant_owner','لوحة مالك المطعم','طلبات آخر 30 يوم: '+(data.owner_dashboard?.total??0)+' | تم تسليمها: '+(data.owner_dashboard?.delivered??0)]
+   ];
+   const overlay=document.createElement('div');
+   overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);overflow:auto;padding:20px;direction:rtl';
+   overlay.innerHTML='<div class="card" style="max-width:800px;margin:20px auto;padding:22px"><h2>معاينة ميزات '+esc(company.name)+' — '+esc(branch.name)+'</h2><p class="meta">معاينة للمالك فقط، بدون تفعيل للعميل أو تعديل بيانات. الأرقام من سجلات هذا الفرع فقط.</p><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">'+entries.map(([code,title,detail])=>{const state=states.find(x=>x.code===code);return '<div class="card" style="padding:14px"><h3>'+esc(title)+'</h3><p class="meta">'+esc(detail)+'</p><p class="meta">'+(state?.enabled?'🟢 مفعلة للفرع':'🔒 غير مفعلة للفرع')+'</p><p class="meta">معاينة بيانات حقيقية — الوظائف المتقدمة قد تتطلب استكمالًا</p></div>';}).join('')+'</div><button id="closeOwnerAddonPreview" class="p big" style="margin-top:18px">إغلاق المعاينة</button></div>';
+   document.body.appendChild(overlay);
+   overlay.querySelector('#closeOwnerAddonPreview').onclick=()=>overlay.remove();
+ };
  $('ownerBranchAddons').onclick=async()=>{
   const options=branches.map(b=>Number(b.id)+': '+b.name).join('\\n');
   if(!branches.length)return alert('أضف فرعًا أولًا حتى تتمكن من إدارة ميزاته.');

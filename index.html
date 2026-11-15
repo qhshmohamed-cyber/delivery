@@ -3329,9 +3329,14 @@ async function loadKitchen() {
 async function loadPending() {
  const stillCurrent=captureOperationalRead('loadPending','pend');if(!stillCurrent())return;
   const box = $('pend'); if (!box) return;
-  let pendingQuery=branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id')).eq('status','new').order('created_at').limit(200);
-  if(!isOwner())pendingQuery=pendingQuery.is('driver_id',null);
-  const { data, error } = await pendingQuery;if(!stillCurrent())return;
+  let data, error;
+  if ((me.workflow_role || me.role) === 'supervisor') {
+    ({data, error} = await safeRpc('dlv_supervisor_queue', {p_branch: Number(selectedBranch)}));
+  } else {
+    let pendingQuery=branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id')).eq('status','new').order('created_at').limit(200);
+    if(!isOwner())pendingQuery=pendingQuery.is('driver_id',null);
+    ({data, error} = await pendingQuery);
+  }if(!stillCurrent())return;
   if (error) return;
   const wf = me.workflow_role || 'manager';
   const rows = (data || []).filter(o => wf !== 'supervisor' || o.workflow_stage === 'kitchen_ready' || o.workflow_stage === 'supervisor_received');

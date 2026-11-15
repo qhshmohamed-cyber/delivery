@@ -18,6 +18,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script>
 <script src="session-actions.js?v=1"></script>
+<script src="native-background.js?v=1"></script>
 <script src="appearance.js?v=1"></script>
 <link rel="stylesheet" href="appearance.css?v=1">
 <style>
@@ -322,7 +323,8 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 const SB_URL = 'https://mkptmejkcemdhlhdaort.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcHRtZWprY2VtZGhsaGRhb3J0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwODE2MTQsImV4cCI6MjEwOTY1NzYxNH0.ovPRrF8RDXPut2jY8HMHdO27sFvxmyDymBVAKBV7mC8';
 /* ============================================================================= */
-const sb = supabase.createClient(SB_URL, SB_KEY);
+const nativeBackground=createNativeBackground(window.Capacitor);
+const sb = supabase.createClient(SB_URL, SB_KEY,{auth:{persistSession:true,autoRefreshToken:!nativeBackground.available,...(nativeBackground.available?{storage:nativeBackground.storage}:{})}});
 const sessionActions = createSessionActions(sb.auth);
 let appLogoutBusy=false,appSessionEpoch=0;
 function clearPrivateSessionDialogs(){
@@ -335,6 +337,7 @@ function clearPrivateSessionDialogs(){
 async function appSignOut(scope='global',message=''){
  if(appLogoutBusy)return false;
  appLogoutBusy=true;
+ try{if(nativeBackground.available)await nativeBackground.stop();}catch(e){appLogoutBusy=false;flash('تعذر تأكيد إيقاف خدمة الموقع؛ أعد محاولة تسجيل الخروج',false);return false;}
  let result;
  try{result=await sessionActions.signOut(scope);}finally{appLogoutBusy=false;}
  if(!result.localCleared){showLogoutFailure(scope);return false;}
@@ -2647,6 +2650,18 @@ async function acquireWakeLock() {
   finally{if(wakePendingGeneration===generation)wakePendingGeneration=null;}
 }
 async function startShare() {
+  if(nativeBackground.available){
+    if(!me||me.role!=='driver'||shareWanted)return;
+    const userId=me.user_id,epoch=appSessionEpoch,generation=++locationGeneration;
+    shareWanted=true;
+    try{
+      await nativeBackground.start(userId);
+      if(generation!==locationGeneration||epoch!==appSessionEpoch||me?.user_id!==userId||!shareWanted){await nativeBackground.stop();return;}
+      renderShare();const box=$('locst');if(box)box.textContent='خدمة Android بدأت — انتظر تأكيد إرسال الموقع';
+      const details=$('locdetail');if(details)details.textContent='مشاركة الموقع أثناء الشفت بإشعار Android ظاهر، حتى عند الانتقال للخلفية. إيقاف التطبيق إجباريًا أو سحب الإذن يوقف الخدمة.';
+    }catch(e){if(generation===locationGeneration){shareWanted=false;renderShare();const box=$('locst');if(box)box.textContent=String(e?.message||'تعذر تشغيل خدمة الخلفية');}}
+    return;
+  }
   if(!me || me.role!=='driver' || shareWanted)return;
   if (!navigator.geolocation) return flash('المتصفح لا يدعم تحديد الموقع', false);
   if (!navigator.onLine) return flash('شغّل الإنترنت قبل بدء مشاركة الموقع',false);
@@ -2671,6 +2686,7 @@ async function startShare() {
   if (s) s.textContent = '⏳ جاري تحديد موقعك وإرساله… التحديث أثناء قفل الشاشة غير مضمون من المتصفح';
 }
 async function stopShare(callServer = true) {
+  if(nativeBackground.available)await nativeBackground.stop();
   const generation=++locationGeneration;shareWanted = false;clearInterval(gpsPollTimer);gpsPollTimer=null;gpsPollBusy=false;
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   const lock=wake;wake=null;lastSend=0;locationBusy=false;
@@ -2684,6 +2700,15 @@ async function stopShare(callServer = true) {
 // استئناف تلقائي من الموقع الحالي عند رجوع الطيار للتبويب/الصفحة.
 let resumeLocationBusy = false;
 async function resumeDriverLocationNow() {
+  if(nativeBackground.available){
+    if(!me||me.role!=='driver')return;
+    const epoch=appSessionEpoch,userId=me.user_id;
+    try{const status=await nativeBackground.status();if(epoch!==appSessionEpoch||me?.user_id!==userId)return;
+      shareWanted=!!status.running;renderShare();const box=$('locst');
+      if(box)box.textContent=status.running?(status.lastSent?'خدمة الخلفية نشطة — آخر إرسال '+tm(new Date(status.lastSent)):'خدمة الخلفية بدأت — انتظار GPS أو الاتصال'):'خدمة الخلفية متوقفة — اضغط تحديث GPS لإعادة تشغيلها';
+    }catch(e){const box=$('locst');if(box)box.textContent='تعذر التحقق من خدمة Android';}
+    return;
+  }
   if (!me || me.role !== 'driver' || !shareWanted || document.visibilityState !== 'visible' || resumeLocationBusy) return;
   const generation=locationGeneration;
   resumeLocationBusy = true;

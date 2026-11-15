@@ -5,8 +5,8 @@
   "description": "Android wrapper for Your Staff Delivery",
   "scripts": {
     "build:web": "node scripts/build-android-web.mjs",
-    "android:init": "npm run build:web && npx cap add android && node scripts/harden-android.mjs",
-    "android:sync": "npm run build:web && npx cap sync android && node scripts/harden-android.mjs",
+    "android:init": "npm run build:web && npx cap add android && node scripts/harden-android.mjs && node scripts/install-android-background.mjs",
+    "android:sync": "npm run build:web && npx cap sync android && node scripts/harden-android.mjs && node scripts/install-android-background.mjs",
     "android:open": "npx cap open android"
   },
   "dependencies": {

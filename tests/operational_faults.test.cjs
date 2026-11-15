@@ -5,7 +5,7 @@ function extract(name){const re=new RegExp('(?:async )?function '+name+'\\('),st
 const deferred=()=>{let resolve;return {promise:new Promise(r=>resolve=r),resolve:v=>resolve(v)};};
 function gpsContext(){
  const calls=[],elements={locst:{textContent:''},locdetail:{textContent:''}},timers=new Map();let timer=0;
- const context={Date,Number,Math,me:{role:'driver',user_id:'fixture-driver'},appSessionEpoch:0,
+ const context={Date,Number,Math,nativeBackground:{available:false},me:{role:'driver',user_id:'fixture-driver'},appSessionEpoch:0,
   navigator:{onLine:true,geolocation:{watchPosition(){return 7;},clearWatch(){},getCurrentPosition(){}},wakeLock:{request:async()=>({addEventListener(){},release:async()=>{}})}},
   document:{visibilityState:'visible'},window:{isSecureContext:true},$:id=>elements[id],
   setInterval:fn=>{timers.set(++timer,fn);return timer;},clearInterval:id=>timers.delete(id),setTimeout(){},

@@ -1,0 +1,22 @@
+import {readFile,writeFile,mkdir,readdir,copyFile} from 'node:fs/promises';
+import {join} from 'node:path';
+const root=process.cwd(),main=join(root,'android/app/src/main'),dest=join(main,'java/com/yourstaff/delivery');
+await mkdir(dest,{recursive:true});
+for(const name of await readdir('native/android/java/com/yourstaff/delivery'))await copyFile(join('native/android/java/com/yourstaff/delivery',name),join(dest,name));
+const source=await readFile('index.html','utf8');
+const url=source.match(/const SB_URL = '([^']+)'/)[1],key=source.match(/const SB_KEY = '([^']+)'/)[1];
+const authKey='sb-'+new URL(url).hostname.split('.')[0]+'-auth-token';
+await writeFile(join(dest,'NativeEndpoint.java'),`package com.yourstaff.delivery;\nfinal class NativeEndpoint { static final String URL=${JSON.stringify(url)}, PUBLIC_KEY=${JSON.stringify(key)}, AUTH_KEY=${JSON.stringify(authKey)}; }\n`);
+await writeFile(join(dest,'MainActivity.java'),`package com.yourstaff.delivery;\nimport android.os.Bundle;\nimport com.getcapacitor.BridgeActivity;\npublic class MainActivity extends BridgeActivity { @Override public void onCreate(Bundle state){ registerPlugin(YourStaffBackgroundPlugin.class); super.onCreate(state); } }\n`);
+const path=join(main,'AndroidManifest.xml');let xml=await readFile(path,'utf8');
+const permissions=['ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION','FOREGROUND_SERVICE','FOREGROUND_SERVICE_LOCATION','POST_NOTIFICATIONS','WAKE_LOCK'];
+for(const permission of permissions)if(!xml.includes('android.permission.'+permission+'"'))xml=xml.replace('</manifest>',`    <uses-permission android:name="android.permission.${permission}"/>\n</manifest>`);
+if(!xml.includes('.DriverLocationService'))xml=xml.replace('</application>','    <service android:name=".DriverLocationService" android:exported="false" android:foregroundServiceType="location" android:stopWithTask="false"/>\n    </application>');
+await writeFile(path,xml);
+const testDest=join(root,'android/app/src/androidTest/java/com/yourstaff/delivery');await mkdir(testDest,{recursive:true});
+for(const name of await readdir('native/android/androidTest/com/yourstaff/delivery'))await copyFile(join('native/android/androidTest/com/yourstaff/delivery',name),join(testDest,name));
+console.log('Native driver foreground service and encrypted shared auth storage installed.');
+
+const debug=join(root,'android/app/src/debug');await mkdir(join(debug,'java/com/yourstaff/delivery'),{recursive:true});
+await copyFile('native/android/debug/com/yourstaff/delivery/BackgroundTestActivity.java',join(debug,'java/com/yourstaff/delivery/BackgroundTestActivity.java'));
+await writeFile(join(debug,'AndroidManifest.xml'),'<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application><activity android:name=".BackgroundTestActivity" android:exported="false"/></application></manifest>');

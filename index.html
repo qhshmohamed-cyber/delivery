@@ -2888,7 +2888,7 @@ function openMap() {
   $('msel').parentElement.appendChild(layerSelect);
   layerSelect.onchange=()=>{map.removeLayer(activeTiles);activeTiles=layerSelect.value==='streets'?streetTiles:satelliteTiles;activeTiles.addTo(map)};
   satelliteTiles.on('tileerror',()=>{if(activeTiles!==satelliteTiles)return;map.removeLayer(satelliteTiles);activeTiles=streetTiles;streetTiles.addTo(map);layerSelect.value='streets';const c=$('mcount');if(c)c.textContent='تعذر تحميل القمر الصناعي؛ تم عرض الشوارع'});
-  markers = {}; const prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
+  markers = {}; const accuracyCircles = {}, prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
   async function refresh() {
     if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine || !document.getElementById('lmap')) return;
     mapBusy = true;
@@ -2909,7 +2909,7 @@ function openMap() {
       seen.add(r.driver_id);
       const ageMs=Date.now()-new Date(r.updated_at).getTime();
       const live = ageMs>=0&&ageMs<30000, nm = name[r.driver_id] || 'طيار';
-      const roadInfo='<div style="font-size:12px;color:#49301e;margin-top:5px">📍 الشارع: غير محدد بعد — يحتاج خدمة تحديد أسماء الشوارع آمنة</div>';
+      const roadInfo='';
       const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● متصل الآن' : '⚠ موقع قديم — آخر ظهور: ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
       const oldPos = prevPos[r.driver_id];
       const displacement=oldPos ? L.latLng(oldPos).distanceTo(L.latLng(r.lat,r.lng)) : 0;
@@ -2921,11 +2921,16 @@ function openMap() {
       const bearing = lastHeading[r.driver_id] ?? 0;
       prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
       const ic = bikeIcon(bearing, live, 72);
+      // The circle represents reported GPS uncertainty, not a guaranteed exact street position.
+      if (Number.isFinite(gpsAccuracy) && gpsAccuracy>0 && gpsAccuracy<=150) {
+        if (accuracyCircles[r.driver_id]) accuracyCircles[r.driver_id].setLatLng([r.lat,r.lng]).setRadius(gpsAccuracy).setStyle({opacity:live?0.55:0.2,fillOpacity:live?0.08:0.03});
+        else accuracyCircles[r.driver_id]=L.circle([r.lat,r.lng],{radius:gpsAccuracy,color:'#1976d2',weight:1,opacity:live?0.55:0.2,fillOpacity:live?0.08:0.03,interactive:false}).addTo(map);
+      } else if (accuracyCircles[r.driver_id]) {map.removeLayer(accuracyCircles[r.driver_id]);delete accuracyCircles[r.driver_id];}
       const m = markers[r.driver_id];
       if (m) { if(moved&&live)animateRiderMarker(m,r.lat,r.lng,4200); else m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); m.setOpacity(live?1:0.55); }
       else { markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic, opacity:live?1:0.55 }).addTo(map).bindPopup(html); }
     });
-    Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; } });
+    Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; if(accuracyCircles[k]){map.removeLayer(accuracyCircles[k]);delete accuracyCircles[k];} delete prevPos[k]; delete lastHeading[k]; } });
     $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+validLocations.filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';
     if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }

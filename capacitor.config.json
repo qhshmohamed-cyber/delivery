@@ -3,9 +3,11 @@
   "appName": "Your Staff Delivery",
   "webDir": "www",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
   },
   "server": {
     "androidScheme": "https"
-  }
+  },
+  "loggingBehavior": "none"
 }

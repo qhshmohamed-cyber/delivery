@@ -1,4 +1,4 @@
-name: Android cloud build (test)
+name: Android release security build (unsigned)
 on:
   workflow_dispatch:
   push:
@@ -7,6 +7,9 @@ on:
       - 'package.json'
       - 'capacitor.config.json'
       - 'scripts/build-android-web.mjs'
+      - 'scripts/harden-android.mjs'
+      - 'scripts/verify-android-release.py'
+      - 'tests/android_hardening.test.cjs'
       - '.github/workflows/android-cloud-build.yml'
 permissions:
   contents: read
@@ -35,16 +38,20 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Prepare Android project
         run: npm run android:init
-      - name: Build test APK and unsigned release AAB
+      - name: Build unsigned release APK and AAB
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug bundleRelease
-      - name: Upload test APK
+          ./gradlew --no-daemon assembleRelease bundleRelease
+      - name: Verify packaged security controls
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print android/app/build/outputs/apk/release/app-release-unsigned.apk > /tmp/yourstaff-release-manifest.xml
+          python3 scripts/verify-android-release.py /tmp/yourstaff-release-manifest.xml
+      - name: Upload unsigned release APK (NOT install-ready)
         uses: actions/upload-artifact@v4
         with:
-          name: your-staff-test-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: your-staff-unsigned-release-apk-not-for-install
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
           retention-days: 7
       - name: Upload unsigned AAB (NOT Play-ready)

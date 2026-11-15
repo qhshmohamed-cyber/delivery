@@ -1,0 +1,29 @@
+name: Sync standby branch from main
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sync-standby-branch
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Merge main into standby (keep main on conflicts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main backup-2026-11-15
+          git checkout -B backup-2026-11-15 origin/backup-2026-11-15
+          git merge --no-edit -X theirs origin/main
+          git push origin HEAD:backup-2026-11-15

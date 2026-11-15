@@ -3502,7 +3502,7 @@ function trackView(code0) {
       const rawPilotPhone = String(j.pilot_phone || '').trim();
       let pilotDigits = rawPilotPhone.replace(/\D/g, '');
       if (pilotDigits.startsWith('0')) pilotDigits = '20' + pilotDigits.slice(1);
-      const hasPilotPhone = /^20(?:10|11|12|15)\d{8}$/.test(pilotDigits) || /^\d{10,15}$/.test(pilotDigits) && !pilotDigits.startsWith('0');
+      const hasPilotPhone = /^20(?:10|11|12|15)\d{8}$/.test(pilotDigits);
       const callAction = hasPilotPhone
         ? '<a href="tel:+' + pilotDigits + '" class="pilot-contact-btn pilot-call" dir="rtl"><span aria-hidden="true">☎</span> اتصال</a>'
         : '<button type="button" class="pilot-contact-btn pilot-disabled" disabled title="أضف رقم الطيار من إدارة الحسابات">☎ اتصال</button>';

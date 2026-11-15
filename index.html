@@ -1863,6 +1863,21 @@ async function loadComplaintsInbox(){
  if(error){$('complaintsRows').textContent='تعذر تحميل الشكاوى: '+error.message;return;}
  complaintsInboxRows=data||[];paintComplaintsInbox();
 }
+function complaintGreeting(company,officer){
+ const c=String(company||'').trim(),n=String(officer||'').trim();
+ if(!c||!n)throw Error('تعذر تحديد الشركة واسم مسؤول المتابعة');
+ return 'متابعة شكاوى '+c+'\nأهلًا بحضرتك 🌷\nمع حضرتك '+n+'.\nأقدر أساعد حضرتك إزاي؟';
+}
+async function openComplaintWhatsApp(id,button){
+ if(button.dataset.busy==='1')return;button.dataset.busy='1';button.setAttribute('aria-disabled','true');
+ try{
+  const {data,error}=await safeRpc('dlv_complaint_whatsapp_context',{p_incident:Number(id)});
+  if(error||!data)throw Error(error?.message||'تعذر التحقق من بيانات الشكوى');
+  const base=complaintWhatsAppUrl(data.phone);if(!base)throw Error('رقم العميل غير صالح لواتساب');
+  const a=document.createElement('a');a.href=base+'?text='+encodeURIComponent(complaintGreeting(data.company,data.officer));a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';document.body.append(a);a.click();a.remove();
+ }catch(e){flash(e.message||'تعذر تجهيز رسالة واتساب',false);}
+ finally{delete button.dataset.busy;button.removeAttribute('aria-disabled');}
+}
 function complaintWhatsAppUrl(phone){
  let p=String(phone||'').replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776)).replace(/\D/g,'');
  if(p.startsWith('00'))p=p.slice(2);
@@ -1875,7 +1890,7 @@ function paintComplaintsInbox(){
  const rows=complaintsInboxRows.filter(x=>(!status||x.status===status)&&(!q||[x.customer_phone,x.order_no,x.title,x.details,x.followup_action,x.followup_employee,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
  $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
  box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[x.status]||x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
- rows.forEach(x=>{const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]'),url=complaintWhatsAppUrl(x.customer_phone);if(!target||!url)return;const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';a.textContent='فتح محادثة واتساب';a.style.cssText='display:inline-block;padding:10px 16px;margin:8px;border-radius:10px;background:#15603b;color:#fff;text-decoration:none;font-weight:700';target.before(a);});
+ rows.forEach(x=>{const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]'),url=complaintWhatsAppUrl(x.customer_phone);if(!target||!url)return;const a=document.createElement('a');a.href='#';a.onclick=e=>{e.preventDefault();void openComplaintWhatsApp(x.id,a);};a.textContent='فتح واتساب برسالة ترحيب';a.style.cssText='display:inline-block;padding:10px 16px;margin:8px;border-radius:10px;background:#15603b;color:#fff;text-decoration:none;font-weight:700';target.before(a);});
  box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=()=>{
  const x=complaintsInboxRows.find(v=>String(v.id)===b.dataset.complaint);if(x)complaintActionDialog(x);
  });

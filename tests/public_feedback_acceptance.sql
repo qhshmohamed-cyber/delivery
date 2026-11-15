@@ -37,6 +37,7 @@ BEGIN
  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',v_user,'session_id',v_sid,'role','authenticated','exp',extract(epoch from now()+interval '5 minutes')::bigint)::text,true);
  SELECT count(*) INTO v_count FROM public.dlv_complaint_inbox(v_branch) WHERE id=v_id AND customer_phone='01000000000' AND order_no='TEST-ROLLBACK';
  IF v_count<>1 THEN RAISE EXCEPTION 'Complaint not visible in authorized officer inbox';END IF;
+ IF public.dlv_complaint_whatsapp_context(v_id)->>'company'<>'واحة اليمن' OR public.dlv_complaint_whatsapp_context(v_id)->>'phone'<>'01000000000' OR public.dlv_complaint_whatsapp_context(v_id)->>'officer' IS NULL THEN RAISE EXCEPTION 'Wrong WhatsApp sender or company';END IF;
  BEGIN PERFORM public.dlv_complaint_inbox(current_setting('test.other_branch')::integer);RAISE EXCEPTION 'Cross-company inbox allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
  PERFORM public.dlv_complaint_followup(v_id,'إجراء قبول فني مؤقت سيتم التراجع عنه','resolved');
  IF NOT EXISTS(SELECT 1 FROM public.dlv_incidents WHERE id=v_id AND status='resolved' AND followup_by=v_user) THEN RAISE EXCEPTION 'Followup did not save';END IF;

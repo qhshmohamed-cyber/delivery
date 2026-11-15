@@ -18,7 +18,8 @@ print('Release manifest verified: no debugging, backup or cleartext; permission 
 
 service=next((s for s in app.findall('service') if s.get(ns+'name','').endswith('.DriverLocationService')),None)
 assert service is not None and service.get(ns+'exported')=='false'
-assert service.get(ns+'foregroundServiceType')=='location'
+service_type=service.get(ns+'foregroundServiceType','')
+assert service_type=='location' or int(service_type,0)==8, 'Service type must be location only'
 assert service.get(ns+'stopWithTask')=='false'
 assert 'android.permission.ACCESS_BACKGROUND_LOCATION' not in permissions
 print('Driver foreground location service verified: private, typed, no boot receiver/background-location privilege.')

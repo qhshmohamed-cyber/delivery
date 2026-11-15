@@ -44,8 +44,7 @@ public class BackgroundServiceTest {
         NativeApi.setTestTransport(context,(path,token,body)->{if(path.endsWith("dlv_update_location"))sends.incrementAndGet();return new JSONObject().put("state","available");});
         SessionVault.put(context,NativeEndpoint.AUTH_KEY,session("fixture",3600).toString());
         SessionVault.put(context,DriverLocationService.WANTED,new JSONObject().put("userId","synthetic-driver").put("runId","test-run").toString());
-        Intent activity=new Intent(context,BackgroundTestActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);context.startActivity(activity);
-        SystemClock.sleep(2000);
+        Intent activity=new Intent(context,BackgroundTestActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);InstrumentationRegistry.getInstrumentation().startActivitySync(activity);
         androidx.core.content.ContextCompat.startForegroundService(context,new Intent(context,DriverLocationService.class));
         for(int i=0;i<50&&(!DriverLocationService.status().optBoolean("running"));i++)SystemClock.sleep(100);
         assertTrue("Foreground service must start",DriverLocationService.status().getBoolean("running"));

@@ -21,7 +21,7 @@ public class DriverLocationService extends Service implements LocationListener {
     private volatile Location latest;
     private volatile long lastSent;
     private volatile String state="starting";
-    private String user="",wanted;
+    private volatile String user="",wanted;
     private LocationManager locations;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
@@ -38,7 +38,7 @@ public class DriverLocationService extends Service implements LocationListener {
             wanted=SessionVault.get(this,WANTED);user=wanted==null?null:new JSONObject(wanted).optString("userId");
             if(user==null||user.isEmpty()||ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){stopSelf();return START_NOT_STICKY;}
             NotificationManager manager=getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(new NotificationChannel(CHANNEL,"تتبع توصيلات Your Staff",NotificationManager.IMPORTANCE_LOW));
+            if(Build.VERSION.SDK_INT>=26)manager.createNotificationChannel(new NotificationChannel(CHANNEL,"تتبع توصيلات Your Staff",NotificationManager.IMPORTANCE_LOW));
             Intent open=getPackageManager().getLaunchIntentForPackage(getPackageName());
             PendingIntent view=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
             Notification notification=new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_mylocation)
@@ -55,7 +55,7 @@ public class DriverLocationService extends Service implements LocationListener {
     @Override public void onLocationChanged(Location location){if(!running)return;latest=new Location(location);submit();}
     private void submit(){
         if(!running||!busy.compareAndSet(false,true))return;
-        worker.execute(()->{
+        try{worker.execute(()->{
             PowerManager.WakeLock lock=((PowerManager)getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"YourStaff:location-send");
             try{
                 lock.acquire(60000);
@@ -77,8 +77,13 @@ public class DriverLocationService extends Service implements LocationListener {
             }catch(NativeApi.Denied denied){state="access_revoked";halt();}
              catch(Exception temporary){if(running)state="waiting_for_network";}
             finally{if(lock.isHeld())lock.release();busy.set(false);}
-        });
+        });}catch(RejectedExecutionException stopped){busy.set(false);}
     }
+    @Override public void onProviderEnabled(String provider){}
+    @Override public void onProviderDisabled(String provider){state="gps_disabled";}
+    @Override public void onStatusChanged(String provider,int status,Bundle extras){}
+    static boolean runningForUser(String id){DriverLocationService s=instance;return s!=null&&s.running&&s.user!=null&&s.user.equals(id);}
+    static boolean runningFor(String run){DriverLocationService s=instance;return s!=null&&s.running&&run.equals(s.wanted);}
     static boolean valid(Location fix){
         long age=(SystemClock.elapsedRealtimeNanos()-fix.getElapsedRealtimeNanos())/1000000;
         return age>=0&&age<=20000&&fix.hasAccuracy()&&Float.isFinite(fix.getAccuracy())&&fix.getAccuracy()>=0&&fix.getAccuracy()<=150

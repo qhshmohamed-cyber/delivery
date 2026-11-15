@@ -39,6 +39,7 @@ public class YourStaffBackgroundPlugin extends Plugin {
     }
     @PluginMethod public void start(PluginCall call){
         call.getData().put("nativeGeneration",generation.incrementAndGet());
+        if(DriverLocationService.runningForUser(call.getString("userId",""))){JSObject result=new JSObject();result.put("started",true);call.resolve(result);return;}
         getActivity().runOnUiThread(()->new AlertDialog.Builder(getActivity()).setTitle("مشاركة الموقع أثناء الشفت")
             .setMessage("سيشارك Your Staff موقعك مع إدارة فرعك أثناء الشفت، حتى عند قفل الشاشة أو فتح تطبيق آخر. يظهر إشعار دائم. يمكنك الإيقاف من التطبيق أو تسجيل الخروج. لا يبدأ التتبع بعد إعادة تشغيل الهاتف تلقائيًا.")
             .setPositiveButton("موافق — تشغيل التتبع",(dialog,which)->requestLocation(call))
@@ -64,11 +65,20 @@ public class YourStaffBackgroundPlugin extends Plugin {
             if(!duty.optString("state").equals("available")&&!duty.optString("state").equals("delivering")){call.reject("ابدأ الشفت أولًا");return;}
             synchronized(generation){
             if(!current(call)){call.reject("تم إلغاء الطلب");return;}
-            SessionVault.put(getContext(),DriverLocationService.WANTED,new JSONObject().put("userId",requested).put("runId",java.util.UUID.randomUUID().toString()).toString());
+            if(DriverLocationService.runningForUser(requested)){JSObject result=new JSObject();result.put("started",true);call.resolve(result);return;}
+            DriverLocationService.stopNow(getContext());
+            String run=new JSONObject().put("userId",requested).put("runId",java.util.UUID.randomUUID().toString()).toString();
+            SessionVault.put(getContext(),DriverLocationService.WANTED,run);
             ContextCompat.startForegroundService(getContext(),new Intent(getContext(),DriverLocationService.class));
-            JSObject result=new JSObject();result.put("started",true);call.resolve(result);
+            confirmStarted(call,run,50);
             }
         }catch(Exception e){DriverLocationService.stopNow(getContext());call.reject("تعذر تشغيل خدمة الخلفية؛ تحقق من الجلسة وصلاحية الموقع");}});
+    }
+    private void confirmStarted(PluginCall call,String run,int remaining){
+        if(!current(call)){call.reject("تم إلغاء الطلب");return;}
+        if(DriverLocationService.runningFor(run)){JSObject result=new JSObject();result.put("started",true);call.resolve(result);return;}
+        if(remaining==0){DriverLocationService.stopNow(getContext());call.reject("لم يؤكد Android تشغيل الخدمة؛ أعد المحاولة من التطبيق");return;}
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->confirmStarted(call,run,remaining-1),100);
     }
     @PluginMethod public void stop(PluginCall call){
         synchronized(generation){generation.incrementAndGet();DriverLocationService.stopNow(getContext());}try{SessionVault.put(getContext(),DriverLocationService.WANTED,null);call.resolve();}catch(Exception e){call.reject("تعذر تأكيد إيقاف التتبع");}

@@ -27,7 +27,10 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Prepare Android project

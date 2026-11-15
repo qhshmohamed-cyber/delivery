@@ -1,10 +1,12 @@
 
 const CACHE_PREFIX = 'yourstaff-static-';
 const LEGACY_CACHE_PREFIX = 'wahat-delivery-static-';
-const CACHE_NAME = CACHE_PREFIX + 'v5';
+const CACHE_NAME = CACHE_PREFIX + 'v6';
 const STATIC_FILES = [
   './manifest.webmanifest',
-  './yourstaff-icon.svg'
+  './yourstaff-icon.svg',
+  './yourstaff-app-192.png',
+  './yourstaff-app-512.png'
 ];
 
 self.addEventListener('install', event => {

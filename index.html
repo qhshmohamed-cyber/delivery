@@ -8,7 +8,9 @@
 <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <title>Your Staff — تسجيل الدخول</title>
-<link rel="manifest" href="manifest.webmanifest?v=2">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="yourstaff-app-192.png">
+<script defer src="web-install.js?v=1"></script>
 <meta name="theme-color" content="#101827">
 
 <link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg?v=2">
@@ -299,6 +301,7 @@ body.ys-tenant input::placeholder,body.ys-tenant textarea::placeholder{color:var
 <link rel="stylesheet" href="desktop-enhancements.css?v=1">
 </head>
 <body class="ys-platform">
+<aside id="webInstallBar" hidden style="position:relative;z-index:2;max-width:900px;margin:10px auto;padding:10px 14px;border:1px solid #a77d3e;border-radius:12px;background:#172235;color:#fff;display:none;align-items:center;gap:12px;flex-wrap:wrap"><span style="flex:1">Your Staff — تثبيت من المتصفح</span><button type="button" id="webInstallButton" style="background:#d8ae64;color:#101827;border-color:#d8ae64">تثبيت التطبيق</button></aside>
 <div id="ys-live-clock" role="timer" aria-label="الوقت والتاريخ الحالي بتوقيت مصر"><span id="ys-clock-date">جاري تحديد التاريخ...</span><span class="ys-clock-time" id="ys-clock-time">--:--:--</span><span class="ys-clock-zone">توقيت مصر</span></div>
 <div class="wrap" id="app"></div>
 <script>

@@ -55,27 +55,28 @@ public class DriverLocationService extends Service implements LocationListener {
     @Override public void onLocationChanged(Location location){if(!running)return;latest=new Location(location);submit();}
     private void submit(){
         if(!running||!busy.compareAndSet(false,true))return;
+        final String run=wanted,owner=user;
         try{worker.execute(()->{
             PowerManager.WakeLock lock=((PowerManager)getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"YourStaff:location-send");
             try{
                 lock.acquire(60000);
                 JSONObject session=NativeApi.session(this);
-                if(!running)return;
-                if(session==null||!user.equals(SessionVault.user(session))||!wanted.equals(SessionVault.get(this,WANTED))){halt();return;}
+                if(!running||!run.equals(wanted))return;
+                if(session==null||!owner.equals(SessionVault.user(session))||!run.equals(SessionVault.get(this,WANTED))){halt();return;}
                 String token=session.getString("access_token");
                 JSONObject duty=NativeApi.request("/rest/v1/rpc/dlv_my_driver_duty",token,new JSONObject());
-                if(!running)return;
+                if(!running||!run.equals(wanted))return;
                 if(!duty.optString("state").equals("available")&&!duty.optString("state").equals("delivering")){state="shift_inactive";halt();return;}
                 Location fix=latest;
                 if(fix==null||!valid(fix)){state="waiting_for_fresh_gps";return;}
                 if(System.currentTimeMillis()-lastSent<5000)return;
                 JSONObject body=new JSONObject().put("p_lat",fix.getLatitude()).put("p_lng",fix.getLongitude()).put("p_acc",fix.getAccuracy());
                 // stop/logout changes running immediately; server independently validates session, company and role.
-                if(!running||!wanted.equals(SessionVault.get(this,WANTED)))return;
+                if(!running||!run.equals(wanted)||!run.equals(SessionVault.get(this,WANTED)))return;
                 NativeApi.request("/rest/v1/rpc/dlv_update_location",token,body);
-                if(running){lastSent=System.currentTimeMillis();state="running";}
-            }catch(NativeApi.Denied denied){state="access_revoked";halt();}
-             catch(Exception temporary){if(running)state="waiting_for_network";}
+                if(running&&run.equals(wanted)){lastSent=System.currentTimeMillis();state="running";}
+            }catch(NativeApi.Denied denied){if(run.equals(wanted)){state="access_revoked";halt();}}
+             catch(Exception temporary){if(running&&run.equals(wanted))state="waiting_for_network";}
             finally{if(lock.isHeld())lock.release();busy.set(false);}
         });}catch(RejectedExecutionException stopped){busy.set(false);}
     }

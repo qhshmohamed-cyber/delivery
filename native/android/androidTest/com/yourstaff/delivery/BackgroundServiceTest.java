@@ -22,7 +22,7 @@ public class BackgroundServiceTest {
             return new JSONObject().put("state","available");
         });
     }
-    @After public void after() throws Exception {DriverLocationService.stopNow(context);SessionVault.put(context,NativeEndpoint.AUTH_KEY,null);NativeApi.setTestTransport(context,null);}
+    @After public void after() throws Exception {try(ParcelFileDescriptor p=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("input keyevent KEYCODE_WAKEUP")){new java.io.FileInputStream(p.getFileDescriptor()).read(new byte[2048]);}DriverLocationService.stopNow(context);SessionVault.put(context,NativeEndpoint.AUTH_KEY,null);NativeApi.setTestTransport(context,null);}
     private JSONObject session(String token,long seconds) throws Exception {
         return new JSONObject().put("access_token",token).put("refresh_token","synthetic-refresh").put("expires_at",System.currentTimeMillis()/1000+seconds).put("user",new JSONObject().put("id","synthetic-driver"));
     }
@@ -49,10 +49,13 @@ public class BackgroundServiceTest {
         for(int i=0;i<50&&(!DriverLocationService.status().optBoolean("running"));i++)SystemClock.sleep(100);
         assertTrue("Foreground service must start",DriverLocationService.status().getBoolean("running"));
         context.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        int beforeBackground=sends.get();
+        try(ParcelFileDescriptor p=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("input keyevent KEYCODE_SLEEP")){new java.io.FileInputStream(p.getFileDescriptor()).read(new byte[2048]);}
+        SystemClock.sleep(5500);
         Location fix=new Location("gps");fix.setLatitude(30);fix.setLongitude(31);fix.setAccuracy(10);fix.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
         DriverLocationService.instance.onLocationChanged(fix);
-        for(int i=0;i<50&&sends.get()==0;i++)SystemClock.sleep(100);
-        assertTrue("Location must be sent after activity goes to background",sends.get()>0);
+        for(int i=0;i<50&&sends.get()<=beforeBackground;i++)SystemClock.sleep(100);
+        assertTrue("Location must be sent after activity goes to background",sends.get()>beforeBackground);
         DriverLocationService.stopNow(context);SessionVault.put(context,NativeEndpoint.AUTH_KEY,null);
         int before=sends.get();SystemClock.sleep(600);assertFalse(DriverLocationService.status().getBoolean("running"));assertEquals(before,sends.get());
     }

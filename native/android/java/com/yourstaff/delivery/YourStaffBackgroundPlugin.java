@@ -31,7 +31,14 @@ public class YourStaffBackgroundPlugin extends Plugin {
     }
     @PluginMethod public void setItem(PluginCall call){
         String key=call.getString("key","");if(!allowedKey(key)){call.reject("Storage key forbidden");return;}
-        try{SessionVault.put(getContext(),key,call.getString("value"));call.resolve();}catch(Exception e){call.reject("Secure session write failed");}
+        try{synchronized(SessionVault.class){
+            String value=call.getString("value");
+            if(key.equals(NativeEndpoint.AUTH_KEY)&&value!=null){
+                String old=SessionVault.get(getContext(),key);
+                if(old!=null&&!SessionVault.user(new JSONObject(old)).equals(SessionVault.user(new JSONObject(value))))DriverLocationService.stopNow(getContext());
+            }
+            SessionVault.put(getContext(),key,value);
+        }call.resolve();}catch(Exception e){call.reject("Secure session write failed");}
     }
     @PluginMethod public void removeItem(PluginCall call){
         String key=call.getString("key","");if(!allowedKey(key)){call.reject("Storage key forbidden");return;}

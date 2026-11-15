@@ -2904,7 +2904,7 @@ function openMap() {
     const seen = new Set();
     const only = $('msel').value;
     const authorizedDrivers=new Set(drivers.map(x=>x.user_id));
-    const validLocations=(l.data||[]).filter(r=>authorizedDrivers.has(r.driver_id)&&Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lng))&&Math.abs(Number(r.lat))<=90&&Math.abs(Number(r.lng))<=180);
+    const validLocations=(l.data||[]).filter(r=>authorizedDrivers.has(r.driver_id)&&r.lat!=null&&r.lng!=null&&r.lat!==''&&r.lng!==''&&Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lng))&&Math.abs(Number(r.lat))<=90&&Math.abs(Number(r.lng))<=180);
     validLocations.filter(r => !only || r.driver_id === only).forEach(r => {
       seen.add(r.driver_id);
       const ageMs=Date.now()-new Date(r.updated_at).getTime();
@@ -3533,7 +3533,7 @@ function trackView(code0) {
     h += '<div class="card" style="font-size:13px" role="status">'+(j.status==='out'?(gpsRecent?'📍 آخر قراءة GPS منذ '+Math.round(gpsAge/1000)+' ثانية. الموقع تقريبي ويتحدث حسب إشارة الطيار.':'⚠ موقع الطيار غير متاح حاليًا. لن نعرض موقعًا قديمًا على أنه مباشر.'):'📍 خريطة الطيار تظهر بعد خروجه للتوصيل وتوفر GPS حديث.')+'</div>';
     box.innerHTML = h;
     const m = $('tmap');
-    if (j.lat != null && Number.isFinite(Number(j.lat)) && Number.isFinite(Number(j.lng))) {
+    if (j.status==='out' && gpsRecent && j.lat != null && j.lng != null && j.lat!=='' && j.lng!=='' && Number.isFinite(Number(j.lat)) && Number.isFinite(Number(j.lng)) && Math.abs(Number(j.lat))<=90 && Math.abs(Number(j.lng))<=180) {
       m.style.display = 'block';
       if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); deliveryTrackingTiles(mapT); mk = L.marker([j.lat, j.lng], { icon: bikeIcon(0, true, 90), keyboard: false }).addTo(mapT); lastTrackPos = {lat:j.lat,lng:j.lng}; }
       else { const nextPos = {lat:j.lat,lng:j.lng}; const moved=lastTrackPos&&L.latLng(lastTrackPos).distanceTo(L.latLng(nextPos))>5; const bearing = moved?bikeBearing(lastTrackPos, nextPos):0; if(moved)animateRiderMarker(mk,j.lat,j.lng,4200); else mk.setLatLng([j.lat,j.lng]); mk.setIcon(bikeIcon(bearing, true, 90)); if(moved)mapT.panTo([j.lat, j.lng],{animate:true,duration:1}); lastTrackPos = nextPos; }

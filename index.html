@@ -1863,12 +1863,19 @@ async function loadComplaintsInbox(){
  if(error){$('complaintsRows').textContent='تعذر تحميل الشكاوى: '+error.message;return;}
  complaintsInboxRows=data||[];paintComplaintsInbox();
 }
+function complaintWhatsAppUrl(phone){
+ let p=String(phone||'').replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776)).replace(/\D/g,'');
+ if(p.startsWith('00'))p=p.slice(2);
+ if(/^01[0125]\d{8}$/.test(p))p='20'+p.slice(1);
+ return /^[1-9]\d{9,14}$/.test(p)?'https://wa.me/'+p:'';
+}
 function paintComplaintsInbox(){
  const box=$('complaintsRows');if(!box)return;
  const q=($('complaintsSearch')?.value||'').trim().toLowerCase(),status=$('complaintsFilter')?.value||'';
  const rows=complaintsInboxRows.filter(x=>(!status||x.status===status)&&(!q||[x.customer_phone,x.order_no,x.title,x.details,x.followup_action,x.followup_employee,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
  $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
  box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[x.status]||x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
+ rows.forEach(x=>{const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]'),url=complaintWhatsAppUrl(x.customer_phone);if(!target||!url)return;const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';a.textContent='فتح محادثة واتساب';a.style.cssText='display:inline-block;padding:10px 16px;margin:8px;border-radius:10px;background:#15603b;color:#fff;text-decoration:none;font-weight:700';target.before(a);});
  box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=()=>{
  const x=complaintsInboxRows.find(v=>String(v.id)===b.dataset.complaint);if(x)complaintActionDialog(x);
  });
@@ -3518,5 +3525,6 @@ const _t = new URLSearchParams(location.search).get('t'); (async()=>{if (_t !== 
 </script>
 </body>
 </html>
+
 
 

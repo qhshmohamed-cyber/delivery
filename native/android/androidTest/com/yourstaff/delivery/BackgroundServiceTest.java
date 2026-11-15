@@ -26,6 +26,10 @@ public class BackgroundServiceTest {
     private JSONObject session(String token,long seconds) throws Exception {
         return new JSONObject().put("access_token",token).put("refresh_token","synthetic-refresh").put("expires_at",System.currentTimeMillis()/1000+seconds).put("user",new JSONObject().put("id","synthetic-driver"));
     }
+    @Test public void sdkSessionCleanupStorageKeys(){
+        for(String suffix:new String[]{"","-user","-code-verifier","-flows-code-verifier","-flow-0123456789abcdef0123456789abcdef-code-verifier"})assertTrue(YourStaffBackgroundPlugin.allowedKey(NativeEndpoint.AUTH_KEY+suffix));
+        assertFalse(YourStaffBackgroundPlugin.allowedKey("other-project-auth-token"));assertFalse(YourStaffBackgroundPlugin.allowedKey(NativeEndpoint.AUTH_KEY+"-arbitrary"));
+    }
     @Test public void encryptedStorageAndSharedRefresh() throws Exception {
         SessionVault.put(context,NativeEndpoint.AUTH_KEY,session("old",1).toString());
         assertFalse(context.getSharedPreferences("yourstaff_private_session",0).getString(NativeEndpoint.AUTH_KEY,"").contains("synthetic-refresh"));

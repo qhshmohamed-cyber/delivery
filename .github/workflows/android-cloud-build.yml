@@ -6,6 +6,7 @@ on:
       - 'index.html'
       - 'native/**'
       - 'native-background.js'
+      - 'tests/native*'
       - 'scripts/install-android-background.mjs'
       - 'package.json'
       - 'capacitor.config.json'
@@ -27,6 +28,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify pinned SDK with native auth storage
+        run: node tests/native_sdk_integration.cjs
       - name: Java 21
         uses: actions/setup-java@v4
         with:

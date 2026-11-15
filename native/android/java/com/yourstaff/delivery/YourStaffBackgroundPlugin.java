@@ -17,7 +17,11 @@ public class YourStaffBackgroundPlugin extends Plugin {
     private static final java.util.concurrent.atomic.AtomicInteger generation=new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ExecutorService io=java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean current(PluginCall call){return call.getInt("nativeGeneration",-1)==generation.get();}
-    private boolean allowedKey(String key){return NativeEndpoint.AUTH_KEY.equals(key)||(NativeEndpoint.AUTH_KEY+"-code-verifier").equals(key);}
+    static boolean allowedKey(String key){
+        String base=NativeEndpoint.AUTH_KEY;
+        return base.equals(key)||(base+"-code-verifier").equals(key)||(base+"-user").equals(key)||(base+"-flows-code-verifier").equals(key)
+            ||key.matches(java.util.regex.Pattern.quote(base)+"-flow-[a-fA-F0-9]{32}-code-verifier");
+    }
     @PluginMethod public void getItem(PluginCall call){
         String key=call.getString("key","");if(!allowedKey(key)){call.reject("Storage key forbidden");return;}
         try{

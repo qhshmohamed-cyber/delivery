@@ -1,6 +1,6 @@
 # Your Staff Delivery — Cloudflare Pages standby
 
-This branch is a frozen backup of the static application. Do not modify the production branch or production database during deployment.
+This branch is a synchronized standby copy of the static application. Updates from `main` are merged by `.github/workflows/sync-standby.yml`; verify the GitHub Actions run and Cloudflare deployment status after every release. Do not modify production data during deployment.
 
 ## Cloudflare Pages setup
 
@@ -15,5 +15,6 @@ This branch is a frozen backup of the static application. Do not modify the prod
 - Check whether authentication redirects, CORS, Content Security Policy, PWA scope, and third-party API allowlists need the new domain.
 - Test role-restricted login and full callcenter → kitchen → supervisor → driver workflow in a safe test branch or test tenant before real failover.
 - The standby uses the same Supabase backend, so it is NOT a database backup and cannot recover from a Supabase outage.
-- Keep deployment manual while this branch is frozen. Review RLS and secrets before exposing additional endpoints.
+- GitHub branch synchronization does not prove Cloudflare deployment succeeded. Configure Cloudflare Pages to auto-deploy this branch and check deployment health separately. Review RLS and secrets before exposing additional endpoints.
+- Reports and operational data are in Supabase; branch synchronization does not back up those records. Configure encrypted private database/storage backups with separate credentials and test restoration before claiming disaster recovery.
 - Never commit service-role credentials, API secrets, or employee/customer exports.

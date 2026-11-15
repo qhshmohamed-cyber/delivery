@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync(require('node:path').join(__dirname,'..','index.html'),'utf8');
+const source=html.split('\n').find(l=>l.includes('rows.forEach(x=>{const count=complaintRepeatCounts'));
+const alerts=[];
+const ctx={rows:[{id:1},{id:2}],complaintRepeatCounts:new Map([[1,3],[2,1]]),box:{querySelector:()=>({closest:()=>({prepend:n=>alerts.push(n)})})},document:{createElement:()=>({dataset:{},style:{},setAttribute(k,v){this[k]=v}})}};
+vm.createContext(ctx);vm.runInContext(source,ctx);
+assert.equal(alerts.length,1);assert.match(alerts[0].textContent,/3 شكاوى/);assert.match(alerts[0].textContent,/2 سابقة/);assert.match(alerts[0].textContent,/المحلولة/);assert.equal(alerts[0].role,'status');
+alerts.length=0;ctx.complaintRepeatCounts=new Map();vm.runInContext(source,ctx);assert.equal(alerts.length,0);
+assert.ok(fs.readFileSync(require('node:path').join(__dirname,'..','feedback.html'),'utf8').includes('أوافق على استخدام رقمي لمتابعة الشكوى.'));
+console.log('PASS: repeated phone alert rendering, single complaint hidden, consent text');

@@ -1854,6 +1854,7 @@ async function openRatingsActions(){
  });
 }
 let complaintsInboxRows=[];
+let complaintRepeatCounts=new Map(),complaintRepeatCheckFailed=false;
 async function loadComplaintsInbox(){
  const stillCurrent=captureOperationalRead('loadComplaintsInbox','complaintsRows');if(!stillCurrent())return;
  if(!$('complaintsRows'))return;
@@ -1861,7 +1862,14 @@ async function loadComplaintsInbox(){
  const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});if(!stillCurrent())return;
  if(!$('complaintsRows'))return;
  if(error){$('complaintsRows').textContent='تعذر تحميل الشكاوى: '+error.message;return;}
- complaintsInboxRows=data||[];paintComplaintsInbox();
+ complaintsInboxRows=data||[];complaintRepeatCounts=new Map();complaintRepeatCheckFailed=false;
+ if(complaintsInboxRows.length){
+  let result;try{result=await safeRpc('dlv_repeat_complaint_counts',{p_incidents:complaintsInboxRows.map(x=>Number(x.id))});}catch{result={error:true};}
+  if(!stillCurrent())return;
+  complaintRepeatCheckFailed=!!result.error;
+  if(!result.error)complaintRepeatCounts=new Map((result.data||[]).map(x=>[Number(x.incident_id),Number(x.complaint_count)]));
+ }
+ paintComplaintsInbox();
 }
 function complaintGreeting(company,officer){
  const c=String(company||'').trim(),n=String(officer||'').trim();
@@ -1890,6 +1898,8 @@ function paintComplaintsInbox(){
  const rows=complaintsInboxRows.filter(x=>(status==='all'||(status==='active'?['open','in_progress'].includes(x.status):x.status===status))&&(!q||[x.customer_phone,x.order_no,x.title,x.details,x.followup_action,x.followup_employee,String(x.id)].some(v=>String(v||'').toLowerCase().includes(q))));
  $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
  box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[x.status]||x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
+ rows.forEach(x=>{const count=complaintRepeatCounts.get(Number(x.id))||0;if(count<2)return;const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]');if(!target)return;const alert=document.createElement('div');alert.setAttribute('role','status');alert.dataset.repeatComplaint=String(x.id);alert.style.cssText='padding:12px;margin:12px 0;border:2px solid #ae6811;border-radius:10px;background:#fff1cc;color:#563000;font-weight:700';alert.textContent='تنبيه: نفس رقم التواصل له '+count+' شكاوى، منها '+(count-1)+' سابقة، بما يشمل المحلولة، ضمن الفروع المصرح لك بمتابعتها.';target.closest('section').prepend(alert);});
+ if(complaintRepeatCheckFailed){const notice=document.createElement('p');notice.setAttribute('role','status');notice.textContent='تعذر فحص الشكاوى السابقة مؤقتًا؛ اضغط تحديث لإعادة المحاولة.';box.prepend(notice);}
  rows.forEach(x=>{const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]'),url=complaintWhatsAppUrl(x.customer_phone);if(!target||!url)return;const a=document.createElement('a');a.href='#';a.onclick=e=>{e.preventDefault();void openComplaintWhatsApp(x.id,a);};a.textContent='فتح واتساب برسالة ترحيب';a.style.cssText='display:inline-block;padding:10px 16px;margin:8px;border-radius:10px;background:#15603b;color:#fff;text-decoration:none;font-weight:700';target.before(a);});
  box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=()=>{
  const x=complaintsInboxRows.find(v=>String(v.id)===b.dataset.complaint);if(x)complaintActionDialog(x);

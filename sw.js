@@ -1,7 +1,7 @@
 
 const CACHE_PREFIX = 'yourstaff-static-';
 const LEGACY_CACHE_PREFIX = 'wahat-delivery-static-';
-const CACHE_NAME = CACHE_PREFIX + 'v6';
+const CACHE_NAME = CACHE_PREFIX + 'v7';
 const STATIC_FILES = [
   './manifest.webmanifest',
   './yourstaff-icon.svg',
@@ -36,6 +36,9 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
+    // Customer forms must never be cached as the employee application's index.
+    const scopePath = new URL('./', self.location.href).pathname;
+    if (url.pathname !== scopePath && url.pathname !== scopePath + 'index.html') return;
     event.respondWith((async () => {
       try {
         const fresh = await fetch(request, {cache: 'no-store'});
@@ -72,3 +75,4 @@ self.addEventListener('fetch', event => {
     })());
   }
 });
+

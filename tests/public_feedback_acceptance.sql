@@ -16,7 +16,7 @@ BEGIN
  IF k->>'receipt'<>j->>'receipt' OR k->>'replayed'<>'true' THEN RAISE EXCEPTION 'Idempotency failed';END IF;
  k:=public.dlv_submit_public_feedback(f,r,current_setting('test.other_branch')::integer,'اختبار قبول مؤقت','01000000000','complaint','رسالة اختبار قبول فني مؤقتة لا تخص عميلًا حقيقيًا',NULL);
  IF k->>'success'='true' THEN RAISE EXCEPTION 'Cross-company routing allowed';END IF;
- k:=public.dlv_submit_public_feedback(f,gen_random_uuid(),b,'اختبار','01000000000','complaint','قصير',NULL);
+ k:=public.dlv_submit_public_feedback(f,gen_random_uuid(),b,'اختبار','01000000000','complaint','',NULL);
  IF k->>'success'='true' THEN RAISE EXCEPTION 'Invalid message accepted';END IF;
  BEGIN PERFORM public.dlv_owner_feedback_form(1,NULL);RAISE EXCEPTION 'Public can create forms';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
 END $$;

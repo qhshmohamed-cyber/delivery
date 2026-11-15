@@ -16,13 +16,13 @@ BEGIN
  IF k->>'receipt'<>j->>'receipt' OR k->>'replayed'<>'true' THEN RAISE EXCEPTION 'Idempotency failed';END IF;
  k:=public.dlv_submit_public_feedback(f,r,current_setting('test.other_branch')::integer,'اختبار قبول مؤقت','01000000000','complaint','رسالة اختبار قبول فني مؤقتة لا تخص عميلًا حقيقيًا',NULL);
  IF k->>'success'='true' THEN RAISE EXCEPTION 'Cross-company routing allowed';END IF;
- k:=public.dlv_submit_public_feedback(f,gen_random_uuid(),b,'اختبار','01000000000','complaint','قصير',NULL);
+ k:=public.dlv_submit_public_feedback(f,gen_random_uuid(),b,'اختبار','01000000000','complaint','',NULL);
  IF k->>'success'='true' THEN RAISE EXCEPTION 'Invalid message accepted';END IF;
  BEGIN PERFORM public.dlv_owner_feedback_form(1,NULL);RAISE EXCEPTION 'Public can create forms';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
 END $$;
 RESET ROLE;
 DO $$
-DECLARE v_id bigint;v_branch integer:=current_setting('test.feedback_branch')::integer;v_user uuid;v_sid uuid;v_count integer;v_before bigint;v_after bigint;j jsonb;v_second bigint;v_other_form uuid;v_other_id bigint;
+DECLARE v_id bigint;v_branch integer:=current_setting('test.feedback_branch')::integer;v_user uuid;v_sid uuid;v_count integer;v_before bigint;v_after bigint;j jsonb;v_second bigint;v_other_form uuid;v_other_id bigint;actor record;test_sid uuid;tested_manager boolean:=false;tested_owner boolean:=false;
 BEGIN
  SELECT s.incident_id INTO STRICT v_id FROM private.dlv_feedback_submissions s JOIN public.dlv_incidents i ON i.id=s.incident_id
  WHERE s.request_id=current_setting('test.feedback_request')::uuid AND i.branch_id=v_branch AND i.created_by IS NULL AND i.category='customer_complaint' AND i.created_at=now();
@@ -57,15 +57,30 @@ BEGIN
  SELECT incident_id INTO v_other_id FROM private.dlv_feedback_submissions WHERE receipt=(j->>'receipt')::uuid;
  SELECT complaint_count INTO v_after FROM public.dlv_repeat_complaint_counts(ARRAY[v_id]);
  IF v_after<>v_before+1 OR EXISTS(SELECT 1 FROM public.dlv_repeat_complaint_counts(ARRAY[v_other_id])) THEN RAISE EXCEPTION 'Cross-company repeat-count disclosure';END IF;
+ IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(public.dlv_complaint_inbox_v2(v_branch)) r WHERE (r->>'id')::bigint=v_id AND (r->>'repeat_count')::bigint=v_before+1) THEN RAISE EXCEPTION 'Repeat count missing from inbox response';END IF;
+ j:=public.dlv_submit_public_feedback(current_setting('test.feedback_form')::uuid,gen_random_uuid(),v_branch,'اختبار قبول مؤقت','01000000001','complaint',repeat('أ',6000),NULL);
+ IF j->>'success'<>'true' OR NOT EXISTS(SELECT 1 FROM private.dlv_feedback_submissions s JOIN public.dlv_incidents i ON i.id=s.incident_id WHERE s.receipt=(j->>'receipt')::uuid AND position(repeat('أ',6000) IN i.details)>0) THEN RAISE EXCEPTION 'Long message rejected or truncated';END IF;
+ j:=public.dlv_submit_public_feedback(current_setting('test.feedback_form')::uuid,gen_random_uuid(),v_branch,'اختبار قبول مؤقت','01000000002','complaint','أ',NULL);
+ IF j->>'success'<>'true' THEN RAISE EXCEPTION 'Nonempty message still requires ten characters';END IF;
  IF public.dlv_complaint_whatsapp_context(v_id)->>'company'<>'واحة اليمن' OR public.dlv_complaint_whatsapp_context(v_id)->>'phone'<>'01000000000' OR public.dlv_complaint_whatsapp_context(v_id)->>'officer' IS NULL THEN RAISE EXCEPTION 'Wrong WhatsApp sender or company';END IF;
  BEGIN PERFORM public.dlv_complaint_inbox(current_setting('test.other_branch')::integer);RAISE EXCEPTION 'Cross-company inbox allowed';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
  PERFORM public.dlv_complaint_followup(v_id,'إجراء قبول فني مؤقت سيتم التراجع عنه','resolved');
  IF NOT EXISTS(SELECT 1 FROM public.dlv_incidents WHERE id=v_id AND status='resolved' AND followup_by=v_user) THEN RAISE EXCEPTION 'Followup did not save';END IF;
  BEGIN PERFORM public.dlv_owner_feedback_form(1,NULL);RAISE EXCEPTION 'Officer created owner-only QR';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ FOR actor IN SELECT DISTINCT ON (p.role) p.user_id,p.role FROM public.dlv_profiles p JOIN auth.users u ON u.id=p.user_id
+ WHERE p.active AND u.deleted_at IS NULL AND (u.banned_until IS NULL OR u.banned_until<=now()) AND ((p.role='manager' AND p.workflow_role='manager' AND p.branch_id=v_branch) OR (p.role='admin' AND p.workflow_role='admin' AND EXISTS(SELECT 1 FROM public.dlv_owner_page_security sec WHERE sec.user_id=p.user_id))) ORDER BY p.role,p.user_id LOOP
+  test_sid:=gen_random_uuid();INSERT INTO auth.sessions(id,user_id,created_at,updated_at) VALUES(test_sid,actor.user_id,now(),now());
+  IF actor.role='admin' THEN INSERT INTO public.dlv_owner_page_unlocks(user_id,session_id,expires_at) VALUES(actor.user_id,test_sid::text,now()+interval '5 minutes');tested_owner:=true;ELSE tested_manager:=true;END IF;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',actor.user_id,'session_id',test_sid,'role','authenticated','exp',extract(epoch from now()+interval '5 minutes')::bigint)::text,true);
+  IF NOT EXISTS(SELECT 1 FROM public.dlv_repeat_complaint_dashboard(v_branch,(SELECT company_id FROM public.dlv_branches WHERE id=v_branch)) x WHERE x.branch_id=v_branch AND x.customer_phone=private.dlv_normalized_contact_phone('01000000000') AND x.total_count>1 AND x.branch_count>1) THEN RAISE EXCEPTION 'Manager or owner repeat dashboard missing data';END IF;
+  IF actor.role='manager' THEN BEGIN PERFORM public.dlv_repeat_complaint_dashboard(current_setting('test.other_branch')::integer,NULL);RAISE EXCEPTION 'Manager saw another company dashboard';EXCEPTION WHEN insufficient_privilege THEN NULL;END;END IF;
+ END LOOP;
+ IF NOT tested_manager OR NOT tested_owner THEN RAISE EXCEPTION 'Manager or owner test actor unavailable';END IF;
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',v_user,'session_id',v_sid,'role','authenticated','exp',extract(epoch from now()+interval '5 minutes')::bigint)::text,true);
  UPDATE public.dlv_companies SET active=false WHERE slug='wahat-al-yemen';
  IF public.dlv_feedback_config(current_setting('test.feedback_form')::uuid)->>'available'<>'false' THEN RAISE EXCEPTION 'Suspended company form remains available';END IF;
  IF public.dlv_submit_public_feedback(current_setting('test.feedback_form')::uuid,gen_random_uuid(),v_branch,'اختبار','01000000000','complaint','اختبار عدم استقبال شكاوى الشركة المعلقة',NULL)->>'success'='true' THEN RAISE EXCEPTION 'Suspended company accepted submission';END IF;
 END $$;
 ROLLBACK;
-SELECT 'PASS: repeat counts include resolved complaints, normalize phone formats, exclude suggestions and other companies; all test data rolled back' AS acceptance;
+SELECT 'PASS: long/short messages, inline repeat counts, officer/manager/owner visibility, normalized phones and company isolation; all test data rolled back' AS acceptance;
 

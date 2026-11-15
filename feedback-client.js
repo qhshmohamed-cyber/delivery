@@ -33,7 +33,8 @@ by('feedbackForm').addEventListener('submit',async event=>{
  const phone=digits(by('phone').value).replace(/[ +()-]/g,'');
  if(!/^[0-9]{8,15}$/.test(phone)){by('error').textContent='اكتب رقم هاتف صحيحًا للتواصل.';return;}
  const payload={p_form:formId,p_branch:Number(by('branch').value),p_name:by('name').value.trim(),p_phone:phone,p_kind:by('kind').value,p_message:by('message').value.trim(),p_order:by('order').value.trim()||null};
- if(!payload.p_branch||payload.p_name.length<2||payload.p_message.length<10||!by('consent').checked){by('error').textContent='اختر الفرع وأكمل البيانات والموافقة. نص الرسالة 10 أحرف على الأقل.';return;}
+ if(!payload.p_branch||payload.p_name.length<2||!payload.p_message.length||!by('consent').checked){by('error').textContent='اختر الفرع وأكمل بياناتك واكتب رسالتك ثم وافق على المتابعة.';return;}
+ if(Array.from(payload.p_message).length>50000){by('error').textContent='الرسالة تجاوزت 50 ألف حرف؛ اختصرها قليلًا أو قسّمها على رسالتين.';return;}
  const fingerprint=JSON.stringify(payload);if(!pending||pending.fingerprint!==fingerprint)pending={fingerprint,id:crypto.randomUUID()};
  busy=true;by('send').disabled=true;by('send').textContent='جارٍ إرسال رسالتك…';
  try{

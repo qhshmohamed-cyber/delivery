@@ -5,7 +5,7 @@
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow,noarchive">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src https://mkptmejkcemdhlhdaort.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>الشكاوى والمقترحات</title><link rel="stylesheet" href="feedback.css?v=1">
-<script defer src="feedback-client.js?v=1"></script>
+<script defer src="feedback-client.js?v=2"></script>
 </head>
 <body><main>
 <header><img id="logo" alt="شعار الشركة" hidden><h1 id="company">الشكاوى والمقترحات</h1><p>رأيك يهمنا، ويساعدنا نحسّن خدمتنا</p></header>
@@ -17,7 +17,7 @@
 <label for="name">اسمك *</label><input id="name" name="name" autocomplete="name" minlength="2" maxlength="100" required>
 <label for="phone">رقم الهاتف / واتساب للتواصل *</label><input id="phone" type="tel" name="tel" dir="ltr" autocomplete="tel" maxlength="24" required placeholder="مثال: 01xxxxxxxxx">
 <label for="order">رقم الطلب (اختياري)</label><input id="order" maxlength="60" autocomplete="off">
-<label for="message">تفاصيل الشكوى أو المقترح *</label><textarea id="message" rows="6" minlength="10" maxlength="2000" required placeholder="اكتب التفاصيل التي تساعدنا على متابعتك…"></textarea>
+<label for="message">تفاصيل الشكوى أو المقترح *</label><textarea id="message" rows="8" maxlength="50000" required aria-describedby="messageHelp" placeholder="اكتب شكواك أو مقترحك بالتفصيل…"></textarea><p id="messageHelp" class="hint">اكتب تفاصيل رسالتك كاملة؛ المساحة متاحة حتى 50 ألف حرف.</p>
 <div class="trap" aria-hidden="true"><label for="website">اترك هذا الحقل فارغًا</label><input id="website" tabindex="-1" autocomplete="off"></div>
 <p class="privacy">نستخدم بيانات التواصل لمتابعة رسالتك داخل الشركة. لا تكتب كلمة مرور أو بيانات بطاقة دفع أو معلومات حساسة.</p>
 <label class="consent"><input id="consent" type="checkbox" required><span>أوافق على استخدام رقمي لمتابعة الشكوى.</span></label>

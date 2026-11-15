@@ -71,8 +71,8 @@ DECLARE f private.dlv_feedback_forms; prior private.dlv_feedback_submissions;
 BEGIN
  IF p_form IS NULL OR p_request IS NULL OR p_branch IS NULL OR length(v_name) NOT BETWEEN 2 AND 100
  OR v_phone !~ '^[0-9]{8,15}$' OR coalesce(p_kind,'') NOT IN ('complaint','suggestion')
- OR length(v_message) NOT BETWEEN 10 AND 2000 OR length(v_order)>60 THEN
- RETURN jsonb_build_object('success',false,'message','راجع الاسم ورقم الهاتف ونص الرسالة (10 أحرف على الأقل)');END IF;
+ OR length(v_message) NOT BETWEEN 1 AND 50000 OR length(v_order)>60 THEN
+ RETURN jsonb_build_object('success',false,'message','راجع الاسم ورقم الهاتف، واكتب نص الرسالة بما لا يتجاوز 50 ألف حرف');END IF;
  SELECT ff.* INTO f FROM private.dlv_feedback_forms ff JOIN public.dlv_companies c ON c.id=ff.company_id
  JOIN public.dlv_branches b ON b.company_id=c.id AND b.id=p_branch
  WHERE ff.id=p_form AND ff.active AND c.active AND c.onboarding_status='active' AND b.active

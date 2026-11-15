@@ -669,7 +669,7 @@ async function performOperationalRefresh() {
   try {
     await Promise.resolve(refreshView());
     if (canViewManagerBoard()) {
-      await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices(),loadDriverGpsHealth()]);
+      await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices(),loadDriverGpsHealth(),loadRepeatCustomerDashboard()]);
     }
     lastOperationalRefreshAt = Date.now();
   } catch(e) { console.warn('Realtime refresh failed',e); }
@@ -1855,21 +1855,19 @@ async function openRatingsActions(){
 }
 let complaintsInboxRows=[];
 let complaintRepeatCounts=new Map(),complaintRepeatCheckFailed=false;
+const complaintRepeatAlertsSeen=new Set();
 async function loadComplaintsInbox(){
  const stillCurrent=captureOperationalRead('loadComplaintsInbox','complaintsRows');if(!stillCurrent())return;
  if(!$('complaintsRows'))return;
  $('complaintsRows').textContent='جاري تحميل الشكاوى...';
- const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});if(!stillCurrent())return;
+ const {data,error}=await safeRpc('dlv_complaint_inbox_v2',{p_branch:selectedBranch||null});if(!stillCurrent())return;
  if(!$('complaintsRows'))return;
  if(error){$('complaintsRows').textContent='تعذر تحميل الشكاوى: '+error.message;return;}
  complaintsInboxRows=data||[];complaintRepeatCounts=new Map();complaintRepeatCheckFailed=false;
- if(complaintsInboxRows.length){
-  let result;try{result=await safeRpc('dlv_repeat_complaint_counts',{p_incidents:complaintsInboxRows.map(x=>Number(x.id))});}catch{result={error:true};}
-  if(!stillCurrent())return;
-  complaintRepeatCheckFailed=!!result.error;
-  if(!result.error)complaintRepeatCounts=new Map((result.data||[]).map(x=>[Number(x.incident_id),Number(x.complaint_count)]));
- }
+ complaintRepeatCounts=new Map(complaintsInboxRows.map(x=>[Number(x.id),Number(x.repeat_count)||0]));
  paintComplaintsInbox();
+ const unseen=complaintsInboxRows.find(x=>['open','in_progress'].includes(x.status)&&Number(x.repeat_count)>1&&!complaintRepeatAlertsSeen.has(appSessionEpoch+':'+me?.user_id+':'+x.id+':'+x.repeat_count));
+ if(unseen){complaintRepeatAlertsSeen.add(appSessionEpoch+':'+me?.user_id+':'+unseen.id+':'+unseen.repeat_count);flash('تنبيه: رقم عميل الشكوى #'+unseen.id+' له '+unseen.repeat_count+' شكاوى. راجع تنبيه الشكاوى المتكررة.',false);}
 }
 function complaintGreeting(company,officer){
  const c=String(company||'').trim(),n=String(officer||'').trim();
@@ -1899,6 +1897,7 @@ function paintComplaintsInbox(){
  $('complaintsSummary').textContent='إجمالي '+complaintsInboxRows.length+' · مفتوحة '+complaintsInboxRows.filter(x=>x.status==='open').length+' · جارٍ المتابعة '+complaintsInboxRows.filter(x=>x.status==='in_progress').length+' · تم الحل '+complaintsInboxRows.filter(x=>x.status==='resolved').length;
  box.innerHTML=rows.map(x=>'<section class="card"><div class="ord"><b>شكوى #'+x.id+' · طلب #'+esc(x.order_no||'غير محدد')+'</b><span class="badge">'+esc(({open:'مفتوحة',in_progress:'جارٍ المتابعة',resolved:'تم الحل'})[x.status]||x.status)+'</span></div><div class="meta">التاريخ: '+new Date(x.created_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})+' · '+esc(branchTitle(x.branch_id))+'</div><div class="meta">رقم العميل: <b dir="ltr">'+esc(x.customer_phone||'غير مسجل')+'</b></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.details||'')+'</p><div class="meta">آخر إجراء: '+esc(x.followup_action||'لم يسجل إجراء بعد')+'</div><div class="meta">بواسطة: '+esc(x.followup_employee||'لم يستلمها مسؤول بعد')+' · '+(x.followup_at?new Date(x.followup_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}):'—')+'</div><button data-complaint="'+x.id+'">تسجيل إجراء متابعة</button></section>').join('')||'<div class="card">لا توجد شكاوى مطابقة</div>';
  rows.forEach(x=>{const count=complaintRepeatCounts.get(Number(x.id))||0;if(count<2)return;const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]');if(!target)return;const alert=document.createElement('div');alert.setAttribute('role','status');alert.dataset.repeatComplaint=String(x.id);alert.style.cssText='padding:12px;margin:12px 0;border:2px solid #ae6811;border-radius:10px;background:#fff1cc;color:#563000;font-weight:700';alert.textContent='تنبيه: نفس رقم التواصل له '+count+' شكاوى، منها '+(count-1)+' سابقة، بما يشمل المحلولة، ضمن الفروع المصرح لك بمتابعتها.';target.closest('section').prepend(alert);});
+ if(rows.some(x=>(complaintRepeatCounts.get(Number(x.id))||0)>1)){const banner=document.createElement('div');banner.setAttribute('role','alert');banner.style.cssText='padding:16px;margin:12px 0;border:3px solid #ae6811;border-radius:12px;background:#fff1cc;color:#563000;font-size:18px;font-weight:800';banner.textContent='⚠ تنبيه شكاوى متكررة: توجد شكاوى لنفس رقم التواصل أكثر من مرة. عدد الشكاوى موضح أعلى كل شكوى متكررة.';box.prepend(banner);}
  if(complaintRepeatCheckFailed){const notice=document.createElement('p');notice.setAttribute('role','status');notice.textContent='تعذر فحص الشكاوى السابقة مؤقتًا؛ اضغط تحديث لإعادة المحاولة.';box.prepend(notice);}
  rows.forEach(x=>{const target=box.querySelector('[data-complaint="'+Number(x.id)+'"]'),url=complaintWhatsAppUrl(x.customer_phone);if(!target||!url)return;const a=document.createElement('a');a.href='#';a.onclick=e=>{e.preventDefault();void openComplaintWhatsApp(x.id,a);};a.textContent='فتح واتساب برسالة ترحيب';a.style.cssText='display:inline-block;padding:10px 16px;margin:8px;border-radius:10px;background:#15603b;color:#fff;text-decoration:none;font-weight:700';target.before(a);});
  box.querySelectorAll('[data-complaint]').forEach(b=>b.onclick=()=>{
@@ -2494,6 +2493,7 @@ function managerView() {
     ${board ? `<section class="card" style="border:2px solid #b9832e;background:linear-gradient(145deg,#fff8ea,#f3dfbd)"><div class="row" style="justify-content:space-between"><h2 style="font-size:18px">📊 مركز متابعة التشغيل المباشر</h2><span class="badge" style="background:#2f9e44">مباشر</span></div><div class="meta">تحديث تلقائي للطلبات والحالات والتأخير والتقييمات</div><div class="grid" id="managerLiveKpi"></div><h2>⏳ الطلبات في الانتظار</h2><div id="managerOpsPending"></div><h2>🚨 تأخيرات المطبخ والإسناد والتوصيل</h2><div id="managerDelayed"></div><h2>⭐ أحدث تقييمات العملاء</h2><div id="managerRatings"></div><div class="meta" id="managerUpdatedAt">آخر تحديث: الآن</div></section>` : ''}
     <h2>📥 الطلبات في الانتظار</h2><div id="pend"></div><div id="codes"></div><div class="grid" id="kpi"></div><h2>أداء الدليفري</h2><div class="card tw" id="perf"></div><h2>الطلبات</h2><div class="card tw" id="tbl"></div><div class="row" style="justify-content:center"><button id="pv">السابق</button><span id="pg" class="meta"></span><button id="nx">التالي</button></div>
   `);
+  if(isOwner()||isLocationManager()){const panel=document.createElement('section');panel.id='repeatCustomerDashboard';panel.className='card';panel.style.cssText='border:2px solid #ae6811;background:#fff8e6;color:#49300b';panel.innerHTML='<h2>⚠ متابعة أرقام العملاء أصحاب الشكاوى المتكررة</h2><div id="repeatCustomerRows" role="status">جارٍ الفحص…</div>';const bar=$('app').querySelector('.ys-operations-bar');if(bar)bar.after(panel);else $('app').prepend(panel);void loadRepeatCustomerDashboard();}
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;
   if ($('ad')) $('ad').onclick = () => addDriverForm(); if($('cancelPermissionsBtn'))$('cancelPermissionsBtn').onclick=openCancelPermissions;if($('customerMessagesBtn'))$('customerMessagesBtn').onclick=customerMessageSettings; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
@@ -2508,6 +2508,13 @@ function managerView() {
   if (board) { refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh(); }
 }
 let managerBoardTimer = null, managerClockTimer = null, managerBoardBusy = false;
+async function loadRepeatCustomerDashboard(){
+ const stillCurrent=captureOperationalRead('loadRepeatCustomerDashboard','repeatCustomerRows');if(!stillCurrent()||!(isOwner()||isLocationManager()))return;
+ const {data,error}=await safeRpc('dlv_repeat_complaint_dashboard',{p_branch:selectedBranch||null,p_company:isOwner()&&ownerActiveCompanyId?Number(ownerActiveCompanyId):null});if(!stillCurrent())return;
+ const box=$('repeatCustomerRows');if(!box)return;
+ if(error){box.textContent='تعذر فحص الشكاوى المتكررة. أعد تحديث البيانات.';return;}
+ box.innerHTML=(data||[]).map(x=>'<div style="border-top:1px solid #d4b878;padding:12px 0"><b>'+esc(x.company_name)+' · '+esc(x.branch_name)+'</b><div>رقم التواصل: <b dir="ltr">'+esc(x.customer_phone)+'</b></div><div>له '+Number(x.total_count)+' شكاوى في الشركة ضمن فروعك المصرح بها؛ منها '+Number(x.branch_count)+' في هذا الفرع.</div><div>قيد المتابعة في الفرع: '+Number(x.open_count)+' · آخر شكوى: '+esc(new Date(x.last_at).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'}))+'</div></div>').join('')||'لا توجد أرقام لها أكثر من شكوى ضمن نطاق صلاحياتك.';
+}
 async function loadDriverGpsHealth(){
  const stillCurrent=captureOperationalRead('loadDriverGpsHealth','managerGpsHealth');if(!stillCurrent())return;
  const box=$('managerGpsHealth');if(!box||!canViewManagerBoard())return;
@@ -2535,7 +2542,7 @@ function startManagerBoardRefresh(){
     if(!canViewManagerBoard() || document.visibilityState!=='visible' || managerBoardBusy) return;
     managerBoardBusy=true;
     try {
-      await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices()]);
+      await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices(),loadRepeatCustomerDashboard()]);
       const u=$('managerUpdatedAt'); if(u) u.textContent='آخر تحديث للبيانات: '+tm(new Date().toISOString());
     } finally { managerBoardBusy=false; }
   },15000);

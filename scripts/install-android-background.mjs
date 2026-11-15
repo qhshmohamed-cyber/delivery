@@ -20,3 +20,8 @@ console.log('Native driver foreground service and encrypted shared auth storage 
 const debug=join(root,'android/app/src/debug');await mkdir(join(debug,'java/com/yourstaff/delivery'),{recursive:true});
 await copyFile('native/android/debug/com/yourstaff/delivery/BackgroundTestActivity.java',join(debug,'java/com/yourstaff/delivery/BackgroundTestActivity.java'));
 await writeFile(join(debug,'AndroidManifest.xml'),'<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application><activity android:name=".BackgroundTestActivity" android:exported="false"/></application></manifest>');
+const gradlePath=join(root,'android/app/build.gradle');let gradle=await readFile(gradlePath,'utf8');
+if(!gradle.includes('yourstaff-native-test-dependencies')){
+ gradle+='\n// yourstaff-native-test-dependencies: align the instrumentation test Kotlin stdlib family.\ndependencies { androidTestImplementation platform("org.jetbrains.kotlin:kotlin-bom:1.8.22") }\n';
+ await writeFile(gradlePath,gradle);
+}

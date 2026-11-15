@@ -3320,7 +3320,7 @@ function kitchenView() {
 }
 async function loadKitchen() {
  const stillCurrent=captureOperationalRead('loadKitchen','kq');if(!stillCurrent())return;
-  const { data, error } = await branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at')).eq('status', 'new').is('driver_id', null).in('workflow_stage', ['new', 'kitchen_ready']).order('created_at').limit(200);if(!stillCurrent())return;
+  const { data, error } = await safeRpc('dlv_kitchen_queue', {p_branch: Number(selectedBranch)});if(!stillCurrent())return;
   if (error) return flash(error.message, false);
   const rows = data || [], a = rows.filter(o => o.workflow_stage === 'new'), b = rows.filter(o => o.workflow_stage === 'kitchen_ready');
   $('kq').innerHTML = '<h2>🍳 عند المطبخ (' + a.length + ')</h2>' + (a.map(o => ordCard(o, '<div class="acts"><button class="p" data-act="kfwd" data-id="' + o.id + '">✅ جاهز — حوّل للمشرف</button></div>')).join('') || '<div class="meta">لا يوجد</div>') +

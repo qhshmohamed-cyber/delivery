@@ -585,6 +585,14 @@ function roleWorkGuide(){
 setInterval(()=>{if(me&&document.visibilityState==='visible')updateStageClocks();},15000);
 new MutationObserver(()=>updateStageClocks()).observe(document.getElementById('app'),{childList:true,subtree:true});
 // Operations UX: connection awareness and a deliberate one-tap refresh.
+// Every asynchronous operational read belongs to one user, branch, DOM view and request.
+const operationalReadRequests=new Map();
+function captureOperationalRead(name,elementId){
+ const element=$(elementId),epoch=appSessionEpoch,userId=me?.user_id,branch=selectedBranch;
+ const request=(operationalReadRequests.get(name)||0)+1;
+ operationalReadRequests.set(name,request);
+ return ()=>!!element&&element.isConnected&&$(elementId)===element&&!!userId&&me?.user_id===userId&&appSessionEpoch===epoch&&selectedBranch===branch&&operationalReadRequests.get(name)===request;
+}
 let ysRefreshBusy=false;
 function ysConnectionStatus(){
  const el=document.getElementById('ysConnectionStatus');if(!el)return;
@@ -1187,14 +1195,15 @@ async function enterOwnerDashboard(){
 }
 
 async function refreshKitchenDelayNotices() {
+ const stillCurrent=captureOperationalRead('refreshKitchenDelayNotices','delayNotices');if(!stillCurrent())return;
   if (!me) return;
-  const {data,error} = await safeRpc('dlv_list_stage_notifications');
+  const {data,error} = await safeRpc('dlv_list_stage_notifications');if(!stillCurrent())return;
   const box = $('delayNotices'); if (!box) return;
   if (error) { box.innerHTML = '<div class="msg e">تعذر تحميل التنبيهات: '+esc(error.message)+'</div>'; return; }
   // قراءة التنبيه لا تعني تسجيل إجراء لحل التأخير؛ الإجراء يُحفظ مستقلًا.
   const rows = (data || []).filter(n => !n.read_at && (n.notification_type === 'kitchen_delay' || String(n.notification_type||'').startsWith('stage_') || !n.notification_type));
   box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+(String(n.notification_type||'').startsWith('stage_')?'<div><button onclick="recordOrderDelay('+Number(n.order_id)+')">تسجيل إجراء</button></div>':'')+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ قرأت التنبيه</button></div>').join('')+'</section>' : '';
-  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { if (!requireOnline('تحديث التنبيه')) return; b.disabled=true; const {error}=await safeRpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)}); if(error){b.disabled=false;return flash('تعذر حفظ قراءة التنبيه',false);} refreshKitchenDelayNotices(); });
+  box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { if (!requireOnline('تحديث التنبيه')) return; b.disabled=true; const {error}=await safeRpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)});if(!stillCurrent())return; if(error){b.disabled=false;return flash('تعذر حفظ قراءة التنبيه',false);} refreshKitchenDelayNotices(); });
 }
 async function runKitchenDelayCheck() {
   if (!me) return;
@@ -1837,9 +1846,10 @@ async function openRatingsActions(){
 }
 let complaintsInboxRows=[];
 async function loadComplaintsInbox(){
+ const stillCurrent=captureOperationalRead('loadComplaintsInbox','complaintsRows');if(!stillCurrent())return;
  if(!$('complaintsRows'))return;
  $('complaintsRows').textContent='جاري تحميل الشكاوى...';
- const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});
+ const {data,error}=await safeRpc('dlv_complaint_inbox',{p_branch:selectedBranch||null});if(!stillCurrent())return;
  if(!$('complaintsRows'))return;
  if(error){$('complaintsRows').textContent='تعذر تحميل الشكاوى: '+error.message;return;}
  complaintsInboxRows=data||[];paintComplaintsInbox();
@@ -1957,21 +1967,22 @@ function callcenterView() {
   loadCallcenterOrders(); loadCallcenterRatings(); startFollowupPulse(); $('cc_pulse_refresh').onclick=refreshFollowupPulse;
 }
 async function loadCallcenterOrders() {
+ const stillCurrent=captureOperationalRead('loadCallcenterOrders','cc_orders');if(!stillCurrent())return;
  const box=$('cc_orders');if(!box)return;
  const q=($('cc_q')?.value||'').trim().replace(/[,()%*]/g,' ');
  const requestId=String(Date.now())+'-'+Math.random();box.dataset.requestId=requestId;
  let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
  if(q)req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
  else req=req.in('status',['new','received','out']);
- const {data,error}=await req;
+ const {data,error}=await req;if(!stillCurrent())return;
  if(!box.isConnected||box.dataset.requestId!==requestId)return;
  if(error){box.innerHTML='<div class="msg e">'+esc(error.message)+'</div>';return;}
  const rows=data||[];
  if(canAccessCustomerTracking()&&rows.length){
   const branchIds=[...new Set(rows.map(o=>Number(o.branch_id)))];
   const secureCodes=new Map();
-  for(const branchId of branchIds){const {data:items,error:codeError}=await safeRpc('dlv_list_order_tracking_codes',{p_branch:branchId});if(codeError){box.innerHTML='<div class="msg e">تعذر التحقق من صلاحيات أكواد المتابعة</div>';return;}for(const item of items||[])secureCodes.set(Number(item.order_id),item.track_code);}
-  if(q){for(const o of rows.filter(o=>!secureCodes.has(Number(o.id)))){const {data:code,error:codeError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(o.id)});if(!codeError&&code)secureCodes.set(Number(o.id),code);}}
+  for(const branchId of branchIds){const {data:items,error:codeError}=await safeRpc('dlv_list_order_tracking_codes',{p_branch:branchId});if(!stillCurrent())return;if(codeError){box.innerHTML='<div class="msg e">تعذر التحقق من صلاحيات أكواد المتابعة</div>';return;}for(const item of items||[])secureCodes.set(Number(item.order_id),item.track_code);}
+  if(q){for(const o of rows.filter(o=>!secureCodes.has(Number(o.id)))){const {data:code,error:codeError}=await safeRpc('dlv_get_order_tracking_code',{p_order_id:Number(o.id)});if(!stillCurrent())return;if(!codeError&&code)secureCodes.set(Number(o.id),code);}}
   if(!box.isConnected||box.dataset.requestId!==requestId)return;
   for(const o of rows)o.track_code=secureCodes.get(Number(o.id))||null;
  }
@@ -1989,8 +2000,9 @@ async function loadCallcenterOrders() {
 }
 
 async function loadCallcenterRatings() {
+ const stillCurrent=captureOperationalRead('loadCallcenterRatings','cc_ratings');if(!stillCurrent())return;
   const box=$('cc_ratings'); if(!box) return;
-  const {data,error}=await safeRpc('dlv_list_customer_ratings',{p_from:cairoDate(),p_to:cairoDate(),p_branch_id:selectedBranch});
+  const {data,error}=await safeRpc('dlv_list_customer_ratings',{p_from:cairoDate(),p_to:cairoDate(),p_branch_id:selectedBranch});if(!stillCurrent())return;
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=data||[];
   box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.branch_name||'')} · ${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الدليفري: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>متابعة الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات اليوم حتى الآن.</div>';
@@ -2456,20 +2468,22 @@ function managerView() {
 }
 let managerBoardTimer = null, managerClockTimer = null, managerBoardBusy = false;
 async function loadDriverGpsHealth(){
+ const stillCurrent=captureOperationalRead('loadDriverGpsHealth','managerGpsHealth');if(!stillCurrent())return;
  const box=$('managerGpsHealth');if(!box||!canViewManagerBoard())return;
- const {data:activeOrders,error}=await branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).eq('status','out').not('driver_id','is',null).limit(200);
+ const {data:activeOrders,error}=await branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).eq('status','out').not('driver_id','is',null).limit(200);if(!stillCurrent())return;
  if(error){box.textContent='تعذر فحص حالة التتبع';return;}
  const ids=[...new Set((activeOrders||[]).map(x=>x.driver_id).filter(Boolean))];
  if(!ids.length){box.textContent='لا توجد طلبات خرجت للتوصيل حاليًا.';return;}
- const {data:locations,error:locError}=await branchQuery(sb.from('dlv_locations').select('driver_id,updated_at')).in('driver_id',ids).limit(200);
+ const {data:locations,error:locError}=await branchQuery(sb.from('dlv_locations').select('driver_id,updated_at')).in('driver_id',ids).limit(200);if(!stillCurrent())return;
  if(locError){box.textContent='تعذر فحص آخر تحديث للمواقع';return;}
  const last=new Map((locations||[]).map(x=>[x.driver_id,Date.parse(x.updated_at)]));
  const stale=ids.filter(id=>!last.has(id)||!Number.isFinite(last.get(id))||Date.now()-last.get(id)>5*60000);
  box.innerHTML='<div class="meta">الطيارون لديهم طلبات خرجت للتوصيل: '+ids.length+' · تحديث GPS متأخر أكثر من 5 دقائق: '+stale.length+'</div>'+(stale.length?'<div class="msg e">⚠️ '+stale.length+' طيار بدون تحديث موقع حديث. راجع الاتصال وفتح صفحة الطيار؛ الموقع القديم ليس موقعًا مباشرًا.</div>':'<div class="msg o">✓ مواقع الطيارين المكلفين بالتوصيل محدثة خلال آخر 5 دقائق.</div>');
 }
 async function loadManagerOpsPending() {
+ const stillCurrent=captureOperationalRead('loadManagerOpsPending','managerOpsPending');if(!stillCurrent())return;
   const box=$('managerOpsPending'); if(!box) return;
-  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status')).eq('status','new').order('created_at',{ascending:true}).limit(200);
+  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status')).eq('status','new').order('created_at',{ascending:true}).limit(200);if(!stillCurrent())return;
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل طلبات الانتظار</div>';return;}
   const rows=data||[];
   box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · منذ ${elapsed} دقيقة</div>${isOwner()||me.can_cancel_orders===true?`<button class="r" data-act="cancelled" data-id="${o.id}">إلغاء الطلب</button>`:''}</div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
@@ -2487,8 +2501,9 @@ function startManagerBoardRefresh(){
 }
 
 async function loadManagerLiveKpis() {
+ const stillCurrent=captureOperationalRead('loadManagerLiveKpis','managerLiveKpi');if(!stillCurrent())return;
   const box=$('managerLiveKpi'); if(!box) return;
-  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,status,workflow_stage,created_at')).eq('order_date',cairoDate());
+  const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,status,workflow_stage,created_at')).eq('order_date',cairoDate());if(!stillCurrent())return;
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل ملخص الطلبات</div>';return;}
   const rows=data||[], pending=rows.filter(o=>o.status==='new' && ['new','kitchen_ready','supervisor_received'].includes(o.workflow_stage)).length;
   const kitchen=rows.filter(o=>o.status==='new' && o.workflow_stage==='new').length;
@@ -2496,16 +2511,18 @@ async function loadManagerLiveKpis() {
   box.innerHTML=[['طلبات اليوم',rows.length],['في الانتظار',pending],['عند المطبخ',kitchen],['خرجت للتوصيل',out]].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
 }
 async function loadManagerDelayed() {
+ const stillCurrent=captureOperationalRead('loadManagerDelayed','managerDelayed');if(!stillCurrent())return;
  const box=$('managerDelayed');if(!box)return;
- const {data,error}=await safeRpc('dlv_followup_pulse',{p_branch:selectedBranch||null});
+ const {data,error}=await safeRpc('dlv_followup_pulse',{p_branch:selectedBranch||null});if(!stillCurrent())return;
  if(!box.isConnected)return;
  if(error){box.textContent='تعذر تحميل التأخيرات';return;}
  const rows=data?.alerts||[];
  box.innerHTML=rows.length?rows.map(o=>'<div class="card"><div class="ord"><b>طلب #'+esc(o.order_no)+'</b><span class="badge" style="background:#c44912">'+esc(o.reason)+'</span></div><div class="meta">مدة المرحلة: '+Number(o.elapsed_minutes)+' دقيقة · الحد: '+Number(o.limit_minutes)+' دقيقة · '+esc(branchTitle(o.branch_id))+'</div></div>').join(''):'<div class="meta">لا توجد تأخيرات حسب حدود المراحل المحددة للفروع.</div>';
 }
 async function loadManagerRatings() {
+ const stillCurrent=captureOperationalRead('loadManagerRatings','managerRatings');if(!stillCurrent())return;
   const box=$('managerRatings'); if(!box) return;
-  const {data,error}=await safeRpc('dlv_list_customer_ratings',{p_from:'2000-01-01',p_to:cairoDate(),p_branch_id:selectedBranch});
+  const {data,error}=await safeRpc('dlv_list_customer_ratings',{p_from:'2000-01-01',p_to:cairoDate(),p_branch_id:selectedBranch});if(!stillCurrent())return;
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل التقييمات: '+esc(error.message)+'</div>';return;}
   const rows=(data||[]).slice(0,5);
   box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">الطيار: ${r.delivery_rating}/5 ⭐ · المطعم: ${r.restaurant_rating}/5 ⭐ · الكول سنتر: ${r.callcenter_rating}/5 ⭐</div>${r.comment?`<div>تعليق العميل: ${esc(r.comment)}</div>`:''}</div>`).join(''):'<div class="msg">لا توجد تقييمات مسجلة حتى الآن.</div>';
@@ -2536,13 +2553,14 @@ async function loadOwnerRatingsPage() {
   box.innerHTML=rows.length?rows.map(r=>`<div class="card"><div class="ord"><b>طلب #${esc(r.order_no)}</b><span class="meta">${tm(r.rated_at)}</span></div><div class="meta">${esc(r.branch_name||'')} · ${esc(r.customer_name||'عميل')} · ${esc(r.phone||'')}</div><div class="meta" style="margin-top:8px">الطيار: ${'⭐'.repeat(r.delivery_rating)} (${r.delivery_rating}/5)<br>المطعم: ${'⭐'.repeat(r.restaurant_rating)} (${r.restaurant_rating}/5)<br>الكول سنتر: ${'⭐'.repeat(r.callcenter_rating)} (${r.callcenter_rating}/5)</div>${r.comment?'<div style="margin-top:8px">تعليق العميل: '+esc(r.comment)+'</div>':''}</div>`).join(''):'<div class="meta">لا توجد تقييمات في الفترة المحددة.</div>';
 }
 async function loadAll() {
+ const stillCurrent=captureOperationalRead('loadAll','tbl');if(!stillCurrent())return;
   const from = $('f_from').value, to = $('f_to').value, st = $('f_st').value, dr = $('f_dr').value;
   const q = $('f_q').value.replace(/[,()%*]/g, ' ').trim();
   let qb = branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id, driver:driver_id(full_name)', {count:'exact'})).gte('order_date', from).lte('order_date', to)
     .order('created_at', {ascending:false}).range(page * PAGE, page * PAGE + PAGE - 1);
   if (st) qb = qb.eq('status', st); if (dr) qb = qb.eq('driver_id', dr);
   if (q) qb = qb.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
-  const [o, s] = await Promise.all([qb, safeRpc('dlv_stats', {p_from: from, p_to: to, p_branch_id: selectedBranch})]);
+  const [o, s] = await Promise.all([qb, safeRpc('dlv_stats', {p_from: from, p_to: to, p_branch_id: selectedBranch})]);if(!stillCurrent())return;
   if (o.error) return flash(o.error.message, false);
   (o.data || []).forEach(x => ORD[x.id] = x);
   const rows = (s.data || []).filter(r => !dr || r.driver_id === dr);
@@ -3216,24 +3234,34 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- مسار الطلب: مطبخ ← مشرف ← طيار ---------- */
-function refreshView() { if (!me) return; if (me.role === 'driver') loadMine(); else if (me.workflow_role === 'kitchen') loadKitchen(); else if (me.workflow_role === 'callcenter_followup') { loadCallcenterOrders(); loadCallcenterRatings(); } else if((me.role==='complaints_officer'||me.workflow_role==='complaints_officer')){loadComplaintsInbox();} else if(me.workflow_role==='custom_unassigned'){customStaffView();} else { loadAll(); loadPending(); loadCodes(); } }
+function refreshView() {
+ if(!me)return Promise.resolve();
+ if(me.role==='driver')return loadMine();
+ if(me.workflow_role==='kitchen')return loadKitchen();
+ if(me.workflow_role==='callcenter_followup')return Promise.all([loadCallcenterOrders(),loadCallcenterRatings()]);
+ if(me.role==='complaints_officer'||me.workflow_role==='complaints_officer')return loadComplaintsInbox();
+ if(me.workflow_role==='custom_unassigned')return customStaffView();
+ return Promise.all([loadAll(),loadPending(),loadCodes()]);
+}
 const ordCard = (o, btn) => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><span class="badge" style="background:' + (o.workflow_stage === 'new' ? '#868e96' : '#2f9e44') + '">' + (STG[o.workflow_stage] || '') + '</span></div><div class="meta">' + esc(me?.workflow_role==='kitchen'?'الطلب جاهز لإجراءات المطبخ':[o.customer_name, o.phone, o.address].filter(Boolean).join(' · ')) + '</div>' + stageClockHtml(o) + ((me?.workflow_role!=='kitchen')?'<button data-act="dossier" data-id="'+o.id+'">ملف الطلب</button>':'') + (['kitchen_ready','supervisor_received'].includes(o.workflow_stage)&&['admin','supervisor'].includes(me?.workflow_role||me?.role)?'<button onclick="suggestOrderDriver('+Number(o.id)+')">اقتراح طيار</button>':'') + btn + '</div>';
 function kitchenView() {
   $('app').innerHTML = shell('<div class="card"><h2>🍳 تجهيز الطلبات</h2><p class="meta">الطلبات الجديدة أولًا. بعد انتهاء التجهيز اضغط «جاهز — حوّل للمشرف».</p></div><div id="kq"></div>');
   bindOut(); loadKitchen();
 }
 async function loadKitchen() {
-  const { data, error } = await branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at')).eq('status', 'new').is('driver_id', null).in('workflow_stage', ['new', 'kitchen_ready']).order('created_at').limit(200);
+ const stillCurrent=captureOperationalRead('loadKitchen','kq');if(!stillCurrent())return;
+  const { data, error } = await branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at')).eq('status', 'new').is('driver_id', null).in('workflow_stage', ['new', 'kitchen_ready']).order('created_at').limit(200);if(!stillCurrent())return;
   if (error) return flash(error.message, false);
   const rows = data || [], a = rows.filter(o => o.workflow_stage === 'new'), b = rows.filter(o => o.workflow_stage === 'kitchen_ready');
   $('kq').innerHTML = '<h2>🍳 عند المطبخ (' + a.length + ')</h2>' + (a.map(o => ordCard(o, '<div class="acts"><button class="p" data-act="kfwd" data-id="' + o.id + '">✅ جاهز — حوّل للمشرف</button></div>')).join('') || '<div class="meta">لا يوجد</div>') +
     '<h2>بانتظار المشرف (' + b.length + ')</h2>' + (b.map(o => ordCard(o, '')).join('') || '<div class="meta">لا يوجد</div>');
 }
 async function loadPending() {
+ const stillCurrent=captureOperationalRead('loadPending','pend');if(!stillCurrent())return;
   const box = $('pend'); if (!box) return;
   let pendingQuery=branchQuery(sb.from('dlv_orders').select('id,branch_id,order_no,order_date,customer_name,phone,address,notes,driver_id,status,received_at,out_at,delivered_at,failed_reason,created_by,created_at,driver_note,source_role,source_user,workflow_stage,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,callcenter_staff_id')).eq('status','new').order('created_at').limit(200);
   if(!isOwner())pendingQuery=pendingQuery.is('driver_id',null);
-  const { data, error } = await pendingQuery;
+  const { data, error } = await pendingQuery;if(!stillCurrent())return;
   if (error) return;
   const wf = me.workflow_role || 'manager';
   const rows = (data || []).filter(o => wf !== 'supervisor' || o.workflow_stage === 'kitchen_ready' || o.workflow_stage === 'supervisor_received');
@@ -3304,14 +3332,15 @@ async function waMsg(id) {
   finally{if(btn){btn.disabled=false;delete btn.dataset.sending;}}
 }
 async function loadCodes() {
+ const stillCurrent=captureOperationalRead('loadCodes','codes');if(!stillCurrent())return;
   const box = $('codes'); if (!box) return;
   if(!canAccessCustomerTracking()){box.innerHTML='';return;}
-  const { data, error } = await branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,status,created_at,driver:driver_id(full_name)')).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false }).limit(200);
+  const { data, error } = await branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,status,created_at,driver:driver_id(full_name)')).in('status', ['new', 'received', 'out']).order('created_at', { ascending: false }).limit(200);if(!stillCurrent())return;
   if (error) return;
   const rawRows=data||[];
   const branches=[...new Set(rawRows.map(o=>Number(o.branch_id)))];
   const codes=new Map();
-  for(const branchId of branches){const {data:secureRows,error:secureError}=await safeRpc('dlv_list_order_tracking_codes',{p_branch:branchId});if(secureError){box.innerHTML='';return flash('تعذر التحقق من صلاحية أكواد المتابعة',false);}for(const item of secureRows||[])codes.set(Number(item.order_id),item.track_code);}
+  for(const branchId of branches){const {data:secureRows,error:secureError}=await safeRpc('dlv_list_order_tracking_codes',{p_branch:branchId});if(!stillCurrent())return;if(secureError){box.innerHTML='';return flash('تعذر التحقق من صلاحية أكواد المتابعة',false);}for(const item of secureRows||[])codes.set(Number(item.order_id),item.track_code);}
   const rows=rawRows.filter(o=>codes.has(Number(o.id))).map(o=>({...o,track_code:codes.get(Number(o.id))}));rows.forEach(o=>ORD[o.id]=o);
   box.innerHTML = rows.length ? '<h2>🔑 أكواد متابعة العملاء (' + rows.length + ')</h2>' + rows.map(o => '<div class="card"><div class="ord"><b style="font-size:18px">#' + esc(o.order_no) + '</b><b dir="ltr" style="font-size:22px;letter-spacing:2px;color:#4e2c12">' + esc(o.track_code) + '</b></div><div class="meta">' + esc([o.customer_name, o.phone].filter(Boolean).join(' · ')) + ' — الطيار: ' + esc(o.driver ? o.driver.full_name : '') + '</div><div class="acts"><button class="p" data-act="cpmsg" data-id="' + o.id + '">نسخ رسالة العميل</button>' + (o.phone ? '<button class="g" data-act="wa" data-id="' + o.id + '">واتساب</button>' : '') + '</div></div>').join('') : '';
 }

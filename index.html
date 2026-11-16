@@ -13,6 +13,7 @@
 <script defer src="web-install.js?v=1"></script>
 <script defer src="qrcode-generator.js?v=1"></script>
 <script defer src="staff-entry.js?v=1"></script>
+<script defer src="team-tools.js?v=1"></script>
 <script defer src="feedback-owner.js?v=2"></script>
 <meta name="theme-color" content="#101827">
 
@@ -329,6 +330,12 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const nativeBackground=createNativeBackground(window.Capacitor);
 const sb = supabase.createClient(SB_URL, SB_KEY,{auth:{persistSession:true,autoRefreshToken:!nativeBackground.available,...(nativeBackground.available?{storage:nativeBackground.storage}:{})}});
 const sessionActions = createSessionActions(sb.auth);
+let teamTools=null;
+function startTeamTools(){
+ if(!me||!window.createTeamTools)return;
+ if(!teamTools)teamTools=window.createTeamTools({rpc:(name,args)=>safeRpc(name,args),identity:()=>me?.user_id||null,epoch:()=>appSessionEpoch,canManage:()=>canViewManagerBoard(),error:message=>flash(message,false)});
+ teamTools.start();
+}
 let appLogoutBusy=false,appSessionEpoch=0;
 function clearPrivateSessionDialogs(){
  document.querySelectorAll('.modal,#ownerAssistantOverlay').forEach(dialog=>{
@@ -500,12 +507,12 @@ async function checkProfileUpdates(){
   if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
   if(error){console.warn('Profile refresh failed:',error.message);return;}
   const sig=profileSignature(data);
-  if(sig!==profileSyncFingerprint){appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);if(me.role==='driver')await stopShare(false);profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
+  if(sig!==profileSyncFingerprint){teamTools?.stop();appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);if(me.role==='driver')await stopShare(false);profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
   if(!isOwner()){
    const {data:allowed,error:accessError}=await safeRpc('dlv_my_branches');
    if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
    if(accessError?.code==='42501'||(!accessError && !(allowed||[]).length)){
-    appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);
+    teamTools?.stop();appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);
     if(me.role==='driver')await stopShare(false);
     stopProfileSync();selectedBranch=null;
     resetPlatformBrand();document.body.classList.add('ys-platform');
@@ -521,11 +528,12 @@ function startProfileSync(){
  if(!me)return;
  profileSyncFingerprint=profileSignature(me);
  if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
- profileSyncChannel=sb.channel('profile:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).subscribe();
+ profileSyncChannel=sb.channel('profile:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).on('broadcast',{event:'staff_message'},()=>{void teamTools?.refreshInbox();}).subscribe();
  if(profileSyncTimer)clearInterval(profileSyncTimer);
  profileSyncTimer=setInterval(()=>{void checkProfileUpdates()},30000);
 }
 function stopProfileSync(){
+ teamTools?.stop();
  if(profileSyncTimer){clearInterval(profileSyncTimer);profileSyncTimer=null;}
  if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
  profileSyncFingerprint='';
@@ -743,6 +751,7 @@ window.addEventListener('offline', () => {
   if (app && me) flash('الاتصال انقطع — البيانات المعروضة قد لا تكون محدثة. سنعيد المزامنة عند عودة الإنترنت.', false);
 });
 async function boot(expectedUserId=null) {
+  teamTools?.stop();
   const requestId=++bootRequestId,epoch=appSessionEpoch;
   const stillCurrent=()=>requestId===bootRequestId&&epoch===appSessionEpoch;
   let entry;
@@ -927,6 +936,7 @@ function ownerBillingSettings(){
  });
 }
 async function ownerCompanyPicker(){
+ startTeamTools();
  resetPlatformBrand();ownerActiveCompanyId=null;
  document.body.classList.add('ys-platform'); document.title='Your Staff — الشركات';
  const [{data,error},brandResult]=await Promise.all([safeRpc('dlv_owner_list_companies'),sb.from('dlv_company_branding').select('*')]);
@@ -1271,7 +1281,7 @@ function startKitchenDelayMonitor() {
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { document.body.dataset.ysView=me?.workflow_role||me?.role||'staff';void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); };if(isOwner()&&!$('appearanceSettingsButton')){const button=document.createElement('button');button.id='appearanceSettingsButton';button.textContent='🎨 الخط والألوان';button.onclick=openCompanyAppearance;document.querySelector('.ys-header-actions')?.appendChild(button);} }
+function bindOut() { startTeamTools();document.body.dataset.ysView=me?.workflow_role||me?.role||'staff';void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); };if(isOwner()&&!$('appearanceSettingsButton')){const button=document.createElement('button');button.id='appearanceSettingsButton';button.textContent='🎨 الخط والألوان';button.onclick=openCompanyAppearance;document.querySelector('.ys-header-actions')?.appendChild(button);} }
 
 async function openCompanyAppearance(){
  if(!OWNER_ONLY())return;

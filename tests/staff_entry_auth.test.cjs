@@ -19,7 +19,7 @@ for(const title of ['كاشير','Cashier','صالة 1'])assert.equal(customTitl
 for(const title of ['<bad>','bad\njob'])assert.equal(customTitlePattern.test(title),true);
 const boot=html.slice(html.indexOf('async function boot('),html.indexOf('\n}',html.indexOf('async function boot('))+2);
 function context(){
- const c={bootRequestId:0,appSessionEpoch:0,staffEntryId:null,loadStaffEntry:async()=>null,loginView:()=>{},
+ const c={teamTools:null,bootRequestId:0,appSessionEpoch:0,staffEntryId:null,loadStaffEntry:async()=>null,loginView:()=>{},
  reconnectView:()=>{},appSignOut:async()=>{c.signedOut=true;},isOwner:()=>false,
  startProfileSync:()=>{},document:{documentElement:{classList:{remove(){}}},body:{classList:{remove(){}}}},
  safeRpc:async()=>({data:[{id:1,name:'branch'}]}),branchNames:{},ysStaffEntry:{matchesBranches},resetPlatformBrand(){},

@@ -12,7 +12,8 @@
 <link rel="apple-touch-icon" href="yourstaff-app-192.png">
 <script defer src="web-install.js?v=1"></script>
 <script defer src="qrcode-generator.js?v=1"></script>
-<script defer src="feedback-owner.js?v=1"></script>
+<script defer src="staff-entry.js?v=1"></script>
+<script defer src="feedback-owner.js?v=2"></script>
 <meta name="theme-color" content="#101827">
 
 <link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg?v=2">
@@ -623,16 +624,35 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
   $('retryBoot').onclick=()=>boot();
   $('retryLogout').onclick=async()=>{await appSignOut();};
 }
-let loginFailures=0,loginBlockedUntil=0;
+let loginFailures=0,loginBlockedUntil=0,bootRequestId=0;
+const staffEntryId=new URLSearchParams(location.search).get('staff');
+async function loadStaffEntry(){
+ if(staffEntryId===null)return null;
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffEntryId))return {available:false};
+ const result=await safeRpc('dlv_feedback_config',{p_form:staffEntryId});
+ if(result.error)throw Error('تعذر التحقق من رابط الفرع');
+ return result.data||{available:false};
+}
+async function renderStaffEntryNotice(){
+ const node=$('staffEntryNotice');if(!node||staffEntryId===null)return;
+ node.textContent='جارٍ التحقق من رابط دخول الفرع…';
+ try{
+  const config=await loadStaffEntry();if(!node.isConnected)return;
+  if(!config?.available){node.textContent='رابط الفرع غير متاح حاليًا. تواصل مع إدارة الشركة.';return;}
+  const title=document.createElement('p');title.textContent='دخول موظفي '+config.company_name+' — '+config.branches.map(b=>b.name).join('، ');node.replaceChildren(title);
+  if(config.logo_url){const url=new URL(config.logo_url,location.href);if(url.protocol==='https:'||url.origin===location.origin){const logo=document.createElement('img');logo.src=url.href;logo.alt='شعار '+config.company_name;logo.style.cssText='width:76px;height:76px;object-fit:contain';logo.onerror=()=>logo.remove();node.prepend(logo);}}
+ }catch(_){if(node.isConnected)node.textContent='تعذر تحميل هوية الفرع؛ تحقق من اتصالك.';}
+}
 function loginView(err) {
   tenantBrandCache.clear();tenantBranchCompanyCache.clear();
   resetPlatformBrand();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
   $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><img src="yourstaff-icon.svg" width="104" height="104" alt="شعار Your Staff" decoding="async" style="display:block;width:104px;height:104px;object-fit:contain;margin:0 auto 12px;filter:drop-shadow(0 5px 15px #0007)"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
-    <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
+    <div id="staffEntryNotice" role="status" style="text-align:center"></div><div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
     <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#eac27b;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div><section aria-label="شركاؤنا" style="border-top:1px solid #a77d3e;margin-top:22px;padding-top:14px"><h2 style="text-align:center;color:#eac27b;font-size:15px">شركاؤنا</h2><div id="publicPartners" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;min-height:40px"></div></section></div>`;
+  void renderStaffEntryNotice();
   // Public opt-in showcase: no branch, user or private tenant data is queried.
   sb.from('dlv_public_partners').select('display_name,logo_url,display_order').eq('is_published',true).order('display_order').limit(20).then(({data,error})=>{
    const target=$('publicPartners');if(!target||error)return;
@@ -650,9 +670,11 @@ function loginView(err) {
     if(Date.now()<loginBlockedUntil){flash('انتظر قليلًا قبل إعادة محاولة تسجيل الدخول',false);return;}
     $('go').disabled = true;
     try {
-      const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
+      const email=$('em').value.trim(),password=$('pw').value;
+      if(!email||!password){loginView('أدخل البريد الإلكتروني وكلمة المرور');return;}
+      const {data:loginData,error} = await sb.auth.signInWithPassword({email, password});
       if (error) {loginFailures++;if(loginFailures>=5)loginBlockedUntil=Date.now()+60000;loginView(error.message?.toLowerCase().includes('fetch') ? 'تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى' : 'بيانات الدخول غير صحيحة'); return; }
-      loginFailures=0;loginBlockedUntil=0;await boot();
+      loginFailures=0;loginBlockedUntil=0;await boot(loginData?.user?.id);
     } catch (e) { reconnectView('تعذر إكمال تسجيل الدخول بسبب الاتصال. أعد المحاولة دون إعادة إدخال بياناتك إذا كانت الجلسة قد حُفظت.'); }
   };
 }
@@ -720,15 +742,28 @@ window.addEventListener('offline', () => {
   const app = $('app');
   if (app && me) flash('الاتصال انقطع — البيانات المعروضة قد لا تكون محدثة. سنعيد المزامنة عند عودة الإنترنت.', false);
 });
-async function boot() {
+async function boot(expectedUserId=null) {
+  const requestId=++bootRequestId,epoch=appSessionEpoch;
+  const stillCurrent=()=>requestId===bootRequestId&&epoch===appSessionEpoch;
+  let entry;
+  try{entry=await loadStaffEntry();}catch(_){return reconnectView('تعذر التحقق من رابط الفرع؛ أعد المحاولة.');}
+  if(!stillCurrent())return;
+  if(staffEntryId!==null&&!entry?.available)return loginView('رابط الفرع غير متاح حاليًا');
   let authResult;
   try { authResult = await sb.auth.getSession(); } catch (e) { return reconnectView(); }
+  if(!stillCurrent())return;
   if (authResult.error) return reconnectView();
   const session = authResult.data?.session;
   if (!session) return loginView();
+  let verified;
+  try{verified=await sb.auth.getUser();}catch(_){if(stillCurrent())return reconnectView();return;}
+  if(!stillCurrent())return;
+  if(verified.error||!verified.data?.user)return reconnectView('تعذر التحقق من جلسة الدخول؛ أعد المحاولة.');
+  if(verified.data.user.id!==session.user.id||(expectedUserId&&expectedUserId!==verified.data.user.id))return appSignOut('local','تغير حساب الجلسة أثناء الدخول؛ سجّل الدخول مجددًا');
   let profileResult;
   try { profileResult = await sb.from('dlv_profiles').select('*').eq('user_id', session.user.id).maybeSingle(); }
   catch (e) { return reconnectView(); }
+  if(!stillCurrent())return;
   const {data, error} = profileResult;
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { return appSignOut('local','الحساب غير مفعّل أو غير مربوط بموظف'); }
@@ -737,16 +772,18 @@ async function boot() {
   if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
   const branchResult=await safeRpc('dlv_my_branches');
+  if(!stillCurrent())return;
   if(branchResult.error)return reconnectView('تعذر التحقق من الفروع المصرح بها حاليًا. أعد المحاولة.');
   const permitted=[...new Set((branchResult.data||[]).map(b=>Number(b.id)).filter(x=>Number.isInteger(x)&&x>0))];
   branchNames={...branchNames,...Object.fromEntries((branchResult.data||[]).map(b=>[Number(b.id),b.name]))};
+  if(entry&&!ysStaffEntry.matchesBranches(entry,permitted))return appSignOut('local','هذا الحساب غير مصرح له بدخول الفرع الموجود في الكود');
   me.allowed_branch_ids=permitted;
   if (!permitted.length) return reconnectView('الشركة موقوفة مؤقتًا أو لا توجد فروع مصرح بها. تواصل مع إدارة المنصة.');
   // Prevent stale tenant branding from the previous session while loading this account.
   resetPlatformBrand();
   // New accounts open directly on their assigned home branch, regardless of any
   // previous user's branch selection. Other authorized branches remain switchable.
-  const homeBranch=Number(me.branch_id);
+  const homeBranch=Number(entry?.branch_id||me.branch_id);
   selectedBranch=permitted.includes(homeBranch)?homeBranch:permitted[0];
   try{await loadBrandConfig();subscribeBrandConfig();}catch(e){console.warn('تعذر تحميل مظهر الشركة، جاري فتح لوحة العمل بالتصميم الافتراضي:',e);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
@@ -756,6 +793,7 @@ async function boot() {
   } else {
     drivers = [];
   }
+  if(!stillCurrent())return;
   try {
     me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : (me.role==='complaints_officer'||me.workflow_role==='complaints_officer') ? complaintsOfficerView() : me.workflow_role==='custom_unassigned'?customStaffView():managerView();
   } catch(e) { console.error('Dashboard render failed:',e); return reconnectView('خطأ في واجهة الحساب ('+String(e?.name||'Error')+'): '+String(e?.message||'غير معروف').slice(0,130)); }
@@ -1015,7 +1053,13 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  </div>`;
  $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
  const companyQr=document.createElement('button');companyQr.type='button';companyQr.className='big';companyQr.textContent='إنشاء QR الشكاوى للشركة';companyQr.onclick=()=>openFeedbackQr(Number(companyId));$('ownerShowBranches').parentElement.append(companyQr);
- $('app').querySelectorAll('[data-rename-branch]').forEach(b=>{const q=document.createElement('button');q.type='button';q.textContent='إنشاء QR شكاوى الفرع';q.onclick=()=>openFeedbackQr(Number(companyId),Number(b.dataset.renameBranch));b.parentElement.after(q);});
+ $('app').querySelectorAll('[data-rename-branch]').forEach(b=>{
+  const actions=document.createElement('div');actions.className='row';
+  for(const [purpose,label] of [['complaints','إنشاء QR شكاوى الفرع'],['staff','إنشاء QR دخول الموظفين']]){
+   const q=document.createElement('button');q.type='button';q.textContent=label;q.onclick=()=>openFeedbackQr(Number(companyId),Number(b.dataset.renameBranch),purpose);actions.append(q);
+  }
+  b.parentElement.after(actions);
+ });
  $('app').querySelectorAll('[data-rename-branch]').forEach(button=>button.onclick=()=>{const branch=branches.find(b=>Number(b.id)===Number(button.dataset.renameBranch));if(branch)openOwnerBranchNameEditor(Number(companyId),branch);});
  $('app').querySelectorAll('[data-report-branch]').forEach(b=>b.onclick=()=>downloadBranchDailyReport(Number(b.dataset.reportBranch),$('ownerReportDay').value));
  $('ownerSetupStatus').onclick=async()=>{
@@ -3024,7 +3068,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     $('a_ok').disabled = true;
     const selectedAccountBranch=Number($('a_branch').value);
     const customTitle=$('a_custom_title').value.trim();
-    if($('a_j').value==='custom'&&(customTitle.length<2||customTitle.length>60||/[<>\\x00-\\x1f]/.test(customTitle)))return fail('اكتب اسم وظيفة من 2 إلى 60 حرفًا بدون رموز غير صالحة');
+    if($('a_j').value==='custom'&&(customTitle.length<2||customTitle.length>60||/[<>\x00-\x1f]/.test(customTitle)))return fail('اكتب اسم وظيفة من 2 إلى 60 حرفًا بدون رموز غير صالحة');
     const { data, error } = await safeRpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value==='custom'?'custom:'+customTitle:$('a_j').value, p_branch_id: selectedAccountBranch });
     if (error) return fail(error.message);
     const jobSel = $('a_j'), jobVal = jobSel.value, jobName = jobVal==='custom'?customTitle:jobSel.options[jobSel.selectedIndex].text; if (jobVal === 'driver') drivers.push({ user_id: data, full_name: name, employee_code: code });

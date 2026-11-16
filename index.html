@@ -2630,9 +2630,9 @@ async function loadAll() {
   $('kpi').innerHTML = [['إجمالي الطلبات', sum('total')], ['خرجت للتوصيل', sum('out_now')], ['تم توصيلها', sum('delivered')],
     ['متأخرة', sum('late')], ['تعذر توصيلها', sum('failed')], ['متوسط التوصيل (د)', avg]]
     .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
-  $('perf').innerHTML = `<table><tr><th>الدليفري</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
+  $('perf').innerHTML = `<table><tr><th>الطيار المسؤول</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
     (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
-  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الدليفري</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الطيار المسؤول</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
     ((o.data || []).map(x => {
       const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
       const cancel = (isOwner()||me.can_cancel_orders===true) && ['new','received','out'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';

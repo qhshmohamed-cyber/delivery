@@ -28,7 +28,7 @@ function setup(){
  const gps=setup(),orders=deferred(),locations=deferred();let reads=0;
  const chain=p=>({eq(){return this;},not(){return this;},in(){return this;},limit(){return p;}});
  gps.ctx.canViewManagerBoard=()=>true;gps.ctx.sb={from:()=>({select:()=>({})})};
- gps.ctx.branchQuery=()=>chain(++reads===1?orders.promise:locations.promise);
+ gps.ctx.branchQuery=()=>{reads++;return chain(orders.promise);};gps.ctx.safeRpc=()=>{reads++;return locations.promise;};
  vm.runInContext(source('loadDriverGpsHealth'),gps.ctx);
  const running=gps.ctx.loadDriverGpsHealth();orders.resolve({data:[{driver_id:'driver'}]});
  await new Promise(setImmediate);assert.equal(reads,2);

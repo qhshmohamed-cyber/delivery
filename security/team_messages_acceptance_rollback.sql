@@ -64,7 +64,7 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub',owner_id::text,true);PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_sid,'exp',extract(epoch FROM now()+interval '1 hour')::bigint)::text,true);
   BEGIN PERFORM public.dlv_team_members();RAISE EXCEPTION 'Locked owner used roster';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
   INSERT INTO public.dlv_owner_page_unlocks(user_id,session_id,expires_at) VALUES(owner_id,owner_sid::text,now()+interval '15 minutes');
-  IF NOT EXISTS(SELECT 1 FROM public.dlv_team_members() x WHERE x.user_id=driver_c) THEN RAISE EXCEPTION 'Owner missing other company';END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.dlv_team_members('QA employee') x WHERE x.user_id=driver_c) THEN RAISE EXCEPTION 'Owner missing other company';END IF;
   PERFORM public.dlv_team_send(driver_c,'QA owner notice',gen_random_uuid());
   INSERT INTO qa_team_results VALUES('owner lock enforced; unlocked owner spans companies; raw tables private',true);
   SELECT jsonb_agg(to_jsonb(r)) INTO summary FROM qa_team_results r;

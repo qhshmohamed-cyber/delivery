@@ -15,13 +15,15 @@ function updateLabel(){
  const current=root.querySelector('[data-nav-order="'+activeOrder+'"]');
  const card=current?.closest('.card');
  const orderText=card?.querySelector('.ord b')?.textContent?.trim();
- label.textContent=activeOrder&&orderText?'📍 العميل الجاري التوجه إليه: '+orderText+' — هذا العميل فقط يرى الموقع.':'📍 اختر «التوجه لهذا العميل» من الطلب الجاري توصيله. طلباتك الأخرى لا ترى موقعك.';
+ const message=activeOrder&&orderText?'📍 العميل الجاري التوجه إليه: '+orderText+' — هذا العميل فقط يرى الموقع.':'📍 اختر «التوجه لهذا العميل» من الطلب الجاري توصيله. طلباتك الأخرى لا ترى موقعك.';
+ if(label.textContent!==message)label.textContent=message;
  root.querySelectorAll('[data-nav-order]').forEach(b=>{
    const same=Number(b.dataset.navOrder)===activeOrder;
-   b.textContent=same?'⏹ إيقاف التوجه لهذا العميل':'📍 التوجه لهذا العميل';
-   b.className=same?'r':'g';
-   b.disabled=busy;
-   b.setAttribute('aria-pressed',String(same));
+   const text=same?'⏹ إيقاف التوجه لهذا العميل':'📍 التوجه لهذا العميل';
+   if(b.textContent!==text)b.textContent=text;
+   const cls=same?'r':'g';if(b.className!==cls)b.className=cls;
+   if(b.disabled!==busy)b.disabled=busy;
+   if(b.getAttribute('aria-pressed')!==String(same))b.setAttribute('aria-pressed',String(same));
  });
 }
 async function current(){

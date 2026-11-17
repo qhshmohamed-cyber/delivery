@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 function el(tag,text){const x=document.createElement(tag);if(text!==undefined)x.textContent=String(text);return x;}
-function isoDay(d){return d.toISOString().slice(0,10);}
+function isoDay(d){return new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);}
 function mount({root,supabase,branchId,ownerVerified}={}){
  if(!root||!supabase||!Number.isInteger(Number(branchId))||!ownerVerified)throw Error('Owner dashboard context required');
  const b=Number(branchId),wrap=el('section'),heading=el('h3','تقفيل اليوم وأرشيف التقارير'),date=el('input'),check=el('button','فحص اليوم'),close=el('button','قفل اليوم'),archive=el('button','عرض الأرشيف'),notice=el('p'),list=el('div');

@@ -1,0 +1,70 @@
+/* Your Staff Delivery — one customer tracking target per driver.
+   Only the backend decides which order may expose GPS coordinates.
+   Designed as a small additive script; do not replace the live index.html. */
+(()=>{
+'use strict';
+let activeOrder=null, view=null, busy=false, queued=false, pollBusy=false;
+function driver(){try{return typeof me!=='undefined' && me?.role==='driver';}catch(_){return false;}}
+function rpc(name,args){if(typeof safeRpc!=='function')return Promise.resolve({error:{message:'خدمة الاتصال غير متاحة'}});return safeRpc(name,args||{});}
+function notify(message,ok){if(typeof flash==='function')flash(message,!!ok);else {const e=document.getElementById('ysCurrentCustomer');if(e)e.textContent=message;}}
+function updateLabel(){
+ const root=document.getElementById('ol');
+ if(!root||!driver())return;
+ let label=document.getElementById('ysCurrentCustomer');
+ if(!label){label=document.createElement('p');label.id='ysCurrentCustomer';label.className='meta';label.style.padding='8px';root.before(label);}
+ const current=root.querySelector('[data-nav-order="'+activeOrder+'"]');
+ const card=current?.closest('.card');
+ const orderText=card?.querySelector('.ord b')?.textContent?.trim();
+ label.textContent=activeOrder&&orderText?'📍 العميل الجاري التوجه إليه: '+orderText+' — هذا العميل فقط يرى الموقع.':'📍 اختر «التوجه لهذا العميل» من الطلب الجاري توصيله. طلباتك الأخرى لا ترى موقعك.';
+ root.querySelectorAll('[data-nav-order]').forEach(b=>{
+   const same=Number(b.dataset.navOrder)===activeOrder;
+   b.textContent=same?'⏹ إيقاف التوجه لهذا العميل':'📍 التوجه لهذا العميل';
+   b.className=same?'r':'g';
+   b.disabled=busy;
+   b.setAttribute('aria-pressed',String(same));
+ });
+}
+async function current(){
+ if(!driver()||!document.getElementById('ol')||pollBusy)return;
+ pollBusy=true;const currentView=document.getElementById('ol');
+ try{const {data,error}=await rpc('dlv_current_customer_navigation');if(error)return;if(!currentView.isConnected||!driver())return;activeOrder=Number(data?.order_id)||null;updateLabel();}
+ catch(_){/* no GPS coordinates are ever made available by this UI */ }
+ finally{pollBusy=false;}
+}
+async function choose(id){
+ if(busy||!driver())return;
+ if(!navigator.onLine){notify('شغّل الإنترنت أولًا',false);return;}
+ busy=true;updateLabel();
+ const isCurrent=activeOrder===id,endpoint=isCurrent?'dlv_stop_customer_navigation':'dlv_begin_customer_navigation';
+ const args=isCurrent?{p_order_id:id}:{p_order_id:id};
+ try{
+   const {data,error}=await rpc(endpoint,args);
+   if(error||(!isCurrent&&data?.success!==true))throw Error(error?.message||'لم يتم تأكيد تغيير العميل');
+   activeOrder=isCurrent?null:id;
+   notify(isCurrent?'تم إيقاف مشاركة الموقع مع هذا العميل':'تم تحديد العميل الحالي؛ باقي العملاء لن يروا موقعك',true);
+ }catch(e){notify('تعذر تحديث وجهة الطيار: '+String(e?.message||e),false);}
+ finally{busy=false;updateLabel();}
+}
+function render(){
+ const root=document.getElementById('ol');
+ if(!root||!driver()){view=null;return;}
+ if(view!==root){view=root;activeOrder=null;void current();}
+ root.querySelectorAll('button[data-act="delivered"]').forEach(done=>{
+   const id=Number(done.dataset.id),actions=done.closest('.acts');
+   if(!Number.isSafeInteger(id)||id<=0||!actions||actions.querySelector('[data-nav-order="'+id+'"]'))return;
+   const button=document.createElement('button');
+   button.type='button';button.dataset.navOrder=String(id);
+   button.addEventListener('click',()=>void choose(id));
+   actions.prepend(button);
+ });
+ updateLabel();
+}
+function schedule(){if(queued)return;queued=true;setTimeout(()=>{queued=false;render();},100);}
+function boot(){
+ if(!document.body)return;
+ new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
+ schedule();
+ setInterval(()=>{if(document.visibilityState==='visible'&&driver()&&document.getElementById('ol'))void current();},12000);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();

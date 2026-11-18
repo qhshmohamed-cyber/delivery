@@ -15,6 +15,7 @@ for (const required of [
   'dlv_root_create_secondary_owner',
   'dlv_root_promote_secondary_owner',
   'dlv_root_toggle_secondary_owner',
+  'dlv_owner_operational_health',
   'isLocationManager',
   'reportOperationalDay'
 ]) assert(script.includes(required), 'Missing integration: ' + required);

@@ -16,6 +16,7 @@ for (const required of [
   'dlv_root_promote_secondary_owner',
   'dlv_root_toggle_secondary_owner',
   'dlv_owner_operational_health',
+  'dlv_driver_gps_diagnostic',
   'isLocationManager',
   'reportOperationalDay'
 ]) assert(script.includes(required), 'Missing integration: ' + required);
@@ -37,9 +38,10 @@ const sandbox = {
   navigator: {onLine: true}, console, Intl, Map, Set, Date, Number, String
 };
 vm.runInNewContext(script, sandbox, {timeout: 1500});
-assert.equal(listeners.filter(x => x.type === 'DOMContentLoaded').length, 2);
+assert.equal(listeners.filter(x => x.type === 'DOMContentLoaded').length, 3);
 assert.equal(window.__ysBrandPerformance20261118Loaded, true);
 assert.equal(window.__ysOwnerAccess20261119Loaded, true);
+assert.equal(window.__ysDriverGPSPersonalDiag20261119, true);
 vm.runInNewContext(script, sandbox, {timeout: 1500});
-assert.equal(listeners.filter(x => x.type === 'DOMContentLoaded').length, 2, 'Must initialize at most once');
+assert.equal(listeners.filter(x => x.type === 'DOMContentLoaded').length, 3, 'Must initialize at most once');
 console.log('PASS: syntax, small size, expected RPCs, guards, duplicate-load safety');

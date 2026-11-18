@@ -62,7 +62,7 @@ async function run(){
   await callbacks[1]({timestamp:Date.now(),coords:{latitude:30,longitude:31,accuracy:10}});assert.equal(calls.length,0);
  });
  await test('role change dismisses previous privileged dialogs and cached orders',async()=>{
-  let cleared=0,booted=0;const ctx={profileSyncBusy:false,profileSyncFingerprint:'old',appSessionEpoch:0,me:{user_id:'fixture-user',role:'manager'},ORD:{1:{id:1}},
+  let cleared=0,booted=0;const ctx={teamTools:{stop(){}},profileSyncBusy:false,profileSyncFingerprint:'old',appSessionEpoch:0,me:{user_id:'fixture-user',role:'manager'},ORD:{1:{id:1}},
    document:{visibilityState:'visible'},console,profileSignature:()=> 'new',clearPrivateSessionDialogs:()=>{cleared++;},boot:async()=>{booted++;},
    sb:{from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{user_id:'fixture-user'},error:null})})})})}};
   vm.createContext(ctx);vm.runInContext(extract('checkProfileUpdates'),ctx);await ctx.checkProfileUpdates();
@@ -91,7 +91,7 @@ async function run(){
  await test('confirmed suspension denial clears stale screen while transport errors retain it',async()=>{
   for(const code of ['42501','NETWORK']){
    let cleared=0;const elements={app:{innerHTML:'previous data'},suspendedRetry:{},suspendedOut:{}};
-   const ctx={profileSyncBusy:false,profileSyncFingerprint:'same',appSessionEpoch:0,me:{user_id:'fixture-user',role:'manager'},ORD:{1:{}},
+   const ctx={teamTools:{stop(){}},profileSyncBusy:false,profileSyncFingerprint:'same',appSessionEpoch:0,me:{user_id:'fixture-user',role:'manager'},ORD:{1:{}},
     document:{visibilityState:'visible',body:{classList:{add(){}}}},console,profileSignature:()=> 'same',isOwner:()=>false,
     clearPrivateSessionDialogs:()=>{cleared++;},stopProfileSync(){},resetPlatformBrand(){},$:id=>elements[id],
     safeRpc:async()=>({data:null,error:{code}}),sb:{from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{},error:null})})})})}};

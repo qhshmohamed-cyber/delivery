@@ -12,7 +12,10 @@
 <link rel="apple-touch-icon" href="yourstaff-app-192.png">
 <script defer src="web-install.js?v=1"></script>
 <script defer src="qrcode-generator.js?v=1"></script>
-<script defer src="feedback-owner.js?v=1"></script>
+<script defer src="staff-entry.js?v=1"></script>
+<script defer src="team-tools.js?v=1"></script>
+<script src="gps-quality.js?v=1"></script>
+<script defer src="feedback-owner.js?v=2"></script>
 <meta name="theme-color" content="#101827">
 
 <link rel="icon" type="image/svg+xml" href="yourstaff-icon.svg?v=2">
@@ -328,6 +331,12 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const nativeBackground=createNativeBackground(window.Capacitor);
 const sb = supabase.createClient(SB_URL, SB_KEY,{auth:{persistSession:true,autoRefreshToken:!nativeBackground.available,...(nativeBackground.available?{storage:nativeBackground.storage}:{})}});
 const sessionActions = createSessionActions(sb.auth);
+let teamTools=null;
+function startTeamTools(){
+ if(!me||!window.createTeamTools)return;
+ if(!teamTools)teamTools=window.createTeamTools({rpc:(name,args)=>safeRpc(name,args),identity:()=>me?.user_id||null,epoch:()=>appSessionEpoch,canManage:()=>canViewManagerBoard(),error:message=>flash(message,false)});
+ teamTools.start();
+}
 let appLogoutBusy=false,appSessionEpoch=0;
 function clearPrivateSessionDialogs(){
  document.querySelectorAll('.modal,#ownerAssistantOverlay').forEach(dialog=>{
@@ -499,12 +508,12 @@ async function checkProfileUpdates(){
   if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
   if(error){console.warn('Profile refresh failed:',error.message);return;}
   const sig=profileSignature(data);
-  if(sig!==profileSyncFingerprint){appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);if(me.role==='driver')await stopShare(false);profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
+  if(sig!==profileSyncFingerprint){teamTools?.stop();appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);if(me.role==='driver')await stopShare(false);profileSyncFingerprint=sig;selectedBranch=null;await boot();return;}
   if(!isOwner()){
    const {data:allowed,error:accessError}=await safeRpc('dlv_my_branches');
    if(epoch!==appSessionEpoch||!me||me.user_id!==userId)return;
    if(accessError?.code==='42501'||(!accessError && !(allowed||[]).length)){
-    appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);
+    teamTools?.stop();appSessionEpoch++;clearPrivateSessionDialogs();Object.keys(ORD).forEach(k=>delete ORD[k]);
     if(me.role==='driver')await stopShare(false);
     stopProfileSync();selectedBranch=null;
     resetPlatformBrand();document.body.classList.add('ys-platform');
@@ -520,11 +529,12 @@ function startProfileSync(){
  if(!me)return;
  profileSyncFingerprint=profileSignature(me);
  if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
- profileSyncChannel=sb.channel('profile:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).subscribe();
+ profileSyncChannel=sb.channel('profile:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).on('broadcast',{event:'staff_message'},()=>{void teamTools?.refreshInbox();}).subscribe();
  if(profileSyncTimer)clearInterval(profileSyncTimer);
  profileSyncTimer=setInterval(()=>{void checkProfileUpdates()},30000);
 }
 function stopProfileSync(){
+ teamTools?.stop();
  if(profileSyncTimer){clearInterval(profileSyncTimer);profileSyncTimer=null;}
  if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
  profileSyncFingerprint='';
@@ -623,16 +633,35 @@ function reconnectView(message='الاتصال بالخادم غير متاح ح
   $('retryBoot').onclick=()=>boot();
   $('retryLogout').onclick=async()=>{await appSignOut();};
 }
-let loginFailures=0,loginBlockedUntil=0;
+let loginFailures=0,loginBlockedUntil=0,bootRequestId=0;
+const staffEntryId=new URLSearchParams(location.search).get('staff');
+async function loadStaffEntry(){
+ if(staffEntryId===null)return null;
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffEntryId))return {available:false};
+ const result=await safeRpc('dlv_feedback_config',{p_form:staffEntryId});
+ if(result.error)throw Error('تعذر التحقق من رابط الفرع');
+ return result.data||{available:false};
+}
+async function renderStaffEntryNotice(){
+ const node=$('staffEntryNotice');if(!node||staffEntryId===null)return;
+ node.textContent='جارٍ التحقق من رابط دخول الفرع…';
+ try{
+  const config=await loadStaffEntry();if(!node.isConnected)return;
+  if(!config?.available){node.textContent='رابط الفرع غير متاح حاليًا. تواصل مع إدارة الشركة.';return;}
+  const title=document.createElement('p');title.textContent='دخول موظفي '+config.company_name+' — '+config.branches.map(b=>b.name).join('، ');node.replaceChildren(title);
+  if(config.logo_url){const url=new URL(config.logo_url,location.href);if(url.protocol==='https:'||url.origin===location.origin){const logo=document.createElement('img');logo.src=url.href;logo.alt='شعار '+config.company_name;logo.style.cssText='width:76px;height:76px;object-fit:contain';logo.onerror=()=>logo.remove();node.prepend(logo);}}
+ }catch(_){if(node.isConnected)node.textContent='تعذر تحميل هوية الفرع؛ تحقق من اتصالك.';}
+}
 function loginView(err) {
   tenantBrandCache.clear();tenantBranchCompanyCache.clear();
   resetPlatformBrand();
   document.documentElement.classList.add('ys-public'); document.body.classList.add('ys-platform'); document.title='Your Staff — تسجيل الدخول';
   $('app').innerHTML = `<div class="card" style="max-width:380px;margin:40px auto"><div style="text-align:center;margin:12px 0 22px"><img src="yourstaff-icon.svg" width="104" height="104" alt="شعار Your Staff" decoding="async" style="display:block;width:104px;height:104px;object-fit:contain;margin:0 auto 12px;filter:drop-shadow(0 5px 15px #0007)"><div style="font-size:clamp(35px,9vw,48px);font-weight:900;color:#eac27b;text-shadow:0 3px 24px #c69a5055">Your Staff</div><div style="font-size:11px;letter-spacing:2px;color:#bba783;margin-top:4px">RESTAURANT DELIVERY MANAGEMENT</div><div style="height:1px;background:linear-gradient(90deg,transparent,#ad8246,transparent);margin:22px 0 14px"></div><div style="font-size:12px;color:#d4c3a5;margin-bottom:9px">منصة إدارة الشركات والفروع</div></div><h1 style="font-size:18px;text-align:center">تسجيل الدخول</h1>
-    <div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
+    <div id="staffEntryNotice" role="status" style="text-align:center"></div><div class="msg e ${err ? '' : 'hide'}">${esc(err)}</div>
     <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username">
     <label style="margin-top:8px;display:block">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password">
     <button class="p big" id="go" style="margin-top:14px">دخول</button><div style="text-align:center;margin-top:16px"><a href="?t=" style="color:#eac27b;font-weight:700">أنا عميل — عايز أتابع طلبي</a></div><section aria-label="شركاؤنا" style="border-top:1px solid #a77d3e;margin-top:22px;padding-top:14px"><h2 style="text-align:center;color:#eac27b;font-size:15px">شركاؤنا</h2><div id="publicPartners" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;min-height:40px"></div></section></div>`;
+  void renderStaffEntryNotice();
   // Public opt-in showcase: no branch, user or private tenant data is queried.
   sb.from('dlv_public_partners').select('display_name,logo_url,display_order').eq('is_published',true).order('display_order').limit(20).then(({data,error})=>{
    const target=$('publicPartners');if(!target||error)return;
@@ -650,9 +679,11 @@ function loginView(err) {
     if(Date.now()<loginBlockedUntil){flash('انتظر قليلًا قبل إعادة محاولة تسجيل الدخول',false);return;}
     $('go').disabled = true;
     try {
-      const {error} = await sb.auth.signInWithPassword({email: $('em').value.trim(), password: $('pw').value});
+      const email=$('em').value.trim(),password=$('pw').value;
+      if(!email||!password){loginView('أدخل البريد الإلكتروني وكلمة المرور');return;}
+      const {data:loginData,error} = await sb.auth.signInWithPassword({email, password});
       if (error) {loginFailures++;if(loginFailures>=5)loginBlockedUntil=Date.now()+60000;loginView(error.message?.toLowerCase().includes('fetch') ? 'تعذر الاتصال. تحقق من الإنترنت وحاول مرة أخرى' : 'بيانات الدخول غير صحيحة'); return; }
-      loginFailures=0;loginBlockedUntil=0;await boot();
+      loginFailures=0;loginBlockedUntil=0;await boot(loginData?.user?.id);
     } catch (e) { reconnectView('تعذر إكمال تسجيل الدخول بسبب الاتصال. أعد المحاولة دون إعادة إدخال بياناتك إذا كانت الجلسة قد حُفظت.'); }
   };
 }
@@ -721,15 +752,29 @@ window.addEventListener('offline', () => {
   const app = $('app');
   if (app && me) flash('الاتصال انقطع — البيانات المعروضة قد لا تكون محدثة. سنعيد المزامنة عند عودة الإنترنت.', false);
 });
-async function boot() {
+async function boot(expectedUserId=null) {
+  teamTools?.stop();
+  const requestId=++bootRequestId,epoch=appSessionEpoch;
+  const stillCurrent=()=>requestId===bootRequestId&&epoch===appSessionEpoch;
+  let entry;
+  try{entry=await loadStaffEntry();}catch(_){return reconnectView('تعذر التحقق من رابط الفرع؛ أعد المحاولة.');}
+  if(!stillCurrent())return;
+  if(staffEntryId!==null&&!entry?.available)return loginView('رابط الفرع غير متاح حاليًا');
   let authResult;
   try { authResult = await sb.auth.getSession(); } catch (e) { return reconnectView(); }
+  if(!stillCurrent())return;
   if (authResult.error) return reconnectView();
   const session = authResult.data?.session;
   if (!session) return loginView();
+  let verified;
+  try{verified=await sb.auth.getUser();}catch(_){if(stillCurrent())return reconnectView();return;}
+  if(!stillCurrent())return;
+  if(verified.error||!verified.data?.user)return reconnectView('تعذر التحقق من جلسة الدخول؛ أعد المحاولة.');
+  if(verified.data.user.id!==session.user.id||(expectedUserId&&expectedUserId!==verified.data.user.id))return appSignOut('local','تغير حساب الجلسة أثناء الدخول؛ سجّل الدخول مجددًا');
   let profileResult;
   try { profileResult = await sb.from('dlv_profiles').select('*').eq('user_id', session.user.id).maybeSingle(); }
   catch (e) { return reconnectView(); }
+  if(!stillCurrent())return;
   const {data, error} = profileResult;
   if (error) return reconnectView('تعذر التحقق من صلاحيات الحساب بسبب الاتصال. لم يتم تسجيل خروجك.');
   if (!data || !data.active) { return appSignOut('local','الحساب غير مفعّل أو غير مربوط بموظف'); }
@@ -738,16 +783,18 @@ async function boot() {
   if (isOwner()) { resetPlatformBrand(); document.body.classList.add('ys-platform'); document.title='Your Staff — إدارة الشركات'; if(!(await ownerPageGate()))return; await ownerCompanyPicker(); return; }
   document.documentElement.classList.remove('ys-public'); document.body.classList.remove('ys-platform');
   const branchResult=await safeRpc('dlv_my_branches');
+  if(!stillCurrent())return;
   if(branchResult.error)return reconnectView('تعذر التحقق من الفروع المصرح بها حاليًا. أعد المحاولة.');
   const permitted=[...new Set((branchResult.data||[]).map(b=>Number(b.id)).filter(x=>Number.isInteger(x)&&x>0))];
   branchNames={...branchNames,...Object.fromEntries((branchResult.data||[]).map(b=>[Number(b.id),b.name]))};
+  if(entry&&!ysStaffEntry.matchesBranches(entry,permitted))return appSignOut('local','هذا الحساب غير مصرح له بدخول الفرع الموجود في الكود');
   me.allowed_branch_ids=permitted;
   if (!permitted.length) return reconnectView('الشركة موقوفة مؤقتًا أو لا توجد فروع مصرح بها. تواصل مع إدارة المنصة.');
   // Prevent stale tenant branding from the previous session while loading this account.
   resetPlatformBrand();
   // New accounts open directly on their assigned home branch, regardless of any
   // previous user's branch selection. Other authorized branches remain switchable.
-  const homeBranch=Number(me.branch_id);
+  const homeBranch=Number(entry?.branch_id||me.branch_id);
   selectedBranch=permitted.includes(homeBranch)?homeBranch:permitted[0];
   try{await loadBrandConfig();subscribeBrandConfig();}catch(e){console.warn('تعذر تحميل مظهر الشركة، جاري فتح لوحة العمل بالتصميم الافتراضي:',e);resetPlatformBrand();flash('تعذر تحميل مظهر الشركة مؤقتًا؛ يمكنك متابعة العمل.',false);}
   if (['supervisor','manager','admin'].includes(me.workflow_role || me.role)) {
@@ -757,6 +804,7 @@ async function boot() {
   } else {
     drivers = [];
   }
+  if(!stillCurrent())return;
   try {
     me.role === 'driver' ? driverView() : me.workflow_role === 'kitchen' ? kitchenView() : me.workflow_role === 'callcenter_followup' ? callcenterView() : (me.role==='complaints_officer'||me.workflow_role==='complaints_officer') ? complaintsOfficerView() : me.workflow_role==='custom_unassigned'?customStaffView():managerView();
   } catch(e) { console.error('Dashboard render failed:',e); return reconnectView('خطأ في واجهة الحساب ('+String(e?.name||'Error')+'): '+String(e?.message||'غير معروف').slice(0,130)); }
@@ -890,6 +938,7 @@ function ownerBillingSettings(){
  });
 }
 async function ownerCompanyPicker(){
+ startTeamTools();
  resetPlatformBrand();ownerActiveCompanyId=null;
  document.body.classList.add('ys-platform'); document.title='Your Staff — الشركات';
  const [{data,error},brandResult]=await Promise.all([safeRpc('dlv_owner_list_companies'),sb.from('dlv_company_branding').select('*')]);
@@ -1016,7 +1065,13 @@ async function ownerBranchPicker(companyId=ownerActiveCompanyId){
  </div>`;
  $('ownerShowBranches').onclick=()=>{const p=$('ownerBranchPanel');p.hidden=!p.hidden;};
  const companyQr=document.createElement('button');companyQr.type='button';companyQr.className='big';companyQr.textContent='إنشاء QR الشكاوى للشركة';companyQr.onclick=()=>openFeedbackQr(Number(companyId));$('ownerShowBranches').parentElement.append(companyQr);
- $('app').querySelectorAll('[data-rename-branch]').forEach(b=>{const q=document.createElement('button');q.type='button';q.textContent='إنشاء QR شكاوى الفرع';q.onclick=()=>openFeedbackQr(Number(companyId),Number(b.dataset.renameBranch));b.parentElement.after(q);});
+ $('app').querySelectorAll('[data-rename-branch]').forEach(b=>{
+  const actions=document.createElement('div');actions.className='row';
+  for(const [purpose,label] of [['complaints','إنشاء QR شكاوى الفرع'],['staff','إنشاء QR دخول الموظفين']]){
+   const q=document.createElement('button');q.type='button';q.textContent=label;q.onclick=()=>openFeedbackQr(Number(companyId),Number(b.dataset.renameBranch),purpose);actions.append(q);
+  }
+  b.parentElement.after(actions);
+ });
  $('app').querySelectorAll('[data-rename-branch]').forEach(button=>button.onclick=()=>{const branch=branches.find(b=>Number(b.id)===Number(button.dataset.renameBranch));if(branch)openOwnerBranchNameEditor(Number(companyId),branch);});
  $('app').querySelectorAll('[data-report-branch]').forEach(b=>b.onclick=()=>downloadBranchDailyReport(Number(b.dataset.reportBranch),$('ownerReportDay').value));
  $('ownerSetupStatus').onclick=async()=>{
@@ -1228,7 +1283,7 @@ function startKitchenDelayMonitor() {
   delayTimer = setInterval(runKitchenDelayCheck, 60000);
 }
 
-function bindOut() { document.body.dataset.ysView=me?.workflow_role||me?.role||'staff';void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); };if(isOwner()&&!$('appearanceSettingsButton')){const button=document.createElement('button');button.id='appearanceSettingsButton';button.textContent='🎨 الخط والألوان';button.onclick=openCompanyAppearance;document.querySelector('.ys-header-actions')?.appendChild(button);} }
+function bindOut() { startTeamTools();document.body.dataset.ysView=me?.workflow_role||me?.role||'staff';void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); };if(isOwner()&&!$('appearanceSettingsButton')){const button=document.createElement('button');button.id='appearanceSettingsButton';button.textContent='🎨 الخط والألوان';button.onclick=openCompanyAppearance;document.querySelector('.ys-header-actions')?.appendChild(button);} }
 
 async function openCompanyAppearance(){
  if(!OWNER_ONLY())return;
@@ -2535,11 +2590,11 @@ async function loadDriverGpsHealth(){
  if(error){box.textContent='تعذر فحص حالة التتبع';return;}
  const ids=[...new Set((activeOrders||[]).map(x=>x.driver_id).filter(Boolean))];
  if(!ids.length){box.textContent='لا توجد طلبات خرجت للتوصيل حاليًا.';return;}
- const {data:locations,error:locError}=await branchQuery(sb.from('dlv_locations').select('driver_id,updated_at')).in('driver_id',ids).limit(200);if(!stillCurrent())return;
+ const {data:locations,error:locError}=await safeRpc('dlv_map_locations',{p_branch:Number(selectedBranch)});if(!stillCurrent())return;
  if(locError){box.textContent='تعذر فحص آخر تحديث للمواقع';return;}
- const last=new Map((locations||[]).map(x=>[x.driver_id,Date.parse(x.updated_at)]));
- const stale=ids.filter(id=>!last.has(id)||!Number.isFinite(last.get(id))||Date.now()-last.get(id)>5*60000);
- box.innerHTML='<div class="meta">الطيارون لديهم طلبات خرجت للتوصيل: '+ids.length+' · تحديث GPS متأخر أكثر من 5 دقائق: '+stale.length+'</div>'+(stale.length?'<div class="msg e">⚠️ '+stale.length+' طيار بدون تحديث موقع حديث. راجع الاتصال وفتح صفحة الطيار؛ الموقع القديم ليس موقعًا مباشرًا.</div>':'<div class="msg o">✓ مواقع الطيارين المكلفين بالتوصيل محدثة خلال آخر 5 دقائق.</div>');
+ const last=new Map((locations||[]).map(x=>[x.driver_id,ysGps.snapshot(x)]));
+ const stale=ids.filter(id=>!last.has(id)||!ysGps.state(last.get(id)).live);
+ box.innerHTML='<div class="meta">الطيارون لديهم طلبات خرجت للتوصيل: '+ids.length+' · تحديث GPS متأخر أكثر من دقيقة: '+stale.length+'</div>'+(stale.length?'<div class="msg e">⚠️ '+stale.length+' طيار بدون تحديث موقع حديث. راجع الاتصال وفتح صفحة الطيار؛ الموقع القديم ليس موقعًا مباشرًا.</div>':'<div class="msg o">✓ مواقع الطيارين المكلفين بالتوصيل محدثة خلال آخر دقيقة.</div>');
 }
 async function loadManagerOpsPending() {
  const stillCurrent=captureOperationalRead('loadManagerOpsPending','managerOpsPending');if(!stillCurrent())return;
@@ -2663,11 +2718,12 @@ async function sendDriverPosition(p, force = false, generation=locationGeneratio
   if (!Number.isFinite(p?.coords?.latitude) || Math.abs(p.coords.latitude)>90 || !Number.isFinite(p?.coords?.longitude) || Math.abs(p.coords.longitude)>180 || !Number.isFinite(p?.coords?.accuracy) || p.coords.accuracy<0 || p.coords.accuracy > 150) {const st=$('locst');if(st)st.textContent='⚠ دقة GPS ضعيفة؛ انتظر إشارة أفضل';return;}
   locationBusy = true;
   try {
-    const { error } = await safeRpc('dlv_update_location', {
-      p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy
+    const { data:locationResult,error } = await safeRpc('dlv_update_location_v2', {
+      p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_acc: p.coords.accuracy,p_recorded_at:new Date(p.timestamp).toISOString()
     });
     if(generation!==locationGeneration||!shareWanted)return;
     const s = $('locst');
+    if(!error&&locationResult?.accepted===false){if(s)s.textContent=locationResult.reason==='throttled'?'⏳ الموقع السابق حديث؛ انتظار قراءة جديدة':'⚠ تم تجاهل قراءة GPS قديمة أو قفزة غير موثوقة؛ انتظار قراءة أدق';return;}
     if (s) s.textContent = error
       ? '⚠ تعذر إرسال الموقع: ' + error.message
       : '🟢 مشاركة الموقع نشطة — آخر إرسال ' + tm(new Date());
@@ -2834,8 +2890,9 @@ function bikeBearing(a, b) {
 }
 // Animate only between real GPS samples; never invent additional location readings.
 const riderAnimations = new WeakMap();
+function cancelRiderAnimation(marker){const pending=riderAnimations.get(marker);if(pending)cancelAnimationFrame(pending);riderAnimations.delete(marker);}
 function animateRiderMarker(marker, lat, lng, duration=2500) {
-  if (!marker || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+  if (!marker || !ysGps.validPoint({lat,lng})) return;
   const target = L.latLng(Number(lat), Number(lng));
   const prior = riderAnimations.get(marker);
   if (prior) cancelAnimationFrame(prior);
@@ -2850,7 +2907,7 @@ function animateRiderMarker(marker, lat, lng, duration=2500) {
     if (!marker._map || document.visibilityState !== 'visible') {
       marker.setLatLng(target); riderAnimations.delete(marker); return;
     }
-    const p = Math.min(1,(now-startAt)/duration), k=ease(p);
+    const p = duration>0?Math.max(0,Math.min(1,(now-startAt)/duration)):1, k=ease(p);
     marker.setLatLng([start.lat+(target.lat-start.lat)*k,start.lng+(target.lng-start.lng)*k]);
     if (p<1) riderAnimations.set(marker,requestAnimationFrame(step));
     else riderAnimations.delete(marker);
@@ -2869,13 +2926,15 @@ function bikeIcon(bearing=0, live=true, size=90) {
   return L.divIcon({className:'ys-bike-marker ys-motorcycle-marker',html,iconSize:[width,height],iconAnchor:[Math.round(width/2),Math.round(height/2)],popupAnchor:[0,-Math.round(height/2)]});
 }
 /* ---------- خريطة الطيارين (المدير) ---------- */
-let map, markers = {}, mapTimer;
 function openMap() {
+  let map,markers={},mapTimer,expiryTimer;
+  const scopeUser=me?.user_id,scopeEpoch=appSessionEpoch,scopeBranch=selectedBranch;
   if(!selectedBranch || !me || !(isOwner() || isLocationManager() || me.workflow_role==='supervisor')) return flash('اختار فرعًا مصرحًا به لعرض مواقع طياريه.',false);
-  const d = document.createElement('div');
+  const d = document.createElement('div');d.className='modal';let closed=false;
   d.style.cssText = 'position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)';
   d.innerHTML = '<div class="ys-map-head"><div class="row"><div style="flex:1"><b style="font-size:16px">خريطة أسطول '+esc(brandConfig?.brand_name||'الشركة')+'</b><div class="meta">متابعة مواقع الطيارين لحظيًا</div></div><span id="mcount" class="meta">0 طيار</span><button id="mclose" style="background:#f2dfb7;color:#551412;border:1px solid #d5b36c">إغلاق</button></div></div><div class="ys-map-shell" style="padding:9px 12px"><select id="msel" style="width:100%;border:1px solid #d8c59c;border-radius:10px;background:#fffdf8;padding:10px"><option value="">كل الطيارين</option>' + drivers.map(x => '<option value="' + x.user_id + '">' + esc(x.full_name) + '</option>').join('') + '</select></div><div id="lmap" style="flex:1;min-height:240px"></div><div class="ys-map-legend"><span><i class="ys-map-dot" style="background:#27ae60"></i> متصل الآن</span><span><i class="ys-map-dot" style="background:#9aa0a6"></i> آخر ظهور</span></div>';
   document.body.appendChild(d);
+  const mapNode=$('lmap');const current=()=>!closed&&d.isConnected&&me?.user_id===scopeUser&&appSessionEpoch===scopeEpoch&&selectedBranch===scopeBranch&&$('lmap')===mapNode;
   if(typeof L==='undefined'){ $('lmap').textContent='تعذر تحميل خدمة الخرائط. تحقق من الاتصال ثم افتح الخريطة مجددًا.'; $('mclose').onclick=()=>d.remove(); return; }
   map = L.map('lmap').setView([30.0444, 31.2357], 12);
   const streetTiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
@@ -2887,40 +2946,38 @@ function openMap() {
   layerSelect.style.cssText='border:1px solid #d8c59c;border-radius:10px;background:#fffdf8;color:#49301e;padding:10px;font-weight:700;min-width:125px';
   layerSelect.innerHTML='<option value="satellite">🛰️ قمر صناعي</option><option value="streets">🗺️ شوارع</option>';
   $('msel').parentElement.appendChild(layerSelect);
-  layerSelect.onchange=()=>{map.removeLayer(activeTiles);activeTiles=layerSelect.value==='streets'?streetTiles:satelliteTiles;activeTiles.addTo(map)};
-  satelliteTiles.on('tileerror',()=>{if(activeTiles!==satelliteTiles)return;map.removeLayer(satelliteTiles);activeTiles=streetTiles;streetTiles.addTo(map);layerSelect.value='streets';const c=$('mcount');if(c)c.textContent='تعذر تحميل القمر الصناعي؛ تم عرض الشوارع'});
-  markers = {}; const accuracyCircles = {}, prevPos = {}, lastHeading = {}; let fitted = false, mapBusy = false;
+  layerSelect.onchange=()=>{if(!current())return;map.removeLayer(activeTiles);activeTiles=layerSelect.value==='streets'?streetTiles:satelliteTiles;activeTiles.addTo(map)};
+  satelliteTiles.on('tileerror',()=>{if(!current()||activeTiles!==satelliteTiles)return;map.removeLayer(satelliteTiles);activeTiles=streetTiles;streetTiles.addTo(map);layerSelect.value='streets';const c=$('mcount');if(c)c.textContent='تعذر تحميل القمر الصناعي؛ تم عرض الشوارع'});
+  markers = {}; const accuracyCircles = {}, prevPos = {}, lastHeading = {}, lastLive = {}; let fitted = false, mapBusy = false;
   async function refresh() {
-    if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine || !document.getElementById('lmap')) return;
+    if(!current())return;
+    if (mapBusy || document.visibilityState !== 'visible' || !navigator.onLine) return;
     mapBusy = true;
-    let l, o;
+    let l, o;const requestStarted=ysGps.nowMono();
     try { [l, o] = await Promise.all([
-      sb.from('dlv_locations').select('driver_id,branch_id,lat,lng,accuracy,updated_at').eq('branch_id',selectedBranch).limit(500),
-      branchQuery(sb.from('dlv_orders').select('driver_id,order_no,status')).in('status', ['received', 'out']).limit(500)]); }
+      safeRpc('dlv_map_locations',{p_branch:Number(scopeBranch)}),
+      sb.from('dlv_orders').select('driver_id,order_no,status').eq('branch_id',scopeBranch).in('status', ['received', 'out']).limit(500)]); }
     catch(e) { mapBusy = false; return; }
     mapBusy = false;
-    if (l.error || !document.getElementById('lmap')) {const n=$('mcount');if(n&&l.error)n.textContent='⚠ تعذر تحديث المواقع';return;}
+    if(!current())return;
+    if (l.error) {const n=$('mcount');if(n&&l.error)n.textContent='⚠ تعذر تحديث المواقع';return;}
     const name = Object.fromEntries(drivers.map(x => [x.user_id, x.full_name]));
     const ord = {}; (o.data || []).forEach(x => { (ord[x.driver_id] = ord[x.driver_id] || []).push('#' + x.order_no + (x.status === 'out' ? ' 🛵' : '')); });
     const seen = new Set();
     const only = $('msel').value;
     const authorizedDrivers=new Set(drivers.map(x=>x.user_id));
-    const validLocations=(l.data||[]).filter(r=>authorizedDrivers.has(r.driver_id)&&r.lat!=null&&r.lng!=null&&r.lat!==''&&r.lng!==''&&Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lng))&&Math.abs(Number(r.lat))<=90&&Math.abs(Number(r.lng))<=180);
+    const validLocations=(l.data||[]).filter(r=>authorizedDrivers.has(r.driver_id)&&Number(r.branch_id)===Number(scopeBranch)).map(r=>ysGps.snapshot(r,Date.now(),ysGps.nowMono(),ysGps.nowMono()-requestStarted)).filter(r=>ysGps.state(r).valid);
     validLocations.filter(r => !only || r.driver_id === only).forEach(r => {
       seen.add(r.driver_id);
-      const ageMs=Date.now()-new Date(r.updated_at).getTime();
-      const live = ageMs>=0&&ageMs<30000, nm = name[r.driver_id] || 'طيار';
+      const move=ysGps.motion(prevPos[r.driver_id],r);if(!move.accept)return;
+      const state=ysGps.state(r),ageMs=state.ageMs;
+      const live = state.live, nm = name[r.driver_id] || 'طيار';
       const roadInfo='';
       const html = '<div style="min-width:165px;direction:rtl;text-align:right"><div style="font-weight:900;color:#741b18;font-size:14px">🛵 ' + esc(nm) + '</div><div style="font-size:12px;color:' + (live?'#218838':'#777') + ';font-weight:700">' + (live ? '● قراءة GPS حديثة — ' + Math.max(0,Math.round(ageMs/1000)) + ' ثانية' : '⚠ آخر قراءة GPS قديمة — ' + tm(r.updated_at)) + '</div><div style="height:1px;background:#ead9b7;margin:6px 0"></div><div style="font-size:12px;color:#49301e">الطلبات الحالية: ' + esc((ord[r.driver_id] || ['لا توجد طلبات نشطة']).join(' · ')) + '</div><div style="font-size:10px;color:#8a7459;margin-top:4px">آخر تحديث للموقع: ' + tm(r.updated_at) + '</div></div>';
-      const oldPos = prevPos[r.driver_id];
-      const displacement=oldPos ? L.latLng(oldPos).distanceTo(L.latLng(r.lat,r.lng)) : 0;
-      const gpsAccuracy=Number(r.accuracy);
-      // Avoid rotating the rider on GPS jitter, inaccurate fixes or stale positions.
-      const reliableFix=live && Number.isFinite(gpsAccuracy) && gpsAccuracy>0 && gpsAccuracy<=40;
-      const moved=!!oldPos && reliableFix && displacement>Math.max(12,gpsAccuracy*1.5);
-      if (moved) lastHeading[r.driver_id] = bikeBearing(oldPos, {lat:r.lat,lng:r.lng});
-      const bearing = lastHeading[r.driver_id] ?? 0;
-      prevPos[r.driver_id] = {lat:r.lat,lng:r.lng};
+      const oldPos = prevPos[r.driver_id],gpsAccuracy=r.accuracy;
+      if(move.rotate)lastHeading[r.driver_id]=bikeBearing(oldPos,r);
+      const bearing=lastHeading[r.driver_id]??0;
+      prevPos[r.driver_id]=r;lastLive[r.driver_id]=live;
       const ic = bikeIcon(bearing, live, 72);
       // The circle represents reported GPS uncertainty, not a guaranteed exact street position.
       if (Number.isFinite(gpsAccuracy) && gpsAccuracy>0 && gpsAccuracy<=150) {
@@ -2928,20 +2985,26 @@ function openMap() {
         else accuracyCircles[r.driver_id]=L.circle([r.lat,r.lng],{radius:gpsAccuracy,color:'#1976d2',weight:1,opacity:live?0.55:0.2,fillOpacity:live?0.08:0.03,interactive:false}).addTo(map);
       } else if (accuracyCircles[r.driver_id]) {map.removeLayer(accuracyCircles[r.driver_id]);delete accuracyCircles[r.driver_id];}
       const m = markers[r.driver_id];
-      if (m) { if(moved&&live)animateRiderMarker(m,r.lat,r.lng,4200); else m.setLatLng([r.lat,r.lng]); m.setIcon(ic); m.getPopup().setContent(html); m.setOpacity(live?1:0.55); }
+      if (m) { if(move.animate)animateRiderMarker(m,r.lat,r.lng,2500); else {cancelRiderAnimation(m);m.setLatLng([r.lat,r.lng]);} m.setIcon(ic); m.getPopup().setContent(html); m.setOpacity(live?1:0.55); }
       else { markers[r.driver_id] = L.marker([r.lat, r.lng], { icon: ic, opacity:live?1:0.55 }).addTo(map).bindPopup(html); }
     });
-    Object.keys(markers).forEach(k => { if (!seen.has(k)) { map.removeLayer(markers[k]); delete markers[k]; if(accuracyCircles[k]){map.removeLayer(accuracyCircles[k]);delete accuracyCircles[k];} delete prevPos[k]; delete lastHeading[k]; } });
-    $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+validLocations.filter(x=>Date.now()-new Date(x.updated_at)<30000).length+' موقع حديث';
+    Object.keys(markers).forEach(k => { if (!seen.has(k)) { cancelRiderAnimation(markers[k]);map.removeLayer(markers[k]); delete markers[k];delete lastLive[k]; if(accuracyCircles[k]){map.removeLayer(accuracyCircles[k]);delete accuracyCircles[k];} delete prevPos[k]; delete lastHeading[k]; } });
+    $('mcount').textContent = only && !seen.size ? 'لا يوجد موقع متاح لهذا الطيار' : seen.size + ' طيار · '+[...seen].filter(id=>prevPos[id]&&ysGps.state(prevPos[id]).live).length+' موقع حديث';
     if (!fitted && seen.size) { if (only) { const m = markers[only]; map.setView(m.getLatLng(), 16); m.openPopup(); } else map.fitBounds(L.featureGroup(Object.values(markers)).getBounds().pad(0.3)); fitted = true; }
   }
-  const mapVisibilityRefresh=()=>{if(document.visibilityState==='visible'&&d.isConnected){map.invalidateSize();refresh();}};
+  function expireMarkers(){
+    if(!current()){closeMap();return;}
+    for(const id of Object.keys(markers)){if(lastLive[id]&&!ysGps.state(prevPos[id]).live){lastLive[id]=false;cancelRiderAnimation(markers[id]);markers[id].setOpacity(0.55);markers[id].getPopup().setContent('⚠ آخر موقع معروف — لا يوجد تحديث GPS حديث.');accuracyCircles[id]?.setStyle({opacity:0.2,fillOpacity:0.03});}}
+    const ids=Object.keys(markers);$('mcount').textContent=ids.length+' طيار · '+ids.filter(id=>ysGps.state(prevPos[id]).live).length+' موقع حديث';
+  }
+  function closeMap(){if(closed)return;closed=true;clearInterval(mapTimer);clearInterval(expiryTimer);document.removeEventListener('visibilitychange',mapVisibilityRefresh);window.removeEventListener('online',mapVisibilityRefresh);Object.values(markers).forEach(cancelRiderAnimation);map.remove();d.remove();}
+  const mapVisibilityRefresh=()=>{if(current()&&document.visibilityState==='visible'){expireMarkers();map.invalidateSize();refresh();}};
   document.addEventListener('visibilitychange',mapVisibilityRefresh);
   window.addEventListener('online',mapVisibilityRefresh);
   $('msel').onchange = () => { fitted = false; refresh(); };
-  setTimeout(()=>{if(document.getElementById('lmap'))map.invalidateSize()},150);
-  refresh(); mapTimer = setInterval(refresh, 5000);
-  $('mclose').onclick = () => { clearInterval(mapTimer);document.removeEventListener('visibilitychange',mapVisibilityRefresh);window.removeEventListener('online',mapVisibilityRefresh); map.remove(); d.remove(); };
+  setTimeout(()=>{if(current())map.invalidateSize()},150);
+  refresh();mapTimer=setInterval(refresh,5000);expiryTimer=setInterval(expireMarkers,1000);
+  d.addEventListener('private-session-ended',closeMap);$('mclose').onclick=closeMap;
 }
 
 /* ---------- إضافة طيار (المدير) ---------- */
@@ -3025,7 +3088,7 @@ function addDriverForm(fixedBranchId=null,companyBranches=null) {
     $('a_ok').disabled = true;
     const selectedAccountBranch=Number($('a_branch').value);
     const customTitle=$('a_custom_title').value.trim();
-    if($('a_j').value==='custom'&&(customTitle.length<2||customTitle.length>60||/[<>\\x00-\\x1f]/.test(customTitle)))return fail('اكتب اسم وظيفة من 2 إلى 60 حرفًا بدون رموز غير صالحة');
+    if($('a_j').value==='custom'&&(customTitle.length<2||customTitle.length>60||/[<>\x00-\x1f]/.test(customTitle)))return fail('اكتب اسم وظيفة من 2 إلى 60 حرفًا بدون رموز غير صالحة');
     const { data, error } = await safeRpc('dlv_create_account', { p_email: email, p_password: pass, p_name: name, p_code: code, p_job: $('a_j').value==='custom'?'custom:'+customTitle:$('a_j').value, p_branch_id: selectedAccountBranch });
     if (error) return fail(error.message);
     const jobSel = $('a_j'), jobVal = jobSel.value, jobName = jobVal==='custom'?customTitle:jobSel.options[jobSel.selectedIndex].text; if (jobVal === 'driver') drivers.push({ user_id: data, full_name: name, employee_code: code });
@@ -3448,7 +3511,19 @@ function trackView(code0) {
   $('app').innerHTML = '<header><img data-brand-logo src="'+esc(brandConfig.logo_url||'yourstaff-icon.svg')+'" alt="شعار البراند" style="width:52px;height:52px;min-width:52px;flex:0 0 52px;border-radius:10px;object-fit:contain;object-position:center;background:transparent;padding:2px"><div style="flex:1"><div style="font-size:20px;font-weight:700">تتبع طلبك</div><small data-brand-title>'+esc(brandConfig.brand_name||'المطعم')+'</small></div></header>' +
     '<div class="card"><label style="font-size:12px">كود المتابعة</label><div class="row"><input id="tc" dir="ltr" style="flex:1;text-transform:uppercase" placeholder="مثال: 7K2M9QXA" value="' + esc((code0 || '').toUpperCase()) + '"><button class="p" id="tg">تتبّع</button></div></div>' +
     '<div id="tinfo"></div><div id="tmap" class="card" style="height:320px;display:none;padding:0;overflow:hidden"></div>';
-  let tmr, mapT, mk, lastTrackPos = null, trackBusy = false, displayedCode='';
+  let tmr,mapT,mk,lastTrackPos=null,trackBusy=false,displayedCode='',lastTrackHeading=0,latestTrackFix=null,trackStatus=null;
+  const ownCodeField=$('tc');
+  function removeCustomerMap(){if(mk)cancelRiderAnimation(mk);if(mapT)mapT.remove();mapT=null;mk=null;lastTrackPos=null;const el=$('tmap');if(el)el.style.display='none';}
+  function updateGpsStatus(){
+    if($('tc')!==ownCodeField||!ownCodeField.isConnected){clearInterval(freshnessTimer);clearInterval(tmr);removeCustomerMap();return;}
+    const status=$('trackGpsStatus');if(!status)return;
+    const fixState=ysGps.state(latestTrackFix);
+    if(trackStatus!=='out'){status.textContent='📍 خريطة الطيار تظهر بعد خروجه للتوصيل وتوفر GPS حديث.';removeCustomerMap();return;}
+    if(!navigator.onLine){status.textContent='⚠ الاتصال منقطع؛ الموقع المباشر غير متاح حتى عودة الاتصال.';removeCustomerMap();return;}
+    if(!fixState.live){status.textContent='⚠ موقع الطيار غير متاح حاليًا. لن نعرض موقعًا قديمًا على أنه مباشر.';removeCustomerMap();return;}
+    status.textContent='📍 آخر قراءة GPS منذ '+Math.max(0,Math.round(fixState.ageMs/1000))+' ثانية · دقة تقريبية '+Math.round(latestTrackFix.accuracy)+' متر.';
+  }
+  const freshnessTimer=setInterval(updateGpsStatus,1000);
   function clearCustomerIdentity(){
     brandConfig={...PLATFORM_BRAND};
     document.documentElement.style.removeProperty('--brand');
@@ -3456,7 +3531,7 @@ function trackView(code0) {
     document.querySelectorAll('[data-brand-logo]').forEach(el=>{el.src='yourstaff-icon.svg';el.alt='شعار المنصة';});
     document.querySelectorAll('[data-brand-title]').forEach(el=>el.textContent='متابعة الطلب');
     document.title='متابعة الطلب — Your Staff';
-    if(mapT){mapT.remove();mapT=null;mk=null;lastTrackPos=null;}
+    latestTrackFix=null;trackStatus=null;lastTrackHeading=0;removeCustomerMap();
     const mapEl=$('tmap');if(mapEl)mapEl.style.display='none';
   }
   async function go() {
@@ -3466,9 +3541,9 @@ function trackView(code0) {
       clearCustomerIdentity();
       const info=$('tinfo');if(info)info.textContent='جاري التحقق من كود المتابعة...';
     }
-    if (trackBusy || document.visibilityState !== 'visible' || !navigator.onLine) return;
+    if (trackBusy || document.visibilityState !== 'visible' || !navigator.onLine) {updateGpsStatus();return;}
     trackBusy = true;
-    let result;
+    let result;const requestStarted=ysGps.nowMono();
     try { result = await safeRpc('dlv_track', { p_code: code }); }
     catch (e) { result = { error: e }; }
     finally { trackBusy = false; if(code!==($('tc')?.value.trim().toUpperCase()) && $('tc')?.value.trim()) void go(); }
@@ -3476,6 +3551,7 @@ function trackView(code0) {
     const { data: j, error } = result || {};
     const box = $('tinfo'); if (!box) return clearInterval(tmr);
     if (error) {
+      updateGpsStatus();
       // Transient network/API errors must never terminate the customer's tracking session.
       const warn = $('trackConnectionNotice');
       if (!warn) box.insertAdjacentHTML('afterbegin','<div class="msg" id="trackConnectionNotice" style="background:#fff4d6;color:#72521a">الاتصال بالخريطة متقطع مؤقتًا؛ سنحاول التحديث تلقائيًا دون إغلاق المتابعة.</div>');
@@ -3529,19 +3605,21 @@ function trackView(code0) {
         : '<button type="button" class="pilot-contact-btn pilot-disabled" disabled title="أضف رقم الطيار من إدارة الحسابات">◉ واتساب</button>';
       h += '<div class="card pilot-contact-card"><div class="meta">الطيار</div><b style="font-size:20px">' + esc(j.pilot_name) + '</b><div class="pilot-contact-actions">' + callAction + waAction + '</div>' + (!hasPilotPhone ? '<div class="meta">رقم الطيار غير متاح للتواصل. يُرجى التأكد من تسجيل رقم صحيح في إدارة الحسابات، ولا تُعرض بيانات الاتصال إلا للعميل المصرّح له.</div>' : '<div class="meta" dir="ltr" style="text-align:right">' + esc(rawPilotPhone) + '</div>') + '</div>';
     }
-    const gpsAge=j.loc_at?Date.now()-new Date(j.loc_at).getTime():NaN;
-    const gpsRecent=Number.isFinite(gpsAge)&&gpsAge>=0&&gpsAge<60000;
-    h += '<div class="card" style="font-size:13px" role="status">'+(j.status==='out'?(gpsRecent?'📍 آخر قراءة GPS منذ '+Math.round(gpsAge/1000)+' ثانية. الموقع تقريبي ويتحدث حسب إشارة الطيار.':'⚠ موقع الطيار غير متاح حاليًا. لن نعرض موقعًا قديمًا على أنه مباشر.'):'📍 خريطة الطيار تظهر بعد خروجه للتوصيل وتوفر GPS حديث.')+'</div>';
-    box.innerHTML = h;
-    const m = $('tmap');
-    if (j.status==='out' && gpsRecent && j.lat != null && j.lng != null && j.lat!=='' && j.lng!=='' && Number.isFinite(Number(j.lat)) && Number.isFinite(Number(j.lng)) && Math.abs(Number(j.lat))<=90 && Math.abs(Number(j.lng))<=180) {
-      m.style.display = 'block';
-      if (!mapT) { mapT = L.map('tmap').setView([j.lat, j.lng], 15); deliveryTrackingTiles(mapT); mk = L.marker([j.lat, j.lng], { icon: bikeIcon(0, true, 90), keyboard: false }).addTo(mapT); lastTrackPos = {lat:j.lat,lng:j.lng}; }
-      else { const nextPos = {lat:j.lat,lng:j.lng}; const moved=lastTrackPos&&L.latLng(lastTrackPos).distanceTo(L.latLng(nextPos))>5; const bearing = moved?bikeBearing(lastTrackPos, nextPos):0; if(moved)animateRiderMarker(mk,j.lat,j.lng,4200); else mk.setLatLng([j.lat,j.lng]); mk.setIcon(bikeIcon(bearing, true, 90)); if(moved)mapT.panTo([j.lat, j.lng],{animate:true,duration:1}); lastTrackPos = nextPos; }
-    } else {m.style.display = 'none';if(mapT){mapT.remove();mapT=null;mk=null;lastTrackPos=null;}}
+    trackStatus=j.status;
+    const nextFix=ysGps.snapshot({lat:j.lat,lng:j.lng,accuracy:j.accuracy,loc_at:j.loc_at,server_at:j.server_at},Date.now(),ysGps.nowMono(),ysGps.nowMono()-requestStarted);
+    const move=ysGps.motion(latestTrackFix,nextFix);if(move.accept||!ysGps.state(nextFix).valid)latestTrackFix=nextFix;
+    h+='<div id="trackGpsStatus" class="card" style="font-size:13px" role="status"></div>';
+    box.innerHTML=h;const m=$('tmap');
+    if(j.status==='out'&&ysGps.state(latestTrackFix).live&&typeof L!=='undefined'&&navigator.onLine){
+      m.style.display='block';const fix=latestTrackFix;
+      if(!mapT){mapT=L.map('tmap').setView([fix.lat,fix.lng],15);deliveryTrackingTiles(mapT);mk=L.marker([fix.lat,fix.lng],{icon:bikeIcon(lastTrackHeading,true,90),keyboard:false}).addTo(mapT);}
+      else if(move.accept){if(move.rotate&&lastTrackPos)lastTrackHeading=bikeBearing(lastTrackPos,fix);if(move.animate)animateRiderMarker(mk,fix.lat,fix.lng,2500);else{cancelRiderAnimation(mk);mk.setLatLng([fix.lat,fix.lng]);}mk.setIcon(bikeIcon(lastTrackHeading,true,90));if(move.animate)mapT.panTo([fix.lat,fix.lng],{animate:true,duration:1});}
+      lastTrackPos=fix;
+    }else removeCustomerMap();
+    updateGpsStatus();
     if (j.status === 'delivered') {
       m.style.display = 'none';
-      if (mapT) { mapT.remove(); mapT = null; mk = null; lastTrackPos = null; }
+      removeCustomerMap();
       const already = j.rated === true;
       if (already) {
         box.innerHTML += '<div class="card"><h2>شكرًا لتقييمك ❤️</h2><div class="meta">تم استلام تقييمك بنجاح.</div></div>';
@@ -3574,7 +3652,8 @@ function trackView(code0) {
   }
   $('tg').onclick = () => { clearInterval(tmr); go(); tmr = setInterval(go, 5000); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && $('tc')) go(); });
-  window.addEventListener('online', () => { if ($('tc')) go(); });
+  window.addEventListener('online',()=>{if($('tc')===ownCodeField)go();});
+  window.addEventListener('offline',updateGpsStatus);
   if (code0) $('tg').onclick();
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

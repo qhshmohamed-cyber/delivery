@@ -33,3 +33,10 @@ No destructive cleanup of orders, closed-day reports, complaints, audit trails o
 - No additional subscription, dependency, build pipeline or GitHub Actions workflow.
 - Changes are additive to GitHub and will **not** deploy automatically to TackHost.
 - Production `index.html` must be treated as authoritative until it is explicitly reconciled with GitHub.
+
+## Operational readiness: root/secondary owners
+- The owner dashboard shows a compact `حالة التشغيل والأمان` card. Click `فحص الآن` to request `dlv_owner_operational_health()`; the endpoint requires an active authenticated owner session and the individual owner's PIN unlock. It has no automatic polling, secret export or persistent data storage.
+- The response indicates per-branch archive/close status for the last completed Egypt operational day, the number of unfinished orders, current/last driver GPS signal and the status of four Supabase cron tasks. Zero GPS updates alone does not prove a fault when drivers are not on duty.
+- Automatic closure retries at **05:15 and 05:35 Africa/Cairo**. It reattempts the **05:05 archival step** if needed and refuses to close branches with missing archive or unfinished orders. No order data is deleted by closing.
+- Production GPS remains unverified until a driver's actual phone shares a new location; the GitHub JS assets are **not automatically published to TackHost**.
+- A database backup independent of Supabase remains **unverified**; a TackHost web backup alone is insufficient.

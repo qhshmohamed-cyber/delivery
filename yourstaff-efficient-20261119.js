@@ -346,6 +346,49 @@
       return String(me.user_id);
     } catch { return null; }
   };
+  /* On-demand owner health: read-only API, no polling or new dependencies. */
+  function ensureOwnerHealth(parent,user) {
+    if(document.getElementById('ys-owner-ops-readiness'))return;
+    const d=document.createElement('details');
+    d.id='ys-owner-ops-readiness';
+    d.className='card';
+    d.style.cssText='margin-top:9px;padding:10px';
+    const title=document.createElement('summary');
+    title.textContent='🩺 حالة التشغيل والأمان';title.style.cursor='pointer';
+    const btn=document.createElement('button');
+    btn.type='button';btn.className='g';btn.textContent='فحص الآن';
+    btn.style.marginTop='8px';
+    const result=document.createElement('div');
+    result.style.cssText='white-space:pre-wrap;margin-top:8px;font-size:13px;line-height:1.6';
+    result.setAttribute('role','status');
+    d.append(title,btn,result);
+    parent.appendChild(d);
+    btn.addEventListener('click',async()=>{
+      if(typeof safeRpc!=='function'||context()!==user)return;
+      btn.disabled=true;result.textContent='جارٍ فحص قاعدة البيانات…';
+      try{
+        const {data,error}=await safeRpc('dlv_owner_operational_health');
+        if(!d.isConnected||context()!==user)return;
+        if(error||!Array.isArray(data?.branches)||!Array.isArray(data?.jobs))
+          throw Error(error?.message||'فشل استلام بيانات الفحص');
+        const branches=data.branches.map(b=>
+          String(b.company||'')+' / '+String(b.branch||'')+
+          '\nتقرير: '+(b.archived?'محفوظ':'غير موجود')+
+          ' | تقفيل: '+(b.closed?'مكتمل':'لم يكتمل')+
+          ' | طلبات معلقة: '+Number(b.unfinished||0)+
+          ' | GPS حديث: '+Number(b.gps_fresh_under_60s||0)+
+          ' من '+Number(b.drivers_registered||0)+' طيارين مسجلين');
+        const jobs=data.jobs.map(j=>
+          String(j.name||'')+': '+(j.active?String(j.last_status||'لم يبدأ بعد'):'موقوف'));
+        result.textContent='يوم التشغيل السابق: '+String(data.previous_operational_day||'')+
+          '\n\n'+branches.join('\n\n')+
+          '\n\nالمهام المجدولة:\n'+jobs.join('\n')+
+          '\n\nالنسخة الاحتياطية الخارجية لقاعدة البيانات: غير مؤكدة'+
+          '\nعدم وجود GPS حديث قد يعني أن الطيارين خارج الورديات.';
+      }catch(e){if(d.isConnected)result.textContent='تعذر الفحص: '+String(e?.message||'خطأ').slice(0,160);}
+      finally{if(d.isConnected)btn.disabled=false;}
+    });
+  }
   const requestSync = () => {
     if (scheduled) return;
     scheduled = true;
@@ -358,6 +401,7 @@
     const parent = app.querySelector('#ownAccounts')?.closest('section');
     if (!parent) return;
     if (checkedUser !== user) { checkedUser = user; primary = false; lastCheck = 0; }
+    ensureOwnerHealth(parent,user);
     if (primary) {
       if (!document.getElementById(BUTTON)) {
         const btn = document.createElement('button');

@@ -587,3 +587,54 @@
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true}); else start();
 })();
+/* Driver-only, on-demand GPS diagnostics: never stores/shares coordinates. */
+(() => {
+  'use strict';
+  if(window.__ysDriverGPSPersonalDiag20261119)return;
+  window.__ysDriverGPSPersonalDiag20261119=true;
+  function attach(){
+    try{
+      if(typeof me==='undefined'||!me||me.role!=='driver'||typeof safeRpc!=='function')return;
+      const retry=document.getElementById('gpsRetry');
+      if(!retry||document.getElementById('ys-driver-gps-diagnostic-btn'))return;
+      const btn=document.createElement('button');
+      btn.id='ys-driver-gps-diagnostic-btn';
+      btn.className='g';btn.type='button';btn.textContent='🔎 فحص وصول GPS للخادم';
+      btn.style.margin='6px 0';
+      const out=document.createElement('div');
+      out.setAttribute('role','status');out.style.cssText='font-size:13px;white-space:pre-wrap;margin-top:7px';
+      retry.insertAdjacentElement('afterend',btn);
+      btn.insertAdjacentElement('afterend',out);
+      btn.addEventListener('click',async()=>{
+        if(btn.disabled)return;
+        btn.disabled=true;out.textContent='جارٍ فحص آخر إشارة على الخادم…';
+        try{
+          const {data,error}=await safeRpc('dlv_driver_gps_diagnostic');
+          if(error||!data||!['fresh','stale','no_sample','poor_accuracy'].includes(data.status))
+             throw Error(error?.message||'تعذر قراءة فحص GPS');
+          const descriptions={
+            fresh:'✅ إشارة GPS وصلت مؤخرًا',
+            stale:'⚠️ آخر إشارة قديمة. افتح التطبيق واسمح بالموقع ثم استخدم زر تحديث GPS.',
+            no_sample:'⚠️ لا توجد إشارة مسجلة. راجع إذن الموقع واتصال الإنترنت.',
+            poor_accuracy:'⚠️ دقة الموقع غير كافية. انتقل إلى مكان يسمح باستقبال GPS.'
+          };
+          if(!btn.isConnected)return;
+          out.textContent=descriptions[data.status]+
+            '\nحالة الشفت: '+String(data.duty_state||'غير محدد')+
+            '\nعمر آخر إشارة: '+(Number.isFinite(Number(data.last_fix_age_seconds))?
+                 Math.max(0,Math.round(Number(data.last_fix_age_seconds)))+' ثانية':'غير متاح')+
+            '\nهذا الفحص لا يشغّل GPS بنفسه ولا يشارك الإحداثيات.';
+        }catch(e){if(btn.isConnected)out.textContent='فشل الفحص: '+String(e?.message||'خطأ').slice(0,110);}
+        finally{if(btn.isConnected)btn.disabled=false;}
+      });
+    }catch(e){console.warn('Driver GPS diagnostic unavailable');}
+  }
+  const start=()=>{
+    const app=document.getElementById('app');
+    if(!app)return;
+    new MutationObserver(attach).observe(app,{subtree:true,childList:true});
+    attach();
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+})();

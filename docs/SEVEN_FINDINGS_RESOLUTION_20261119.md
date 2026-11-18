@@ -1,0 +1,26 @@
+# Seven production-readiness findings — actions and remaining limits (2026-11-19)
+
+No paid services or destructive customer-data cleanup were used. A GitHub change does NOT automatically reach the newer live TackHost HTML.
+
+| # | Finding | Implemented / verified | Still needed |
+|---|---|---|---|
+| 1 | Duplicate order numbers block 8-digit-code customer tracking | Supabase RPC dlv_customer_track now checks the given code against eligible reused order numbers. Mocked two correct distinct codes + wrong code in a full rolled-back transaction; live migration applied. Never returns another customer's order when code mismatches. | Real customer journey test with two orders sharing a number and different codes. |
+| 2 | WhatsApp statuses stuck despite recorded consent | Consent RPC now idempotent with a unique order_id index, and moves recent pending events to awaiting_provider. Order-status enqueue respects pre-existing consent. Four stale records with old confirmed consent were marked cancelled/obsolete (retained), not delivered days late. Three events without consent remain awaiting_consent. | No WhatsApp sender/provider is installed. A valid consent does NOT imply a message can actually be sent. Do not enable an untested sender or resend historical events. |
+| 3 | No fresh live rider GPS | New authenticated-driver-only read-only dlv_driver_gps_diagnostic RPC. Additive JS creates an on-demand "فحص وصول GPS للخادم" button beside the rider GPS retry button; shows last-fix age, accuracy class and duty state WITHOUT coordinates. Mocked valid driver allowed / manager rejected using real auth sessions inside ROLLBACK. | Requires live JS installation and a real phone sending a fresh fix; mobile OS background restrictions cannot be overridden. |
+| 4 | Supabase native leaked-password protection warning | Existing private.dlv_checked_password_hash checks password complexity (12+ mixed), checks public HIBP range prefix with padding and secure transport, then hashes. Synthetic strong password succeeded (60-character bcrypt hash); all app-managed user/password creation paths call this guard. | Supabase native Auth option is Pro-and-above per Supabase official documentation. Avoid upgrading solely to clear the warning; this separate account-RPC protection does not protect arbitrary Auth endpoints. |
+| 5 | TackHost ModSecurity PCRE limits on large HTML | Existing tools/prepare_live_index_modularization.py prepares an untouched, reversible lighter candidate from the EXACT live HTML for a Test environment. | Current connector cannot edit deployed files or server WAF rules. The host must inspect two response-side regexes (RESPONSE-951-DATA-LEAKAGES-SQL.conf, lines 93 and 421) or approve a staged code change. Never disable all ModSecurity request protections. |
+| 6 | Missing verified independent Supabase data backup | Optional tools/backup_supabase_offsite_encrypted.py uses pg_dump + age public-key encryption on a trusted machine, never GitHub; no new subscription. | This utility has NOT run against the real database and no restore drill has passed. Needs private DB access, encrypted external destination and verified isolated restore. Avoid committing credentials or customer data. |
+| 7 | GitHub index.html is older than live TackHost index.html | Added tools/preflight_current_live_upgrade.py + unit tests to block replacing the live file with the stale GitHub file. It permits ONLY the exact new JS tag based on a separately saved current live HTML. Existing JS upgrade now has rider GPS diagnostics. | Current live index bytes cannot be obtained via connected host file tools, so GitHub HTML is NOT synchronized. Do not deploy GitHub main index.html. Safely reconcile from a new current live export after backups. |
+
+## Safe release rules
+- Deploy only the new additive JS onto a backed-up copy of the **current** TackHost public_html; NEVER replace it using the older GitHub index.
+- Retain records and production audit history. No fake GPS samples, no synthetic SMS/WhatsApp customer messages.
+- Keep the tested 05:05 archive, 05:15 and 05:35 close jobs unchanged.
+- Existing optional upgrade script: yourstaff-efficient-20261119.js. Add just ONE script tag to live HTML after Test validation.
+- Owner operational-health status is on-demand. Rider GPS diagnostic is also on-demand; neither continuously polls or exports location data.
+
+## Narrow TackHost support request
+Please inspect only the ModSecurity RESPONSE-951-DATA-LEAKAGES-SQL.conf PCRE processing errors on GET /index.html (rules at lines 93 and 421). The current live index is substantially larger than the old GitHub version. Keep request-side WAF and all SQL injection controls ON. Please review safe regex-limit tuning or a *response-side only* path-scoped false-positive exclusion; confirm log impact. Do not replace public_html/index.html or any scripts. Preserve a full private backup before changes.
+
+## Password source
+Supabase official docs: https://supabase.com/docs/guides/auth/password-security (native leaked password protection requires Pro plan or above). A separately implemented custom password guard is in use for this app's privileged account-management RPCs; it does not change native Supabase auth configuration.

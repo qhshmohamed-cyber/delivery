@@ -20,6 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script>
 <script src="session-actions.js?v=1"></script>
+<script src="employee-session-guard.js?v=1"></script>
 <script src="native-background.js?v=1"></script>
 <script src="appearance.js?v=1"></script>
 <link rel="stylesheet" href="appearance.css?v=1">
@@ -328,6 +329,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const nativeBackground=createNativeBackground(window.Capacitor);
 const sb = supabase.createClient(SB_URL, SB_KEY,{auth:{persistSession:true,autoRefreshToken:!nativeBackground.available,...(nativeBackground.available?{storage:nativeBackground.storage}:{})}});
 const sessionActions = createSessionActions(sb.auth);
+const employeeSessionGuard=createStaffSessionGuard(sb,{onLost:()=>{void appSignOut('local','هذا الحساب أصبح مستخدمًا على جهاز آخر. تم إغلاق الجلسة الحالية.');}});
 let appLogoutBusy=false,appSessionEpoch=0;
 function clearPrivateSessionDialogs(){
  document.querySelectorAll('.modal,#ownerAssistantOverlay').forEach(dialog=>{
@@ -341,6 +343,7 @@ async function appSignOut(scope='global',message=''){
  appLogoutBusy=true;
  try{if(nativeBackground.available)await nativeBackground.stop();}catch(e){appLogoutBusy=false;flash('تعذر تأكيد إيقاف خدمة الموقع؛ أعد محاولة تسجيل الخروج',false);return false;}
  let result;
+ try{await Promise.race([employeeSessionGuard.release(),new Promise(resolve=>setTimeout(resolve,2000))]);}catch(_){}
  try{result=await sessionActions.signOut(scope);}finally{appLogoutBusy=false;}
  if(!result.localCleared){showLogoutFailure(scope);return false;}
  appSessionEpoch++;
@@ -354,7 +357,7 @@ async function appSignOut(scope='global',message=''){
  if(realtimeRetryTimer)clearTimeout(realtimeRetryTimer);
  if(reconnectRefreshTimer)clearTimeout(reconnectRefreshTimer);
  try{await sb.removeAllChannels();}catch(_){}
- chan=null;brandChannel=null;me=null;selectedBranch=null;drivers=[];ownerActiveCompanyId=null;activeBrandCompanyId=null;tenantBranchCompanyCache.clear();
+ chan=null;activeOrderChannelUserId=null;clearTimeout(hiddenOrderChannelTimer);hiddenOrderChannelTimer=null;brandChannel=null;me=null;selectedBranch=null;drivers=[];ownerActiveCompanyId=null;activeBrandCompanyId=null;tenantBranchCompanyCache.clear();
  Object.keys(ORD).forEach(k=>delete ORD[k]);ownerBrandCache.clear();tenantBrandCache.clear();
  document.querySelectorAll('.modal').forEach(e=>e.remove());resetPlatformBrand();
  loginView(message||(!result.serverConfirmed?'تم قفل هذا الجهاز. تعذر تأكيد إلغاء الجلسة على السيرفر؛ أعد المحاولة عند عودة الاتصال.':''));
@@ -657,6 +660,8 @@ function loginView(err) {
   };
 }
 let realtimeState = 'CLOSED';
+let activeOrderChannelUserId=null;
+let hiddenOrderChannelTimer=null;
 let realtimeRetryTimer = null;
 let reconnectRefreshTimer = null;
 let operationalRefreshBusy = false;
@@ -692,25 +697,56 @@ setInterval(() => {
       Date.now() - lastOperationalRefreshAt > 30000) refreshOperationalData();
 }, 30000);
 function startOrderRealtime() {
-  if (!me) return;
-  if (chan) { try { sb.removeChannel(chan); } catch (e) {} chan = null; }
-  realtimeState = 'JOINING';
-  chan = sb.channel('orders:user:'+me.user_id,{config:{private:true}})
+  if (!me || document.visibilityState !== 'visible' || !navigator.onLine) return;
+  // A JOINING/SUBSCRIBED channel is already the live feed; never spawn a second one.
+  if (chan && activeOrderChannelUserId===me.user_id &&
+      (realtimeState === 'JOINING' || realtimeState === 'SUBSCRIBED')) return;
+  clearTimeout(realtimeRetryTimer);realtimeRetryTimer=null;
+  const previous=chan;
+  if(previous){try{void sb.removeChannel(previous).catch(()=>{});}catch(_){}}
+  realtimeState='JOINING';
+  activeOrderChannelUserId=me.user_id;
+  const next=sb.channel('orders:user:'+me.user_id,{config:{private:true}})
     .on('postgres_changes', {event:'*', schema:'public', table:'dlv_orders'}, refreshOperationalData)
-    .on('postgres_changes', {event:'INSERT', schema:'public', table:'dlv_incidents'}, refreshOperationalData)
-    .subscribe(status => {
-      realtimeState = status;
-      if (status === 'SUBSCRIBED') {
-        clearTimeout(realtimeRetryTimer);
-        refreshOperationalData();
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        clearTimeout(realtimeRetryTimer);
-        realtimeRetryTimer = setTimeout(() => {
-          if (me && navigator.onLine && document.visibilityState === 'visible') startOrderRealtime();
-        }, 5000);
-      }
-    });
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'dlv_incidents'}, refreshOperationalData);
+  chan=next;
+  next.subscribe(status => {
+    if(chan!==next) return; // Ignore a late callback from a removed channel.
+    realtimeState=status;
+    if(status==='SUBSCRIBED'){
+      clearTimeout(realtimeRetryTimer);realtimeRetryTimer=null;
+      refreshOperationalData();
+    }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+      clearTimeout(realtimeRetryTimer);
+      realtimeRetryTimer=setTimeout(()=>{
+        if(me && navigator.onLine && document.visibilityState==='visible' && chan===next) startOrderRealtime();
+      },5000);
+    }
+  });
 }
+// Close idle, hidden employee UI sockets, not authentication or native GPS service.
+// The next foreground event recreates channels and fetches fresh data.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    clearTimeout(hiddenOrderChannelTimer);
+    hiddenOrderChannelTimer=setTimeout(()=>{
+      if(!me||document.visibilityState!=='hidden')return;
+      clearTimeout(realtimeRetryTimer);realtimeRetryTimer=null;
+      const old=chan;chan=null;activeOrderChannelUserId=null;realtimeState='CLOSED';
+      if(old)try{void sb.removeChannel(old).catch(()=>{});}catch(_){}
+      if(profileSyncChannel){const p=profileSyncChannel;profileSyncChannel=null;try{void sb.removeChannel(p).catch(()=>{});}catch(_){}}
+      if(brandChannel){const b=brandChannel;brandChannel=null;try{void sb.removeChannel(b).catch(()=>{});}catch(_){}}
+    },120000);
+  }else{
+    clearTimeout(hiddenOrderChannelTimer);hiddenOrderChannelTimer=null;
+    if(me){
+      if(!profileSyncChannel)startProfileSync();
+      if(!brandChannel && activeBrandCompanyId)subscribeBrandConfig();
+      startOrderRealtime();
+      refreshOperationalData();
+    }
+  }
+});
 window.addEventListener('online', () => {
   if (!me) return;
   refreshOperationalData();
@@ -727,6 +763,10 @@ async function boot() {
   if (authResult.error) return reconnectView();
   const session = authResult.data?.session;
   if (!session) return loginView();
+  let staffClaim;
+  try { staffClaim=await employeeSessionGuard.begin(session); }
+  catch(e){return reconnectView('تعذر التحقق من جلسة الجهاز حاليًا. راجع الاتصال ثم أعد المحاولة.');}
+  if(!staffClaim.allowed) return appSignOut('local','الحساب مفتوح على جهاز آخر. سجل خروجًا من الجهاز الأول ثم حاول مرة ثانية.');
   let profileResult;
   try { profileResult = await sb.from('dlv_profiles').select('*').eq('user_id', session.user.id).maybeSingle(); }
   catch (e) { return reconnectView(); }

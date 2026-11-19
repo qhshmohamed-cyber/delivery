@@ -9,6 +9,9 @@
   const ID = 'ys-brand-stage-bars';
   const VERSION = '2026-11-18';
   let requestNo = 0;
+  let pendingKey = '';
+  let failedKey = '';
+  let retryAfter = 0;
   let loadedKey = '';
   let dayOverride = '';
   let showAllHours = false;
@@ -162,8 +165,12 @@
     const day=input?.value||operationalDay();
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;
     const key=`${ctx.user}/${ctx.branch}/${day}`;
+    // One in-flight RPC per branch/day. DOM mutations may call sync repeatedly.
+    if(!force && pendingKey===key)return;
+    if(!force && failedKey===key && Date.now()<retryAfter)return;
     if(!force && loadedKey===key && Date.now()-lastUpdateAt<60000)return;
     const token=++requestNo;
+    pendingKey=key;
     const status=node.querySelector('[data-status]');
     if(status)status.textContent='جارٍ تحديث نسب الأداء…';
     try{
@@ -172,9 +179,13 @@
       if(token!==requestNo || !node.isConnected || !now || now.user!==ctx.user || now.branch!==ctx.branch || (node.querySelector('#ysb-day')?.value)!==day)return;
       if(error)throw new Error(error.message||'تعذر تحميل التحليل');
       if(!data || Number(data.branch_id)!==ctx.branch || String(data.day)!==day || !Array.isArray(data.stages) || !Array.isArray(data.hours))throw new Error('البيانات لا تتطابق مع الفرع والتاريخ');
-      loadedKey=key;lastUpdateAt=Date.now();paint(data,node);
+      loadedKey=key;lastUpdateAt=Date.now();failedKey='';retryAfter=0;paint(data,node);
     }catch(e){if(token!==requestNo || !node.isConnected)return;
+      // Avoid a repeated RPC loop when a failed response mutates the panel.
+      failedKey=key;retryAfter=Date.now()+15000;
       status.textContent='تعذر تحميل التحليل: '+String(e?.message||'خطأ غير معروف').slice(0,140);
+    }finally{
+      if(token===requestNo)pendingKey='';
     }
   }
   function updateOwnerLabel(){
@@ -189,7 +200,7 @@
     scheduled=false;updateOwnerLabel();bindManagerMap();
     if(mapClose&&!mapScope())mapClose();
     const ctx=required();
-    if(!ctx){loadedKey='';requestNo++;return;}
+    if(!ctx){loadedKey='';pendingKey='';requestNo++;return;}
     let panel=document.getElementById(ID);
     if(!panel || !panel.isConnected || panel.previousElementSibling!==ctx.anchor){
       panel?.remove();panel=createPanel(ctx.anchor);loadedKey='';lastUpdateAt=0;

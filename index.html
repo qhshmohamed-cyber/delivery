@@ -2563,6 +2563,17 @@ function managerView() {
       <button class="p" id="mp" style="min-height:64px">🗺️<div>الطيارون</div></button>
       <button class="g" id="nw" style="min-height:64px">➕<div>طلب جديد</div></button>
     </div>
+    <details class="card" id="managerTimelinePanel" open>
+      <summary style="cursor:pointer;font-weight:700">📦 عرض الطلبات — التسلسل الزمني</summary>
+      <div class="row" style="margin-top:9px;gap:7px">
+        <input type="date" id="managerTimelineDate" value="${t}" style="flex:1;min-width:130px">
+        <select id="managerTimelineStatus" style="flex:1;min-width:120px"><option value="">كل الحالات</option><option value="new">جديد</option><option value="received">استلم الطيار</option><option value="out">في التوصيل</option><option value="delivered">تم التسليم</option><option value="failed">تعذر</option><option value="cancelled">ملغي</option></select>
+        <input id="managerTimelineSearch" placeholder="بحث رقم الطلب أو العميل" style="flex:2;min-width:140px">
+        <button id="managerTimelineRefresh">تحديث</button>
+      </div>
+      <div class="tw" id="managerTimelineRows" style="margin-top:10px">جارٍ تحميل الطلبات...</div>
+      <div class="row" style="justify-content:center;margin-top:8px"><button id="managerTimelinePrev">السابق</button><span id="managerTimelineCount" class="meta"></span><button id="managerTimelineNext">التالي</button></div>
+    </details>
     <details class="card"><summary style="cursor:pointer;font-weight:700">⭐ تقييمات العملاء</summary><div id="managerRatings" style="margin-top:10px"></div></details>
     <details class="card"><summary style="cursor:pointer;font-weight:700">🔎 البحث عن طلب</summary><div class="row" style="margin-top:12px"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></details>
     <details class="card"><summary style="cursor:pointer;font-weight:700">📂 السجلات والمتابعة</summary><div class="row" style="margin-top:12px"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">الطلبات الملغاة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">المشاكل والشكاوى</button></div></details>
@@ -2581,6 +2592,13 @@ function managerView() {
   if ($('ad')) $('ad').onclick = () => addDriverForm(); if($('cancelPermissionsBtn'))$('cancelPermissionsBtn').onclick=openCancelPermissions;if($('customerMessagesBtn'))$('customerMessagesBtn').onclick=customerMessageSettings; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
     $('managerSearch').onclick = async () => { const q=orderSearchTerm($('f_q').value); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · وقت الإنشاء: ${tm(o.created_at)} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    managerTimelinePage=0;
+    ['managerTimelineDate','managerTimelineStatus'].forEach(id=>$(id).onchange=()=>{managerTimelinePage=0;loadManagerTimeline();});
+    $('managerTimelineSearch').onkeydown=e=>{if(e.key==='Enter'){managerTimelinePage=0;loadManagerTimeline();}};
+    $('managerTimelineRefresh').onclick=()=>{managerTimelinePage=0;loadManagerTimeline();};
+    $('managerTimelinePrev').onclick=()=>{if(managerTimelinePage>0){managerTimelinePage--;loadManagerTimeline();}};
+    $('managerTimelineNext').onclick=()=>{managerTimelinePage++;loadManagerTimeline();};
+    loadManagerTimeline();
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
     return;
   }
@@ -2611,6 +2629,27 @@ async function loadDriverGpsHealth(){
  const stale=ids.filter(id=>!last.has(id)||!Number.isFinite(last.get(id))||Date.now()-last.get(id)>5*60000);
  box.innerHTML='<div class="meta">الطيارون لديهم طلبات خرجت للتوصيل: '+ids.length+' · تحديث GPS متأخر أكثر من 5 دقائق: '+stale.length+'</div>'+(stale.length?'<div class="msg e">⚠️ '+stale.length+' طيار بدون تحديث موقع حديث. راجع الاتصال وفتح صفحة الطيار؛ الموقع القديم ليس موقعًا مباشرًا.</div>':'<div class="msg o">✓ مواقع الطيارين المكلفين بالتوصيل محدثة خلال آخر 5 دقائق.</div>');
 }
+
+let managerTimelinePage=0;
+async function loadManagerTimeline(){
+ const stillCurrent=captureOperationalRead('loadManagerTimeline','managerTimelineRows');if(!stillCurrent())return;
+ const box=$('managerTimelineRows');if(!box)return;
+ const date=$('managerTimelineDate')?.value||cairoDate(),status=$('managerTimelineStatus')?.value||'';
+ const term=String($('managerTimelineSearch')?.value||'').replace(/[,()%*]/g,' ').trim();
+ let request=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,out_at,delivered_at',{count:'exact'}))
+  .eq('order_date',date).order('created_at',{ascending:false}).range(managerTimelinePage*10,managerTimelinePage*10+9);
+ if(status)request=request.eq('status',status);
+ if(term)request=request.or('order_no.ilike.%'+term+'%,customer_name.ilike.%'+term+'%,phone.ilike.%'+term+'%');
+ const {data,error,count}=await request;if(!stillCurrent())return;
+ if(error){box.innerHTML='<div class="msg e">تعذر تحميل الطلبات: '+esc(error.message)+'</div>';return;}
+ const items=data||[],pages=Math.max(1,Math.ceil((count||0)/10));
+ box.innerHTML='<table><thead><tr><th>الطلب</th><th>العميل</th><th>الحالة</th><th>وقت الإنشاء</th><th>إجمالي الوقت</th><th>مراحل الطلب</th></tr></thead><tbody>'+
+ (items.map(o=>'<tr><td><b>#'+esc(o.order_no)+'</b></td><td>'+esc(o.customer_name||'—')+'</td><td>'+esc(ST[o.status]?.[0]||o.status)+'</td><td>'+tm(o.created_at)+'</td><td>'+esc(orderTotalDurationText(o))+'</td><td>'+orderTimelineHtml(o)+'</td></tr>').join('')||'<tr><td colspan="6">لا توجد طلبات</td></tr>')+'</tbody></table>';
+ $('managerTimelineCount').textContent=(managerTimelinePage+1)+' / '+pages+' ('+(count||0)+' طلب)';
+ $('managerTimelinePrev').disabled=managerTimelinePage===0;
+ $('managerTimelineNext').disabled=managerTimelinePage+1>=pages;
+}
+
 async function loadManagerOpsPending() {
  const stillCurrent=captureOperationalRead('loadManagerOpsPending','managerOpsPending');if(!stillCurrent())return;
   const box=$('managerOpsPending'); if(!box) return;

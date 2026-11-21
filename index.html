@@ -2081,7 +2081,7 @@ async function loadCallcenterOrders() {
  const box=$('cc_orders');if(!box)return;
  const q=($('cc_q')?.value||'').trim().replace(/[,()%*]/g,' ');
  const requestId=String(Date.now())+'-'+Math.random();box.dataset.requestId=requestId;
- let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
+ let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,delivered_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
  if(q)req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
  else req=req.in('status',['new','received','out']);
  const {data,error}=await req;if(!stillCurrent())return;
@@ -2101,6 +2101,7 @@ async function loadCallcenterOrders() {
  rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
  <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>
  <div class="meta" style="margin:7px 0">وقت إنشاء الطلب: <b>${tm(o.created_at)}</b> · المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
+ <div class="meta" style="margin:5px 0">إجمالي وقت الطلب: <b>${esc(orderTotalDurationText(o))}</b></div>${orderTimelineHtml(o)}
  ${stageClockHtml(o)}<div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button><button data-act="dossier" data-id="${o.id}">ملف الطلب</button>${canAccessCustomerTracking()&&o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
  <details style="margin-top:9px"><summary style="cursor:pointer;padding:7px 0;font-weight:600">تفاصيل وإجراءات إضافية</summary>
  <div class="meta" style="margin:9px 0">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</div>
@@ -2702,12 +2703,12 @@ async function loadAll() {
     .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
   $('perf').innerHTML = `<table><tr><th>الطيار المسؤول</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
     (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
-  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>وقت إنشاء الطلب</th><th>العميل</th><th>الطيار المسؤول</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>وقت إنشاء الطلب</th><th>العميل</th><th>الطيار المسؤول</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>إجمالي وقت الطلب</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
     ((o.data || []).map(x => {
-      const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
+      const s2 = ST[x.status];
       const cancel = (isOwner()||me.can_cancel_orders===true) && ['new','received','out'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
-      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${tm(x.created_at)}</td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
-        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${canAccessCustomerTracking()?esc(x.track_code || ''):'—'}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
+      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${tm(x.created_at)}</td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${esc(orderTotalDurationText(x))}</td>
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${canAccessCustomerTracking()?esc(x.track_code || ''):'—'}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}${orderTimelineHtml(x)}</td></tr>`;
     }).join('') || '<tr><td colspan="15">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;

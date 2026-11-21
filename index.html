@@ -384,6 +384,35 @@ const generateStrongPassword = () => { const sets=['ABCDEFGHJKLMNPQRSTUVWXYZ','a
 const cairoDate = d => (d || new Date()).toLocaleDateString('en-CA', {timeZone:'Africa/Cairo'});
 const tm = t => t ? new Date(t).toLocaleTimeString('ar-EG', {timeZone:'Africa/Cairo', hour:'2-digit', minute:'2-digit'}) : '—';
 const mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000) : null;
+
+function stageDurationText(start,end){
+ if(!start||!end)return '—';
+ const a=Date.parse(start),b=Date.parse(end);
+ if(!Number.isFinite(a)||!Number.isFinite(b)||b<a)return '—';
+ const total=Math.floor((b-a)/60000);
+ return total>=60?Math.floor(total/60)+' س '+(total%60)+' د':total+' د';
+}
+function orderTotalDurationText(o){
+ if(o?.delivered_at)return stageDurationText(o.created_at,o.delivered_at);
+ if(['new','received','out'].includes(o?.status)&&o?.created_at)return 'جارٍ: '+stageDurationText(o.created_at,new Date().toISOString());
+ return 'لم يكتمل بالتسليم';
+}
+function orderTimelineHtml(o){
+ const active=['new','received','out'].includes(o.status);
+ const elapsed=(start,end,ongoing)=>end?stageDurationText(start,end):(ongoing&&start?'جارٍ: '+stageDurationText(start,new Date().toISOString()):'—');
+ const kitchen=elapsed(o.kitchen_received_at||o.created_at,o.kitchen_ready_at,active&&!o.kitchen_ready_at&&o.workflow_stage==='new');
+ const supervisor=elapsed(o.supervisor_received_at,o.pilot_assigned_at,active&&!!o.supervisor_received_at);
+ const delivery=elapsed(o.out_at,o.delivered_at,active&&!!o.out_at);
+ const item=(label,value)=>'<div style="min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:9px"><b style="font-size:12px">'+esc(label)+'</b><div class="meta" style="white-space:normal">'+esc(value)+'</div></div>';
+ return '<details style="margin-top:6px;max-width:100%;white-space:normal"><summary style="cursor:pointer;font-weight:700">⏱ تفاصيل أوقات الطلب</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px;margin-top:7px">'+
+ item('تسجيل الكول سنتر',tm(o.created_at))+
+ item('المطبخ','استلام: '+tm(o.kitchen_received_at)+' | جاهز: '+tm(o.kitchen_ready_at)+' | المدة: '+kitchen)+
+ item('المشرف','استلم: '+tm(o.supervisor_received_at)+' | حوّل: '+tm(o.pilot_assigned_at)+' | المدة: '+supervisor)+
+ item('الطيار والتوصيل','استلم: '+tm(o.received_at)+' | خرج: '+tm(o.out_at)+' | سلّم: '+tm(o.delivered_at)+' | مدة التوصيل: '+delivery)+
+ item('إجمالي وقت الطلب',orderTotalDurationText(o))+
+ '</div></details>';
+}
+
 const isLate = o => ['new','received','out'].includes(o.status)
   ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;
@@ -2052,7 +2081,7 @@ async function loadCallcenterOrders() {
  const box=$('cc_orders');if(!box)return;
  const q=($('cc_q')?.value||'').trim().replace(/[,()%*]/g,' ');
  const requestId=String(Date.now())+'-'+Math.random();box.dataset.requestId=requestId;
- let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
+ let req=branchQuery(sb.from('dlv_orders').select('id,order_no,branch_id,customer_name,phone,address,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,delivered_at,driver:driver_id(full_name)')).order('created_at',{ascending:false}).limit(q?100:100);
  if(q)req=req.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`);
  else req=req.in('status',['new','received','out']);
  const {data,error}=await req;if(!stillCurrent())return;
@@ -2071,7 +2100,8 @@ async function loadCallcenterOrders() {
  box.innerHTML='<div class="meta" style="margin:8px 0">'+(q?'نتائج البحث: '+rows.length+' طلب':'الطلبات الجارية: '+rows.length+' · المكتملة والملغية تظهر بالبحث فقط')+'</div>'+
  rows.map(o=>`<div class="card" style="padding:12px;margin-bottom:10px">
  <div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${(ST[o.status]||['','#868e96'])[1]}">${esc((ST[o.status]||['غير معروف'])[0])}</span></div>
- <div class="meta" style="margin:7px 0">المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
+ <div class="meta" style="margin:7px 0">وقت إنشاء الطلب: <b>${tm(o.created_at)}</b> · المرحلة: ${esc(STG[o.workflow_stage]||'—')} · الطيار: ${esc(o.driver?.full_name||'لم يُعيّن بعد')}</div>
+ <div class="meta" style="margin:5px 0">إجمالي وقت الطلب: <b>${esc(orderTotalDurationText(o))}</b></div>${orderTimelineHtml(o)}
  ${stageClockHtml(o)}<div class="row"><button class="p" onclick="openFollowupOrderMap(${o.id})">📍 متابعة الطلب</button><button data-act="dossier" data-id="${o.id}">ملف الطلب</button>${canAccessCustomerTracking()&&o.track_code&&o.phone?`<button class="g" data-act="wa" data-id="${o.id}">إرسال المتابعة على واتساب</button>`:''}</div>
  <details style="margin-top:9px"><summary style="cursor:pointer;padding:7px 0;font-weight:600">تفاصيل وإجراءات إضافية</summary>
  <div class="meta" style="margin:9px 0">${esc(o.customer_name||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</div>
@@ -2533,6 +2563,17 @@ function managerView() {
       <button class="p" id="mp" style="min-height:64px">🗺️<div>الطيارون</div></button>
       <button class="g" id="nw" style="min-height:64px">➕<div>طلب جديد</div></button>
     </div>
+    <details class="card" id="managerTimelinePanel" open>
+      <summary style="cursor:pointer;font-weight:700">📦 عرض الطلبات — التسلسل الزمني</summary>
+      <div class="row" style="margin-top:9px;gap:7px">
+        <input type="date" id="managerTimelineDate" value="${t}" style="flex:1;min-width:130px">
+        <select id="managerTimelineStatus" style="flex:1;min-width:120px"><option value="">كل الحالات</option><option value="new">جديد</option><option value="received">استلم الطيار</option><option value="out">في التوصيل</option><option value="delivered">تم التسليم</option><option value="failed">تعذر</option><option value="cancelled">ملغي</option></select>
+        <input id="managerTimelineSearch" placeholder="بحث رقم الطلب أو العميل" style="flex:2;min-width:140px">
+        <button id="managerTimelineRefresh">تحديث</button>
+      </div>
+      <div class="tw" id="managerTimelineRows" style="margin-top:10px">جارٍ تحميل الطلبات...</div>
+      <div class="row" style="justify-content:center;margin-top:8px"><button id="managerTimelinePrev">السابق</button><span id="managerTimelineCount" class="meta"></span><button id="managerTimelineNext">التالي</button></div>
+    </details>
     <details class="card"><summary style="cursor:pointer;font-weight:700">⭐ تقييمات العملاء</summary><div id="managerRatings" style="margin-top:10px"></div></details>
     <details class="card"><summary style="cursor:pointer;font-weight:700">🔎 البحث عن طلب</summary><div class="row" style="margin-top:12px"><input id="f_q" placeholder="رقم الطلب أو العميل أو الهاتف" style="flex:1"><button id="managerSearch">بحث</button></div><div id="managerSearchResults"></div></details>
     <details class="card"><summary style="cursor:pointer;font-weight:700">📂 السجلات والمتابعة</summary><div class="row" style="margin-top:12px"><button class="g" onclick="openFollowupArchive(&quot;cancelled&quot;)">الطلبات الملغاة</button><button class="g" onclick="openFollowupArchive(&quot;problems&quot;)">المشاكل والشكاوى</button></div></details>
@@ -2550,7 +2591,14 @@ function managerView() {
   bindOut(); $('nw').onclick = newOrderForm; $('mp').onclick = openMap; if($('operationsBtn'))$('operationsBtn').onclick=openOperationsRoom;
   if ($('ad')) $('ad').onclick = () => addDriverForm(); if($('cancelPermissionsBtn'))$('cancelPermissionsBtn').onclick=openCancelPermissions;if($('customerMessagesBtn'))$('customerMessagesBtn').onclick=customerMessageSettings; if ($('pm')) $('pm').onclick = managePilots; if ($('rp')) $('rp').onclick = openReport; if ($('ownerRatingsPage')) $('ownerRatingsPage').onclick = ownerRatingsView; if($('brandSettings')) $('brandSettings').onclick=openBrandSettings;
   if (managerScreen) {
-    $('managerSearch').onclick = async () => { const q=orderSearchTerm($('f_q').value); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    $('managerSearch').onclick = async () => { const q=orderSearchTerm($('f_q').value); const box=$('managerSearchResults'); if(!q){box.innerHTML='';return;} const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at')).or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%`).order('created_at',{ascending:false}).limit(10); box.innerHTML=error?'<div class="msg e">تعذر البحث</div>':(data||[]).map(o=>`<div class="card"><b>طلب #${esc(o.order_no)}</b><div class="meta">${esc(o.customer_name||'عميل')} · وقت الإنشاء: ${tm(o.created_at)} · ${esc(ST[o.status]?.[0]||o.status)} · ${esc(STG[o.workflow_stage]||'')}</div>${['new','received','out'].includes(o.status)?'<button class="r" data-act="cancelled" data-id="'+o.id+'">إلغاء الطلب</button>':''}</div>`).join('')||'<div class="meta">لا توجد نتائج</div>'; };
+    managerTimelinePage=0;
+    ['managerTimelineDate','managerTimelineStatus'].forEach(id=>$(id).onchange=()=>{managerTimelinePage=0;loadManagerTimeline();});
+    $('managerTimelineSearch').onkeydown=e=>{if(e.key==='Enter'){managerTimelinePage=0;loadManagerTimeline();}};
+    $('managerTimelineRefresh').onclick=()=>{managerTimelinePage=0;loadManagerTimeline();};
+    $('managerTimelinePrev').onclick=()=>{if(managerTimelinePage>0){managerTimelinePage--;loadManagerTimeline();}};
+    $('managerTimelineNext').onclick=()=>{managerTimelinePage++;loadManagerTimeline();};
+    loadManagerTimeline();
     refreshKitchenDelayNotices(); loadManagerDelayed(); loadManagerRatings(); loadManagerLiveKpis(); loadManagerOpsPending(); startManagerBoardRefresh();
     return;
   }
@@ -2581,13 +2629,34 @@ async function loadDriverGpsHealth(){
  const stale=ids.filter(id=>!last.has(id)||!Number.isFinite(last.get(id))||Date.now()-last.get(id)>5*60000);
  box.innerHTML='<div class="meta">الطيارون لديهم طلبات خرجت للتوصيل: '+ids.length+' · تحديث GPS متأخر أكثر من 5 دقائق: '+stale.length+'</div>'+(stale.length?'<div class="msg e">⚠️ '+stale.length+' طيار بدون تحديث موقع حديث. راجع الاتصال وفتح صفحة الطيار؛ الموقع القديم ليس موقعًا مباشرًا.</div>':'<div class="msg o">✓ مواقع الطيارين المكلفين بالتوصيل محدثة خلال آخر 5 دقائق.</div>');
 }
+
+let managerTimelinePage=0;
+async function loadManagerTimeline(){
+ const stillCurrent=captureOperationalRead('loadManagerTimeline','managerTimelineRows');if(!stillCurrent())return;
+ const box=$('managerTimelineRows');if(!box)return;
+ const date=$('managerTimelineDate')?.value||cairoDate(),status=$('managerTimelineStatus')?.value||'';
+ const term=String($('managerTimelineSearch')?.value||'').replace(/[,()%*]/g,' ').trim();
+ let request=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,delivered_at',{count:'exact'}))
+  .eq('order_date',date).order('created_at',{ascending:false}).range(managerTimelinePage*10,managerTimelinePage*10+9);
+ if(status)request=request.eq('status',status);
+ if(term)request=request.or('order_no.ilike.%'+term+'%,customer_name.ilike.%'+term+'%,phone.ilike.%'+term+'%');
+ const {data,error,count}=await request;if(!stillCurrent())return;
+ if(error){box.innerHTML='<div class="msg e">تعذر تحميل الطلبات: '+esc(error.message)+'</div>';return;}
+ const items=data||[],pages=Math.max(1,Math.ceil((count||0)/10));
+ box.innerHTML='<table><thead><tr><th>الطلب</th><th>العميل</th><th>الحالة</th><th>وقت الإنشاء</th><th>إجمالي الوقت</th><th>مراحل الطلب</th></tr></thead><tbody>'+
+ (items.map(o=>'<tr><td><b>#'+esc(o.order_no)+'</b></td><td>'+esc(o.customer_name||'—')+'</td><td>'+esc(ST[o.status]?.[0]||o.status)+'</td><td>'+tm(o.created_at)+'</td><td>'+esc(orderTotalDurationText(o))+'</td><td>'+orderTimelineHtml(o)+'</td></tr>').join('')||'<tr><td colspan="6">لا توجد طلبات</td></tr>')+'</tbody></table>';
+ $('managerTimelineCount').textContent=(managerTimelinePage+1)+' / '+pages+' ('+(count||0)+' طلب)';
+ $('managerTimelinePrev').disabled=managerTimelinePage===0;
+ $('managerTimelineNext').disabled=managerTimelinePage+1>=pages;
+}
+
 async function loadManagerOpsPending() {
  const stillCurrent=captureOperationalRead('loadManagerOpsPending','managerOpsPending');if(!stillCurrent())return;
   const box=$('managerOpsPending'); if(!box) return;
   const {data,error}=await branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,created_at,workflow_stage,status')).eq('status','new').order('created_at',{ascending:true}).limit(200);if(!stillCurrent())return;
   if(error){box.innerHTML='<div class="msg e">تعذر تحميل طلبات الانتظار</div>';return;}
   const rows=data||[];
-  box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · منذ ${elapsed} دقيقة</div>${isOwner()||me.can_cancel_orders===true?`<button class="r" data-act="cancelled" data-id="${o.id}">إلغاء الطلب</button>`:''}</div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
+  box.innerHTML=rows.length?rows.map(o=>{const elapsed=Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000));return `<div class="card"><div class="ord"><b>طلب #${esc(o.order_no)}</b><span class="badge" style="background:${elapsed>=25?'#e8590c':'#868e96'}">${esc(STG[o.workflow_stage]||'قيد المتابعة')}</span></div><div class="meta">${esc(o.customer_name||'عميل')} · وقت الإنشاء: ${tm(o.created_at)} · منذ ${elapsed} دقيقة</div>${isOwner()||me.can_cancel_orders===true?`<button class="r" data-act="cancelled" data-id="${o.id}">إلغاء الطلب</button>`:''}</div>`}).join(''):'<div class="msg">لا توجد طلبات انتظار حاليًا.</div>';
 }
 function startManagerBoardRefresh(){
   clearInterval(managerBoardTimer); clearInterval(managerClockTimer);
@@ -2673,13 +2742,13 @@ async function loadAll() {
     .map(k => `<div class="stat"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
   $('perf').innerHTML = `<table><tr><th>الطيار المسؤول</th><th>الإجمالي</th><th>تم</th><th>جاري</th><th>متأخر</th><th>تعذر</th><th>متوسط (د)</th></tr>` +
     (rows.map(r => `<tr><td>${esc(r.driver_name)}</td><td>${r.total}</td><td>${r.delivered}</td><td>${r.out_now}</td><td>${r.late}</td><td>${r.failed}</td><td>${r.avg_min ?? '—'}</td></tr>`).join('') || '<tr><td colspan="7">لا بيانات</td></tr>') + '</table>';
-  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>العميل</th><th>الطيار المسؤول</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>المدة</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
+  $('tbl').innerHTML = `<table><tr><th>الطلب</th><th>وقت إنشاء الطلب</th><th>العميل</th><th>الطيار المسؤول</th><th>جاهز (مطبخ)</th><th>استلام المشرف</th><th>تحويل للطيار</th><th>استلام الطيار</th><th>خروج</th><th>تسليم</th><th>إجمالي وقت الطلب</th><th>الحالة</th><th>ملاحظة الطيار</th><th>كود العميل</th><th></th></tr>` +
     ((o.data || []).map(x => {
-      const s2 = ST[x.status], d = mins(x.out_at, x.delivered_at);
+      const s2 = ST[x.status];
       const cancel = (isOwner()||me.can_cancel_orders===true) && ['new','received','out'].includes(x.status) ? `<button class="r" data-act="cancelled" data-id="${x.id}">إلغاء</button>` : '';
-      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${d != null ? d + ' د' : '—'}</td>
-        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${canAccessCustomerTracking()?esc(x.track_code || ''):'—'}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}</td></tr>`;
-    }).join('') || '<tr><td colspan="14">لا طلبات</td></tr>') + '</table>';
+      return `<tr><td><b>#${esc(x.order_no)}</b></td><td>${tm(x.created_at)}</td><td>${esc(x.customer_name || '')}</td><td>${esc(x.driver?.full_name || '')}</td><td>${tm(x.kitchen_ready_at)}</td><td>${tm(x.supervisor_received_at)}</td><td>${tm(x.pilot_assigned_at)}</td><td>${tm(x.received_at)}</td><td>${tm(x.out_at)}</td><td>${tm(x.delivered_at)}</td><td>${esc(orderTotalDurationText(x))}</td>
+        <td><span class="badge" style="background:${s2[1]}">${s2[0]}</span> ${isLate(x) ? '<span class="late">⚠</span>' : ''}${x.failed_reason ? '<div class="meta" style="white-space:normal;min-width:130px">⛔ ' + esc(x.failed_reason) + '</div>' : ''}</td><td style="white-space:normal;min-width:140px">${esc(x.driver_note || '')}</td><td dir="ltr" style="font-weight:700">${canAccessCustomerTracking()?esc(x.track_code || ''):'—'}</td><td><button data-act="dossier" data-id="${x.id}">ملف الطلب</button><button data-act="edit" data-id="${x.id}">تعديل</button> ${cancel}${orderTimelineHtml(x)}</td></tr>`;
+    }).join('') || '<tr><td colspan="15">لا طلبات</td></tr>') + '</table>';
   const pages = Math.max(1, Math.ceil((o.count || 0) / PAGE));
   $('pg').textContent = `${page + 1} / ${pages} (${o.count || 0} طلب)`;
   $('pv').disabled = page === 0; $('nx').disabled = page + 1 >= pages;

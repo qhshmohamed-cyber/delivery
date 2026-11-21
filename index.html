@@ -525,7 +525,7 @@ function startProfileSync(){
  if(profileSyncChannel){sb.removeChannel(profileSyncChannel);profileSyncChannel=null;}
  profileSyncChannel=sb.channel('profile:user:'+me.user_id,{config:{private:true}}).on('postgres_changes',{event:'UPDATE',schema:'public',table:'dlv_profiles',filter:'user_id=eq.'+me.user_id},()=>{void checkProfileUpdates();}).subscribe();
  if(profileSyncTimer)clearInterval(profileSyncTimer);
- profileSyncTimer=setInterval(()=>{void checkProfileUpdates()},30000);
+ profileSyncTimer=setInterval(()=>{void checkProfileUpdates()},90000);
 }
 function stopProfileSync(){
  if(profileSyncTimer){clearInterval(profileSyncTimer);profileSyncTimer=null;}
@@ -663,6 +663,7 @@ let realtimeState = 'CLOSED';
 let activeOrderChannelUserId=null;
 let hiddenOrderChannelTimer=null;
 let realtimeRetryTimer = null;
+let realtimeRetryFailures = 0;
 let reconnectRefreshTimer = null;
 let operationalRefreshBusy = false;
 let operationalRefreshPending = false;
@@ -714,13 +715,15 @@ function startOrderRealtime() {
     if(chan!==next) return; // Ignore a late callback from a removed channel.
     realtimeState=status;
     if(status==='SUBSCRIBED'){
-      clearTimeout(realtimeRetryTimer);realtimeRetryTimer=null;
+      clearTimeout(realtimeRetryTimer);realtimeRetryTimer=null;realtimeRetryFailures=0;
       refreshOperationalData();
     }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
       clearTimeout(realtimeRetryTimer);
+      // Back off failed channel joins without turning off realtime orders or GPS.
+      const retryMs=Math.min(120000,5000*(2**Math.min(realtimeRetryFailures++,5)));
       realtimeRetryTimer=setTimeout(()=>{
         if(me && navigator.onLine && document.visibilityState==='visible' && chan===next) startOrderRealtime();
-      },5000);
+      },retryMs);
     }
   });
 }
@@ -1255,17 +1258,24 @@ async function refreshKitchenDelayNotices() {
   box.innerHTML = rows.length ? '<section class="card" style="border:1px solid #e8590c;background:#fff4e6"><div class="ord"><b>🔔 تنبيهات تحتاج متابعة</b><span class="badge" style="background:#e8590c">'+rows.length+' جديد</span></div>' + rows.map(n => '<div class="msg e" style="margin-top:8px"><b>'+esc(n.title)+'</b><br>'+esc(n.body)+(String(n.notification_type||'').startsWith('stage_')?'<div><button onclick="recordOrderDelay('+Number(n.order_id)+')">تسجيل إجراء</button></div>':'')+'<div class="meta">'+tm(n.created_at)+'</div><button data-delay-read="'+n.id+'" style="margin-top:6px">✓ قرأت التنبيه</button></div>').join('')+'</section>' : '';
   box.querySelectorAll('[data-delay-read]').forEach(b => b.onclick = async () => { if (!requireOnline('تحديث التنبيه')) return; b.disabled=true; const {error}=await safeRpc('dlv_mark_notification_read',{p_id:Number(b.dataset.delayRead)});if(!stillCurrent())return; if(error){b.disabled=false;return flash('تعذر حفظ قراءة التنبيه',false);} refreshKitchenDelayNotices(); });
 }
+let kitchenDelayCheckBusy=false, lastKitchenDelayCheckAt=0;
 async function runKitchenDelayCheck() {
-  if (!me) return;
-  const {error} = await safeRpc('dlv_check_kitchen_delays');
-  if (error) console.warn('Kitchen delay check:', error.message);
-  await refreshKitchenDelayNotices();
+  if (!me || !navigator.onLine || document.visibilityState!=='visible' || kitchenDelayCheckBusy) return;
+  // Supplementary delay notifications should not be polled by every delivery employee.
+  if (!(me.role==='admin'||me.workflow_role==='kitchen'||me.workflow_role==='manager')) return;
+  if (Date.now()-lastKitchenDelayCheckAt<300000) return;
+  kitchenDelayCheckBusy=true;lastKitchenDelayCheckAt=Date.now();
+  try {
+    const {error}=await safeRpc('dlv_check_kitchen_delays');
+    if(error) console.warn('Kitchen delay check:',error.message);
+    else await refreshKitchenDelayNotices();
+  } finally {kitchenDelayCheckBusy=false;}
 }
 function startKitchenDelayMonitor() {
   clearInterval(delayTimer);
-  if (!me) return;
-  runKitchenDelayCheck();
-  delayTimer = setInterval(runKitchenDelayCheck, 60000);
+  if (!me || !(me.role==='admin'||me.workflow_role==='kitchen'||me.workflow_role==='manager')) return;
+  void runKitchenDelayCheck();
+  delayTimer=setInterval(()=>{void runKitchenDelayCheck();},300000);
 }
 
 function bindOut() { document.body.dataset.ysView=me?.workflow_role||me?.role||'staff';void loadStageSla(); startKitchenDelayMonitor(); const sw=$('branchSwitch'); if(sw) sw.onclick=async()=>{ if(isOwner()) return ownerBranchPicker(ownerActiveCompanyId); const ids=permittedBranches(); if(ids.length>1) return employeeBranchPicker(ids); }; $('out').onclick = async () => { await appSignOut(); };if(isOwner()&&!$('appearanceSettingsButton')){const button=document.createElement('button');button.id='appearanceSettingsButton';button.textContent='🎨 الخط والألوان';button.onclick=openCompanyAppearance;document.querySelector('.ys-header-actions')?.appendChild(button);} }
@@ -2598,7 +2608,7 @@ function startManagerBoardRefresh(){
       await Promise.allSettled([loadManagerLiveKpis(),loadManagerOpsPending(),loadManagerDelayed(),refreshKitchenDelayNotices(),loadRepeatCustomerDashboard()]);
       const u=$('managerUpdatedAt'); if(u) u.textContent='آخر تحديث للبيانات: '+tm(new Date().toISOString());
     } finally { managerBoardBusy=false; }
-  },15000);
+  },30000);
 }
 
 async function loadManagerLiveKpis() {
@@ -3350,7 +3360,7 @@ async function refreshMe() {
   if (n) n.textContent = me.full_name;
   if (m) m.textContent = roleLabel(me) + ' · كود ' + me.employee_code;
 }
-setInterval(refreshMe, 60000);
+setInterval(refreshMe, 180000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     refreshMe();

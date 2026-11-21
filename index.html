@@ -384,6 +384,35 @@ const generateStrongPassword = () => { const sets=['ABCDEFGHJKLMNPQRSTUVWXYZ','a
 const cairoDate = d => (d || new Date()).toLocaleDateString('en-CA', {timeZone:'Africa/Cairo'});
 const tm = t => t ? new Date(t).toLocaleTimeString('ar-EG', {timeZone:'Africa/Cairo', hour:'2-digit', minute:'2-digit'}) : '—';
 const mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000) : null;
+
+function stageDurationText(start,end){
+ if(!start||!end)return '—';
+ const a=Date.parse(start),b=Date.parse(end);
+ if(!Number.isFinite(a)||!Number.isFinite(b)||b<a)return '—';
+ const total=Math.floor((b-a)/60000);
+ return total>=60?Math.floor(total/60)+' س '+(total%60)+' د':total+' د';
+}
+function orderTotalDurationText(o){
+ if(o?.delivered_at)return stageDurationText(o.created_at,o.delivered_at);
+ if(['new','received','out'].includes(o?.status)&&o?.created_at)return 'جارٍ: '+stageDurationText(o.created_at,new Date().toISOString());
+ return 'لم يكتمل بالتسليم';
+}
+function orderTimelineHtml(o){
+ const active=['new','received','out'].includes(o.status);
+ const elapsed=(start,end,ongoing)=>end?stageDurationText(start,end):(ongoing&&start?'جارٍ: '+stageDurationText(start,new Date().toISOString()):'—');
+ const kitchen=elapsed(o.kitchen_received_at||o.created_at,o.kitchen_ready_at,active&&!o.kitchen_ready_at&&o.workflow_stage==='new');
+ const supervisor=elapsed(o.supervisor_received_at,o.pilot_assigned_at,active&&!!o.supervisor_received_at);
+ const delivery=elapsed(o.out_at,o.delivered_at,active&&!!o.out_at);
+ const item=(label,value)=>'<div style="min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:9px"><b style="font-size:12px">'+esc(label)+'</b><div class="meta" style="white-space:normal">'+esc(value)+'</div></div>';
+ return '<details style="margin-top:6px;max-width:100%;white-space:normal"><summary style="cursor:pointer;font-weight:700">⏱ تفاصيل أوقات الطلب</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px;margin-top:7px">'+
+ item('تسجيل الكول سنتر',tm(o.created_at))+
+ item('المطبخ','استلام: '+tm(o.kitchen_received_at)+' | جاهز: '+tm(o.kitchen_ready_at)+' | المدة: '+kitchen)+
+ item('المشرف','استلم: '+tm(o.supervisor_received_at)+' | حوّل: '+tm(o.pilot_assigned_at)+' | المدة: '+supervisor)+
+ item('الطيار والتوصيل','خرج: '+tm(o.out_at)+' | سلّم: '+tm(o.delivered_at)+' | مدة التوصيل: '+delivery)+
+ item('إجمالي وقت الطلب',orderTotalDurationText(o))+
+ '</div></details>';
+}
+
 const isLate = o => ['new','received','out'].includes(o.status)
   ? mins(o.received_at || o.created_at, new Date()) > LATE_MIN
   : o.status === 'delivered' && mins(o.received_at || o.created_at, o.delivered_at) > LATE_MIN;

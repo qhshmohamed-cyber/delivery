@@ -408,7 +408,7 @@ function orderTimelineHtml(o){
  item('تسجيل الكول سنتر',tm(o.created_at))+
  item('المطبخ','استلام: '+tm(o.kitchen_received_at)+' | جاهز: '+tm(o.kitchen_ready_at)+' | المدة: '+kitchen)+
  item('المشرف','استلم: '+tm(o.supervisor_received_at)+' | حوّل: '+tm(o.pilot_assigned_at)+' | المدة: '+supervisor)+
- item('الطيار والتوصيل','خرج: '+tm(o.out_at)+' | سلّم: '+tm(o.delivered_at)+' | مدة التوصيل: '+delivery)+
+ item('الطيار والتوصيل','استلم: '+tm(o.received_at)+' | خرج: '+tm(o.out_at)+' | سلّم: '+tm(o.delivered_at)+' | مدة التوصيل: '+delivery)+
  item('إجمالي وقت الطلب',orderTotalDurationText(o))+
  '</div></details>';
 }
@@ -2636,7 +2636,7 @@ async function loadManagerTimeline(){
  const box=$('managerTimelineRows');if(!box)return;
  const date=$('managerTimelineDate')?.value||cairoDate(),status=$('managerTimelineStatus')?.value||'';
  const term=String($('managerTimelineSearch')?.value||'').replace(/[,()%*]/g,' ').trim();
- let request=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,out_at,delivered_at',{count:'exact'}))
+ let request=branchQuery(sb.from('dlv_orders').select('id,order_no,customer_name,phone,status,workflow_stage,created_at,kitchen_received_at,kitchen_ready_at,supervisor_received_at,pilot_assigned_at,received_at,out_at,delivered_at',{count:'exact'}))
   .eq('order_date',date).order('created_at',{ascending:false}).range(managerTimelinePage*10,managerTimelinePage*10+9);
  if(status)request=request.eq('status',status);
  if(term)request=request.or('order_no.ilike.%'+term+'%,customer_name.ilike.%'+term+'%,phone.ilike.%'+term+'%');
